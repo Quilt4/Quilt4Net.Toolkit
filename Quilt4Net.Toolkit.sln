@@ -3,23 +3,24 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35506.116
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit", "Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj", "{D099F8AA-267D-4CB5-874D-99E84176EE0E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit", "Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj", "{D099F8AA-267D-4CB5-874D-99E84176EE0E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Tests", "Quilt4Net.Toolkit.Tests\Quilt4Net.Toolkit.Tests.csproj", "{B32C08ED-780A-48C5-9FC1-581D6C44B425}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Tests", "Quilt4Net.Toolkit.Tests\Quilt4Net.Toolkit.Tests.csproj", "{B32C08ED-780A-48C5-9FC1-581D6C44B425}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Api", "Quilt4Net.Toolkit.Api\Quilt4Net.Toolkit.Api.csproj", "{0B5BF53A-8939-4BDA-B27E-019F2743A865}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Api", "Quilt4Net.Toolkit.Api\Quilt4Net.Toolkit.Api.csproj", "{0B5BF53A-8939-4BDA-B27E-019F2743A865}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Api.Tests", "Quilt4Net.Toolkit.Api.Tests\Quilt4Net.Toolkit.Api.Tests.csproj", "{DEADD446-3298-457D-9CD8-92F9DDA1E2BD}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Api.Tests", "Quilt4Net.Toolkit.Api.Tests\Quilt4Net.Toolkit.Api.Tests.csproj", "{DEADD446-3298-457D-9CD8-92F9DDA1E2BD}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{596754A9-C7FF-4A14-B6B5-B76F05C69BB2}"
 	ProjectSection(SolutionItems) = preProject
+		..\azure-pipelines.yml = ..\azure-pipelines.yml
 		LICENSE = LICENSE
 		README.md = README.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Sample", "Sample", "{DE636D86-71E3-48D1-9C27-86D3A30F1256}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Api.Sample", "Quilt4Net.Toolkit.Api.Sample\Quilt4Net.Toolkit.Api.Sample.csproj", "{0D4E18BF-F54E-4B67-859B-8D3E01D4F0FB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Api.Sample", "Quilt4Net.Toolkit.Api.Sample\Quilt4Net.Toolkit.Api.Sample.csproj", "{0D4E18BF-F54E-4B67-859B-8D3E01D4F0FB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
