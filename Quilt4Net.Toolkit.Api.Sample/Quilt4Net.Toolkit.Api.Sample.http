@@ -1,0 +1,6 @@
+@Quilt4Net.Toolkit.Api.Sample_HostAddress = http://localhost:5178
+
+GET {{Quilt4Net.Toolkit.Api.Sample_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -40,7 +40,6 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
         {
             case nameof(HealthController.Live):
                 return ("Liveness", "Checks if the service is running.");
-                break;
             //case nameof(HealthController.Ready):
             //    summary = "Readiness";
             //    description = "Checks if the service is ready for traffic.";
@@ -65,8 +64,8 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
             //    summary = "Dependencies";
             //    description = "Lists the health of critical dependencies.";
             //    break;
+            default:
+                return (null, null);
         }
-
-        return summary;
     }
 }
