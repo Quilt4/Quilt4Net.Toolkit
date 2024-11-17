@@ -27,7 +27,7 @@ public record Quilt4NetApiOptions
     /// Ex. https://localhost:7119/api/[ControllerName]/live
     /// Default is health, IE. https://localhost:7119/api/health/live
     /// </summary>
-    public string ControllerName { get; set; } = "health";
+    public string ControllerName { get; set; } = "Health";
 
     /// <summary>
     /// If set to true, Ready will return 503 when the system is degraded.

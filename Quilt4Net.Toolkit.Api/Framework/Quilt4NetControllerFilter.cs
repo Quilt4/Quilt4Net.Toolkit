@@ -35,7 +35,7 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                             Summary = information.Summary,
                             Description = information.Description,
                             Responses = information.Responses,
-                            Tags = [new OpenApiTag { Name = "Health" }]
+                            Tags = [new OpenApiTag { Name = _options.ControllerName }]
                         }
                     },
                 });
