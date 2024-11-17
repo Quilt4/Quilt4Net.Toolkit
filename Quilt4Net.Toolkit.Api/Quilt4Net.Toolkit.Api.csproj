@@ -11,8 +11,8 @@
 		<Description>Support for API health, liveness, readiness, startup, metrics, version and dependencies.</Description>
 		<PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
-		<PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
 	</PropertyGroup>
 
 	<ItemGroup>

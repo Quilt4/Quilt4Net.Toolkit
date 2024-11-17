@@ -4,13 +4,12 @@ trigger:
 name: 0.0.$(Rev:r)
 
 pool:
-  vmImage: 'ubuntu-latest'
-
+  vmImage: 'windows-latest'
 
 variables:
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  BQC.ForceNewBaseline: true
+  BQC.ForceNewBaseline: false
 
 stages:
 - stage: Build
