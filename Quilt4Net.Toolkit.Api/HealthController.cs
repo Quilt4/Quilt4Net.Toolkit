@@ -2,6 +2,7 @@
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
+using System.Diagnostics;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -22,7 +23,7 @@ public class HealthController : ControllerBase
     /// Purpose: Checks if the application is running (basic process check). It should return 200 OK if the service is up, regardless of its ability to handle requests.
     /// Use Case: Typically used by Kubernetes liveness probes to restart the container if it becomes unresponsive.
     /// </summary>
-    /// <returns>alive</returns>
+    /// <returns></returns>
     public async Task<IActionResult> Live()
     {
         return Ok(await _liveService.GetStatusAsync());
@@ -75,21 +76,30 @@ public class HealthController : ControllerBase
     //    return Ok(new { status = "started" });
     //}
 
-    ///// <summary>
-    ///// Purpose: Provides metrics for monitoring and observability systems like Prometheus. The format is often specific to the monitoring tool (e.g., Prometheus metrics format).
-    ///// Use Case: Used to track detailed performance metrics, such as request rates, error rates, CPU/memory usage, and more.
-    ///// </summary>
-    ///// <returns></returns>
-    ///// <exception cref="NotImplementedException"></exception>
-    //public IActionResult Metrics()
-    //{
-    //    //TODO: Implement
-    //    /*
-    //        http_requests_total{method="GET",endpoint="/api/values"} 1027
-    //        memory_usage_bytes 52428800
-    //    */
-    //    throw new NotImplementedException();
-    //}
+    /// <summary>
+    /// Purpose: Provides metrics for monitoring and observability systems like Prometheus. The format is often specific to the monitoring tool (e.g., Prometheus metrics format).
+    /// Use Case: Used to track detailed performance metrics, such as request rates, error rates, CPU/memory usage, and more.
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public IActionResult Metrics(CancellationToken cancellationToken)
+    {
+        // Get memory usage
+        var process = Process.GetCurrentProcess();
+        var memoryUsage = process.WorkingSet64; // Memory usage in bytes
+        var cpuTime = process.TotalProcessorTime; // CPU time used by the process
+        var upTime = DateTime.Now - process.StartTime; // Application uptime
+
+        // Prepare the health check data
+        var metrics = new
+        {
+            MemoryUsageInMB = memoryUsage / (1024 * 1024),
+            CpuTime = cpuTime.TotalMilliseconds,
+            UptimeMinutes = upTime.TotalMinutes
+        };
+
+        return Ok(metrics);
+    }
 
     ///// <summary>
     ///// Purpose: Provides the version of the application or service. This can be helpful for debugging or ensuring proper deployments.

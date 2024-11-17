@@ -1,5 +1,8 @@
 ﻿using System.Reflection;
 using Microsoft.OpenApi.Models;
+using Quilt4Net.Toolkit.Api.Features.Health;
+using Quilt4Net.Toolkit.Api.Features.Live;
+using Quilt4Net.Toolkit.Api.Features.Ready;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Quilt4Net.Toolkit.Api.Framework;
@@ -44,26 +47,23 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
         switch (method.Name)
         {
             case nameof(HealthController.Live):
-                return (
-                    "Liveness",
-                    "Checks if the service is running.",
+                return ("Liveness",
+                    $"Checks if the service is running.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<LiveStatusResult>())}",
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" },
                     });
             case nameof(HealthController.Ready):
-                return (
-                    "Readiness",
-                    "Checks if the service is ready for traffic.",
+                return ("Readiness",
+                    $"Checks if the service is ready for traffic.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<ReadyStatusResult>())}",
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" },
                         ["503"] = new() { Description = "Service Unavailable" }
                     });
             case nameof(HealthController.Health):
-                return (
-                    "Health",
-                    "Comprehensive health check of the service and dependencies.",
+                return ("Health",
+                    $"Comprehensive health check of the service and dependencies.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<HealthStatusResult>())}",
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" },
@@ -73,10 +73,13 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
             //    summary = "Startup";
             //    description = "Indicates whether the service has started successfully.";
             //    break;
-            //case nameof(HealthController.Metrics):
-            //    summary = "Metrics";
-            //    description = "Provides performance and system metrics.";
-            //    break;
+            case nameof(HealthController.Metrics):
+                return ("Metrics",
+                    "Provides performance and system metrics.",
+                    new OpenApiResponses
+                    {
+                        ["200"] = new() { Description = "Success" }
+                    });
             //case nameof(HealthController.Version):
             //    summary = "Version";
             //    description = "Shows the application version.";

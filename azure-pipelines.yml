@@ -4,7 +4,7 @@ trigger:
 name: 0.0.$(Rev:r)
 
 pool:
-  vmImage: 'windows-latest'
+  vmImage: 'ubuntu-latest'
 
 
 variables:
@@ -79,7 +79,7 @@ stages:
 - stage: Release
   displayName: Release
   dependsOn: Build
-  condition: and(succeeded('Build'), ne(variables['Build.SourceBranch'], 'refs/heads/master'))
+  condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'master'))
   jobs:
   - job: Release
     displayName: Release
