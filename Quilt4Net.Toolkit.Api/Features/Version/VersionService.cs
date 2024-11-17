@@ -17,8 +17,6 @@ internal class VersionService : IVersionService
         var asm = Assembly.GetEntryAssembly();
         var name = _hostEnvironment.EnvironmentName;
 
-        //TODO: Look up IP address here.
-
         var result = new VersionResponse
         {
             Version = $"{asm?.GetName().Version}",

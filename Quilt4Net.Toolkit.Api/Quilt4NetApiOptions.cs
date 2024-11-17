@@ -13,7 +13,7 @@ public record Quilt4NetApiOptions
     /// If this is set to true the documentation is added to swagger.
     /// Default is true.
     /// </summary>
-    public bool ShowInSwagger { get; init; } = true;
+    public bool ShowInSwagger { get; set; } = true;
 
     /// <summary>
     /// Pattern to between the base address and the controller name. This value can be empty.
@@ -34,7 +34,7 @@ public record Quilt4NetApiOptions
     /// If set to false Ready will return 200 when the system is degraded.
     /// Default is false.
     /// </summary>
-    public bool FailReadyWhenDegraded { get; init; }
+    public bool FailReadyWhenDegraded { get; set; }
 
     /// <summary>
     /// Add a component for perform system checks on.
@@ -52,4 +52,12 @@ public record Quilt4NetApiOptions
     }
 
     internal IEnumerable<Component> Components => _components.Values;
+
+    /// <summary>
+    /// Level of detail returned when an exception occurs.
+    /// Default for Production environment is Hidden.
+    /// Default for Development environment is StackTrace.
+    /// For all other environments default is Message.
+    /// </summary>
+    public ExceptionDataLevel? ExceptionDataLevel { get; set; }
 }

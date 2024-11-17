@@ -24,6 +24,7 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
+		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
 	</ItemGroup>
 
 	<ItemGroup>

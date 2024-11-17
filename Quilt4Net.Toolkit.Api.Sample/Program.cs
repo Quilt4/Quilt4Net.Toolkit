@@ -9,6 +9,8 @@ builder.Services.AddSwaggerGen();
 //Add AddQuilt4Net
 builder.AddQuilt4Net(o =>
 {
+    o.FailReadyWhenDegraded = true;
+
     o.AddComponent(new Component
     {
         Name = "some-service",

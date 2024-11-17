@@ -42,7 +42,28 @@ builder.AddQuilt4Net(o =>
 });
 ```
 
+### Configuration options
+Configuration can be configured by code. This will override any other configuration.
+```
+builder.AddQuilt4Net(o =>
+{
+    o.ShowInSwagger = false;
+    o.FailReadyWhenDegraded = true;
+});
+```
+Configuration in *appsettings.json*.
+```
+{
+  "Quilt4Net": {
+    "ShowInSwagger": false,
+    "FailReadyWhenDegraded" : true,
+  }
+}
+```
+For values without configuration default values are used.
+
 ## Planned
+- IP-Address lookup
 - Authentication for endpoints (Use project auth or API-Key for different methods.)
 - Feature to check if background services are running or if they have crashed.
 - Monitor service that can be implemented so that components does not have to be added with 'AddComponent' in 'AddQuilt4Net'.

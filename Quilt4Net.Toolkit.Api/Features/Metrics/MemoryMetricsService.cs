@@ -22,9 +22,9 @@ internal class MemoryMetricsService : IMemoryMetricsService
 
         return new Memory
         {
-            ApplicationMemoryUsageMB = applicationMemoryUsageMb,
-            AvailableFreeMemoryMB = memory.FreeMemoryMB,
-            TotalMemoryMB = memory.TotalMemoryMB
+            ApplicationMemoryUsageMb = applicationMemoryUsageMb,
+            AvailableFreeMemoryMb = memory.FreeMemoryMB,
+            TotalMemoryMb = memory.TotalMemoryMB
         };
     }
 
