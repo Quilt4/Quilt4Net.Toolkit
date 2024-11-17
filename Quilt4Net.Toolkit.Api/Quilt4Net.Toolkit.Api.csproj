@@ -23,7 +23,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.5.0" />
+	  <PackageReference Include="System.Management" Version="9.0.0" />
 	</ItemGroup>
 
 </Project>

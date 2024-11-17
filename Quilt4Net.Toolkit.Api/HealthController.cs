@@ -3,6 +3,8 @@ using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using System.Diagnostics;
+using Quilt4Net.Toolkit.Api.Features.Metrics;
+using Quilt4Net.Toolkit.Api.Features.Version;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -11,12 +13,16 @@ public class HealthController : ControllerBase
     private readonly ILiveService _liveService;
     private readonly IReadyService _readyService;
     private readonly IHealthService _healthService;
+    private readonly IVersionService _versionService;
+    private readonly IMetricsService _metricsService;
 
-    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService)
+    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService, IVersionService versionService, IMetricsService metricsService)
     {
         _liveService = liveService;
         _readyService = readyService;
         _healthService = healthService;
+        _versionService = versionService;
+        _metricsService = metricsService;
     }
 
     /// <summary>
@@ -82,43 +88,22 @@ public class HealthController : ControllerBase
     /// </summary>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public IActionResult Metrics(CancellationToken cancellationToken)
+    public async Task<IActionResult> Metrics(CancellationToken cancellationToken)
     {
-        // Get memory usage
-        var process = Process.GetCurrentProcess();
-        var memoryUsage = process.WorkingSet64; // Memory usage in bytes
-        var cpuTime = process.TotalProcessorTime; // CPU time used by the process
-        var upTime = DateTime.Now - process.StartTime; // Application uptime
-
-        // Prepare the health check data
-        var metrics = new
-        {
-            MemoryUsageInMB = memoryUsage / (1024 * 1024),
-            CpuTime = cpuTime.TotalMilliseconds,
-            UptimeMinutes = upTime.TotalMinutes
-        };
-
+        var metrics = await _metricsService.GetMetricsAsync(cancellationToken);
         return Ok(metrics);
     }
 
-    ///// <summary>
-    ///// Purpose: Provides the version of the application or service. This can be helpful for debugging or ensuring proper deployments.
-    ///// Use Case: Enables operators to quickly verify the deployed version.
-    ///// </summary>
-    ///// <returns></returns>
-    //public IActionResult Version()
-    //{
-    //    //TODO: Implement
-    //    /*
-    //    {
-    //      "version": "1.2.3",
-    //      "build": "abc123",
-    //      "commit": "def456"
-    //    }
-    //     */
-
-    //    throw new NotImplementedException();
-    //}
+    /// <summary>
+    /// Purpose: Provides the version of the application or service. This can be helpful for debugging or ensuring proper deployments.
+    /// Use Case: Enables operators to quickly verify the deployed version.
+    /// </summary>
+    /// <returns></returns>
+    public async Task<IActionResult> Version(CancellationToken cancellationToken)
+    {
+        var result = await _versionService.GetVersionAsync(cancellationToken);
+        return Ok(result);
+    }
 
     ///// <summary>
     ///// Purpose: Lists all critical dependencies and their statuses.

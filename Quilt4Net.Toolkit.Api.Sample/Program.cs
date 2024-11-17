@@ -9,6 +9,11 @@ builder.Services.AddSwaggerGen();
 //Add AddQuilt4Net
 builder.AddQuilt4Net(o =>
 {
+    //TODO: Make it possible to protect with API-Key.
+    //TODO: Dynamically add auth to selected API-methods
+    //TODO: Implement a way to have a common service, instead of adding the components here.
+    //TODO: Feature to check if background services are running or if they have crashed.
+    //TODO: Make it possible to inject alternatives to the services so that they can have an alternative implementation.
     o.Pattern = "api";
 
     //TODO: Metoden skall returnera...

@@ -4,20 +4,36 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
+using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Ready;
+using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
+/// <summary>
+/// Quilt4Net service registration.
+/// </summary>
 public static class Quilt4NetRegistration
 {
     private static Quilt4NetApiOptions _options;
 
+    /// <summary>
+    /// Register using WebApplicationBuilder.
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="options"></param>
     public static void AddQuilt4Net(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = default)
     {
         AddQuilt4Net(builder.Services, builder.Configuration, options);
     }
 
+    /// <summary>
+    /// Register using IServiceCollection and optional IConfiguration.
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="configuration"></param>
+    /// <param name="options"></param>
     public static void AddQuilt4Net(this IServiceCollection services, IConfiguration configuration = default, Action<Quilt4NetApiOptions> options = default)
     {
         _options = BuildOptions(configuration, options);
@@ -33,6 +49,10 @@ public static class Quilt4NetRegistration
         services.AddTransient<ILiveService, LiveService>();
         services.AddTransient<IReadyService, ReadyService>();
         services.AddTransient<IHealthService, HealthService>();
+        services.AddTransient<IVersionService, VersionService>();
+        services.AddTransient<IMetricsService, MetricsService>();
+        services.AddTransient<IMemoryMetricsService, MemoryMetricsService>();
+        services.AddTransient<IProcessorMetricsService, ProcessorMetricsService>();
     }
 
     private static Quilt4NetApiOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApiOptions> options)

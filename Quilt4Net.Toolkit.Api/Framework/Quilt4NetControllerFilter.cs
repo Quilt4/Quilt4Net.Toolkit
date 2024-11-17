@@ -80,10 +80,13 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                     {
                         ["200"] = new() { Description = "Success" }
                     });
-            //case nameof(HealthController.Version):
-            //    summary = "Version";
-            //    description = "Shows the application version.";
-            //    break;
+            case nameof(HealthController.Version):
+                return ("Version",
+                    "Shows the application version and environment information.",
+                    new OpenApiResponses
+                    {
+                        ["200"] = new() { Description = "Success" }
+                    });
             //case nameof(HealthController.Dependencies):
             //    summary = "Dependencies";
             //    description = "Lists the health of critical dependencies.";
