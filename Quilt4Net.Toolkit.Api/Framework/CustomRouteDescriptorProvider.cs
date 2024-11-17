@@ -17,9 +17,12 @@ internal class CustomRouteDescriptorProvider : IActionDescriptorProvider
     {
         foreach (var descriptor in context.Results)
         {
-            if (descriptor.RouteValues["controller"] == "Health")
+            if (descriptor.RouteValues.TryGetValue("controller", out var item))
             {
-                descriptor.RouteValues["controller"] = _options.ControllerName;
+                if (item == "Health")
+                {
+                    descriptor.RouteValues["controller"] = _options.ControllerName;
+                }
             }
         }
     }
