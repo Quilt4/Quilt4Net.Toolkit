@@ -1,4 +1,5 @@
-﻿using FluentAssertions;
+﻿using AutoFixture;
+using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -36,11 +37,12 @@ public class HealthServiceTests
     public async Task OneComponent(bool success, bool essential, HealthStatus expectedStatus)
     {
         //Arrange
+        var message = new Fixture().Create<string>();
         var component = new Component
         {
             Name = "a",
             Essential = essential,
-            CheckAsync = _ => Task.FromResult(new CheckResult { Success = success }),
+            CheckAsync = _ => Task.FromResult(new CheckResult { Success = success, Message = message }),
         };
         var option = new Quilt4NetApiOptions();
         option.AddComponent(component);
@@ -54,6 +56,8 @@ public class HealthServiceTests
         result.Status.Should().Be(expectedStatus);
         result.Components.Single().Key.Should().Be(component.Name);
         result.Components.Single().Value.Status.Should().Be(expectedStatus);
+        result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "elapsed").Value.Should().NotBeNull();
+        result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "message").Value.Should().Be(message);
     }
 
     [Theory]

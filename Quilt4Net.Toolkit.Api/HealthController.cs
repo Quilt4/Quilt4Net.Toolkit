@@ -57,8 +57,7 @@ public class HealthController : ControllerBase
     {
         var result = await _readyService.GetStatusAsync(cancellationToken);
 
-        if (result.Status == ReadyStatus.Unready
-            || (result.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
+        if (result.Status == ReadyStatus.Unready || (result.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
         {
             return StatusCode(503, result);
         }

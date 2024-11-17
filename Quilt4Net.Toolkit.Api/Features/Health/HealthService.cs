@@ -28,12 +28,17 @@ internal class HealthService : IHealthService
         {
             var result = new KeyValuePair<string, Component>(x.Result.Name, new Component
             {
-                Status = BuildStatus(x.Result.Status, x.Result.Essential),
+                Status = BuildStatus(x.Result.Status.Success, x.Result.Essential),
                 Details = new Dictionary<string, string>
                 {
                     { "elapsed", $"{x.Result.Elapsed}" },
                 }
             });
+
+            if (!string.IsNullOrEmpty(x.Result.Status.Message))
+            {
+                result.Value.Details.TryAdd("message", x.Result.Status.Message);
+            }
 
             if (x.Result.Exception != null)
             {
@@ -87,9 +92,9 @@ internal class HealthService : IHealthService
         return $"Logged with correlationId {correlationId}";
     }
 
-    private static HealthStatus BuildStatus(CheckResult checkResult, bool essential)
+    private static HealthStatus BuildStatus(bool success, bool essential)
     {
-        if (checkResult.Success) return HealthStatus.Healthy;
+        if (success) return HealthStatus.Healthy;
 
         if (!essential) return HealthStatus.Degraded;
 

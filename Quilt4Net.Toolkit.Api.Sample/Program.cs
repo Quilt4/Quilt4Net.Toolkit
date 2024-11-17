@@ -18,7 +18,11 @@ builder.AddQuilt4Net(o =>
         CheckAsync = async _ =>
         {
             await Task.Delay(TimeSpan.FromSeconds(1));
-            return new CheckResult { Success = true };
+            return new CheckResult
+            {
+                Success = true,
+                Message = "Some information"
+            };
         }
     });
 });
