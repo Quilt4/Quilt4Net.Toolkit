@@ -1,17 +1,20 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
+using Quilt4Net.Toolkit.Api.Features.Ready;
 
 namespace Quilt4Net.Toolkit.Api;
 
 public class HealthController : ControllerBase
 {
     private readonly ILiveService _liveService;
+    private readonly IReadyService _readyService;
     private readonly IHealthService _healthService;
 
-    public HealthController(ILiveService liveService, IHealthService healthService)
+    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService)
     {
         _liveService = liveService;
+        _readyService = readyService;
         _healthService = healthService;
     }
 
@@ -25,34 +28,23 @@ public class HealthController : ControllerBase
         return Ok(await _liveService.GetStatusAsync());
     }
 
-    ///// <summary>
-    ///// Purpose: Indicates whether the application is ready to handle traffic, including checks for essential dependencies (e.g., database, cache, APIs).
-    ///// Use Case: Used by Kubernetes readiness probes to determine if the service should be added to the load balancer.
-    ///// </summary>
-    ///// <returns></returns>
-    //public IActionResult Ready()
-    //{
-    //    //TODO: Implement this pattern
-    //    /*
-    //    {
-    //      "status": "ready",
-    //      "components": {
-    //        "database": { "status": "healthy" },
-    //        "cache": { "status": "healthy" }
-    //      }
-    //    }
-    //     */
+    /// <summary>
+    /// Purpose: Indicates whether the application is ready to handle traffic, including checks for essential dependencies (e.g., database, cache, APIs).
+    /// Use Case: Used by Kubernetes readiness probes to determine if the service should be added to the load balancer.
+    /// </summary>
+    /// <returns></returns>
+    public async Task<IActionResult> Ready(CancellationToken cancellationToken)
+    {
+        var result = await _readyService.GetStatusAsync(cancellationToken);
 
-    //    return Ok(new
-    //    {
-    //        status = "ready",
-    //        components = new Dictionary<string, dynamic>
-    //        {
-    //            { "database", new { status = "healthy" } },
-    //            { "cache", new { status = "healthy" } },
-    //        }
-    //    });
-    //}
+        //TODO: Configure if traffic is accepted on Degraded
+        if (result.Status == ReadyStatusResult.Unready)
+        {
+            return StatusCode(503, result);
+        }
+
+        return Ok(result);
+    }
 
     /// <summary>
     /// Purpose: Provides detailed information about the health of the service and its dependencies. This can include overall status and specific details about databases, queues, external APIs, etc.

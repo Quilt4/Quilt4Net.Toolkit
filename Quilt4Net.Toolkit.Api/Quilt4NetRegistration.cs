@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
+using Quilt4Net.Toolkit.Api.Features.Ready;
+using Quilt4Net.Toolkit.Api.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -29,6 +31,7 @@ public static class Quilt4NetRegistration
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
 
         services.AddTransient<ILiveService, LiveService>();
+        services.AddTransient<IReadyService, ReadyService>();
         services.AddTransient<IHealthService, HealthService>();
     }
 

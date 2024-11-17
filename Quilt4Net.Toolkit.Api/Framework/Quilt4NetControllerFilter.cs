@@ -2,7 +2,7 @@
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace Quilt4Net.Toolkit.Api;
+namespace Quilt4Net.Toolkit.Api.Framework;
 
 internal class Quilt4NetControllerFilter : IDocumentFilter
 {
@@ -41,20 +41,25 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
 
     private static (string Summary, string Description, OpenApiResponses Responses) GetInformation(MethodInfo method)
     {
-        var responses = new OpenApiResponses
-        {
-            ["200"] = new() { Description = "Success" },
-            //["503"] = new() { Description = "Service Unavailable" }
-        };
-
         switch (method.Name)
         {
             case nameof(HealthController.Live):
-                return ("Liveness", "Checks if the service is running.", responses);
-            //case nameof(HealthController.Ready):
-            //    summary = "Readiness";
-            //    description = "Checks if the service is ready for traffic.";
-            //    break;
+                return (
+                    "Liveness",
+                    "Checks if the service is running.",
+                    new OpenApiResponses
+                    {
+                        ["200"] = new() { Description = "Success" },
+                    });
+            case nameof(HealthController.Ready):
+                return (
+                    "Readiness",
+                    "Checks if the service is ready for traffic.",
+                    new OpenApiResponses
+                    {
+                        ["200"] = new() { Description = "Success" },
+                        ["503"] = new() { Description = "Service Unavailable" }
+                    });
             case nameof(HealthController.Health):
                 return (
                     "Health",
@@ -81,7 +86,7 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
             //    description = "Lists the health of critical dependencies.";
             //    break;
             default:
-                return (null, null, responses);
+                return (null, null, new OpenApiResponses { ["200"] = new() { Description = "Success" } });
         }
     }
 }

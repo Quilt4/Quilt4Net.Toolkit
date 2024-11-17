@@ -18,14 +18,14 @@ internal class HealthService : IHealthService
 
     public Task<HealthResponse> GetStatusAsync(CancellationToken cancellationToken)
     {
-        var tasks = _option.Components.Select(x => RunTaskAsync(x.Name, x.CheckAsync)).ToArray();
+        var tasks = _option.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync)).ToArray();
 
         Task.WaitAll(tasks.ToArray<Task>(), cancellationToken);
         var components = tasks.Select(x =>
         {
             var result = new KeyValuePair<string, Component>(x.Result.Name, new Component
             {
-                Status = $"{x.Result.Status}",
+                Status = BuildStatus(x.Result.Status, x.Result.Essential),
                 Details = new Dictionary<string, string>
                 {
                     { "elapsed", $"{x.Result.Elapsed}" },
@@ -43,7 +43,7 @@ internal class HealthService : IHealthService
         }).ToArray();
 
         var status = components.Any()
-            ? components.Max(x => Enum.Parse<HealthStatusResult>(x.Value.Status, true))
+            ? components.Max(x => x.Value.Status)
             : HealthStatusResult.Healthy;
 
         return Task.FromResult(new HealthResponse
@@ -53,7 +53,16 @@ internal class HealthService : IHealthService
         });
     }
 
-    private async Task<(string Name, HealthStatusResult Status, TimeSpan Elapsed, Exception Exception)> RunTaskAsync(string name, Func<IServiceProvider, Task<HealthStatusResult>> check)
+    private static HealthStatusResult BuildStatus(CheckResult checkResult, bool essential)
+    {
+        if (checkResult.Success) return HealthStatusResult.Healthy;
+
+        if (!essential) return HealthStatusResult.Degraded;
+
+        return HealthStatusResult.Unhealthy;
+    }
+
+    private async Task<(string Name, bool Essential, CheckResult Status, TimeSpan Elapsed, Exception Exception)> RunTaskAsync(string name, bool essential, Func<IServiceProvider, Task<CheckResult>> check)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -63,12 +72,12 @@ internal class HealthService : IHealthService
             var result = await check.Invoke(_serviceProvider);
             stopwatch.Stop();
             _logger?.LogTrace("Complete check for {name} component after {elapsed}.", name, stopwatch.Elapsed);
-            return (name, result, stopwatch.Elapsed, null);
+            return (name, essential, result, stopwatch.Elapsed, null);
         }
         catch (Exception exception)
         {
             _logger?.LogError("Failed check for {name} component after {elapsed}. {message}", name, stopwatch.Elapsed, exception.Message);
-            return (name, HealthStatusResult.Unhealthy, stopwatch.Elapsed, exception);
+            return (name, essential, new CheckResult { Success = false }, stopwatch.Elapsed, exception);
         }
         finally
         {

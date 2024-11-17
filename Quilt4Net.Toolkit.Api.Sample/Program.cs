@@ -1,5 +1,4 @@
 using Quilt4Net.Toolkit.Api;
-using Quilt4Net.Toolkit.Api.Features.Health;
 using Component = Quilt4Net.Toolkit.Api.Component;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,20 +11,39 @@ builder.AddQuilt4Net(o =>
 {
     o.Pattern = "api";
 
+    //TODO: Metoden skall returnera...
+    //- Tjänsten funkar eller inte
+    //- Tjänsten är vesentlig för funktion eller det går att använda utan.
+
     o.AddComponent(new Component
     {
         Name = "second",
+        Essential = true,
         CheckAsync = async _ =>
         {
             await Task.Delay(TimeSpan.FromSeconds(1));
-            return HealthStatusResult.Degraded;
+            return new CheckResult { Success = true };
         }
     });
     o.AddComponent(new Component
     {
-        Name = "fail",
-        CheckAsync = _ => throw new InvalidOperationException("Oups")
+        Name = "low-prio-service",
+        Essential = false,
+        CheckAsync = async _ =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            return new CheckResult { Success = false };
+        }
     });
+    //o.AddComponent(new Component
+    //{
+    //    Name = "fail",
+    //    Essential = true,
+    //    CheckAsync = async _ =>
+    //    {
+    //        throw new InvalidOperationException("Oups");
+    //    }
+    //});
 });
 
 builder.Services.AddOpenApi();

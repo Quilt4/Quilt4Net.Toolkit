@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
 
-namespace Quilt4Net.Toolkit.Api;
+namespace Quilt4Net.Toolkit.Api.Framework;
 
 internal class CustomRouteDescriptorProvider : IActionDescriptorProvider
 {
