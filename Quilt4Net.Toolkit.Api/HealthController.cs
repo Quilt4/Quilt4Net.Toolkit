@@ -2,12 +2,14 @@
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
-using System.Diagnostics;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Version;
 
 namespace Quilt4Net.Toolkit.Api;
 
+/// <summary>
+/// Health Controller
+/// </summary>
 public class HealthController : ControllerBase
 {
     private readonly ILiveService _liveService;
@@ -15,14 +17,25 @@ public class HealthController : ControllerBase
     private readonly IHealthService _healthService;
     private readonly IVersionService _versionService;
     private readonly IMetricsService _metricsService;
+    private readonly Quilt4NetApiOptions _options;
 
-    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService, IVersionService versionService, IMetricsService metricsService)
+    /// <summary>
+    /// Health Controller constructor.
+    /// </summary>
+    /// <param name="liveService"></param>
+    /// <param name="readyService"></param>
+    /// <param name="healthService"></param>
+    /// <param name="versionService"></param>
+    /// <param name="metricsService"></param>
+    /// <param name="options"></param>
+    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService, IVersionService versionService, IMetricsService metricsService, Quilt4NetApiOptions options)
     {
         _liveService = liveService;
         _readyService = readyService;
         _healthService = healthService;
         _versionService = versionService;
         _metricsService = metricsService;
+        _options = options;
     }
 
     /// <summary>
@@ -44,8 +57,8 @@ public class HealthController : ControllerBase
     {
         var result = await _readyService.GetStatusAsync(cancellationToken);
 
-        //TODO: Configure if traffic is accepted on Degraded
-        if (result.Status == ReadyStatusResult.Unready)
+        if (result.Status == ReadyStatus.Unready
+            || (result.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
         {
             return StatusCode(503, result);
         }
@@ -63,7 +76,7 @@ public class HealthController : ControllerBase
     {
         var result = await _healthService.GetStatusAsync(cancellationToken);
 
-        if (result.Status == HealthStatusResult.Unhealthy)
+        if (result.Status == HealthStatus.Unhealthy)
         {
             return StatusCode(503, result);
         }
@@ -78,7 +91,6 @@ public class HealthController : ControllerBase
     ///// <returns></returns>
     //public IActionResult Startup()
     //{
-    //    //TODO: Implement
     //    return Ok(new { status = "started" });
     //}
 
@@ -112,8 +124,6 @@ public class HealthController : ControllerBase
     ///// <returns></returns>
     //public IActionResult Dependencies()
     //{
-    //    //TODO: Implement
-
     //    /*
     //    {
     //      "dependencies": {

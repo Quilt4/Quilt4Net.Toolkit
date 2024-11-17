@@ -1,6 +1,9 @@
 ﻿namespace Quilt4Net.Toolkit.Api.Features.Ready;
 
-public enum ReadyStatusResult
+/// <summary>
+/// Status for Ready.
+/// </summary>
+public enum ReadyStatus
 {
     /// <summary>
     /// The application is fully prepared to handle incoming traffic.

@@ -1,6 +1,9 @@
 ﻿namespace Quilt4Net.Toolkit.Api.Features.Live;
 
-public enum LiveStatusResult
+/// <summary>
+/// Status for Health.
+/// </summary>
+public enum LiveStatus
 {
     /// <summary>
     /// The application process is running.

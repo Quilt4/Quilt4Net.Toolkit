@@ -1,6 +1,6 @@
 ﻿//namespace Quilt4Net.Toolkit.Api.Features.Startup;
 
-//public enum StartupStatusResult
+//public enum StartupStatus
 //{
 //    /// <summary>
 //    /// The application is in the process of initializing but is not yet ready to serve traffic.

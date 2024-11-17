@@ -1,6 +1,9 @@
 ﻿namespace Quilt4Net.Toolkit.Api.Features.Health;
 
-public enum HealthStatusResult
+/// <summary>
+/// Status for Health.
+/// </summary>
+public enum HealthStatus
 {
     /// <summary>
     /// All components are operational, and the service is running as expected.

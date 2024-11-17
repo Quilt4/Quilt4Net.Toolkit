@@ -12,7 +12,7 @@ internal class VersionService : IVersionService
         _hostEnvironment = hostEnvironment;
     }
 
-    public async Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken)
+    public Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken)
     {
         var asm = Assembly.GetEntryAssembly();
         var name = _hostEnvironment.EnvironmentName;
@@ -26,6 +26,6 @@ internal class VersionService : IVersionService
             Environment = name
         };
 
-        return result;
+        return Task.FromResult(result);
     }
 }

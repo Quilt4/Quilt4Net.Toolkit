@@ -2,8 +2,14 @@
 
 namespace Quilt4Net.Toolkit.Api.Features.Ready;
 
+/// <summary>
+/// Component for Ready check.
+/// </summary>
 public record Component
 {
+    /// <summary>
+    /// Status for the component check.
+    /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required ReadyStatusResult Status { get; init; }
+    public required ReadyStatus Status { get; init; }
 }

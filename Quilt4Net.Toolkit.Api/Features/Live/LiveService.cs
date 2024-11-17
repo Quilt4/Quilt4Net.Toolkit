@@ -4,6 +4,6 @@ internal class LiveService : ILiveService
 {
     public ValueTask<LiveResponse> GetStatusAsync()
     {
-        return ValueTask.FromResult(new LiveResponse { Status = LiveStatusResult.Alive });
+        return ValueTask.FromResult(new LiveResponse { Status = LiveStatus.Alive });
     }
 }

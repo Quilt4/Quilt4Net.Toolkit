@@ -1,6 +1,9 @@
 ﻿namespace Quilt4Net.Toolkit.Api.Features.Dependencies;
 
-public enum DependenciesStatusResult
+/// <summary>
+/// Status for Dependencies.
+/// </summary>
+public enum DependenciesStatus
 {
     /// <summary>
     /// The dependency is operational.

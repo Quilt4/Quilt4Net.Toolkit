@@ -48,14 +48,14 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
         {
             case nameof(HealthController.Live):
                 return ("Liveness",
-                    $"Checks if the service is running.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<LiveStatusResult>())}",
+                    $"Checks if the service is running.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<LiveStatus>())}",
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" },
                     });
             case nameof(HealthController.Ready):
                 return ("Readiness",
-                    $"Checks if the service is ready for traffic.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<ReadyStatusResult>())}",
+                    $"Checks if the service is ready for traffic.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<ReadyStatus>())}",
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" },
@@ -63,7 +63,7 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                     });
             case nameof(HealthController.Health):
                 return ("Health",
-                    $"Comprehensive health check of the service and dependencies.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<HealthStatusResult>())}",
+                    $"Comprehensive health check of the service and dependencies.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<HealthStatus>())}",
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" },

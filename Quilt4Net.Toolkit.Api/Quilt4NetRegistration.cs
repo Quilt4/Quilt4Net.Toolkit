@@ -60,12 +60,20 @@ public static class Quilt4NetRegistration
         var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetApiOptions>() ?? new Quilt4NetApiOptions();
         options?.Invoke(o);
 
+        //NOTE: the pattern needs to start and end with '/'.
         if (!o.Pattern.EndsWith('/')) o.Pattern = $"{o.Pattern}/";
         if (!o.Pattern.StartsWith('/')) o.Pattern = $"/{o.Pattern}";
+
+        //NOTE: Empty controller name is not allowed, automatically revert to default.
+        if (string.IsNullOrEmpty(o.ControllerName)) o.ControllerName = new Quilt4NetApiOptions().ControllerName;
 
         return o;
     }
 
+    /// <summary>
+    /// Sets up routing to the Quilt4Net health checks.
+    /// </summary>
+    /// <param name="app"></param>
     public static void UseQuilt4Net(this WebApplication app)
     {
         app.UseRouting();

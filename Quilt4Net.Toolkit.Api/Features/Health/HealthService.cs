@@ -34,7 +34,7 @@ internal class HealthService : IHealthService
 
             if (x.Result.Exception != null)
             {
-                //TODO: Detail level should be configurable
+                //TODO: Detail level should be configurable, possibly per environment.
                 result.Value.Details.TryAdd("exception.message", x.Result.Exception.Message);
                 result.Value.Details.TryAdd("exception.stacktrace", x.Result.Exception.StackTrace);
             }
@@ -44,7 +44,7 @@ internal class HealthService : IHealthService
 
         var status = components.Any()
             ? components.Max(x => x.Value.Status)
-            : HealthStatusResult.Healthy;
+            : HealthStatus.Healthy;
 
         return Task.FromResult(new HealthResponse
         {
@@ -53,13 +53,13 @@ internal class HealthService : IHealthService
         });
     }
 
-    private static HealthStatusResult BuildStatus(CheckResult checkResult, bool essential)
+    private static HealthStatus BuildStatus(CheckResult checkResult, bool essential)
     {
-        if (checkResult.Success) return HealthStatusResult.Healthy;
+        if (checkResult.Success) return HealthStatus.Healthy;
 
-        if (!essential) return HealthStatusResult.Degraded;
+        if (!essential) return HealthStatus.Degraded;
 
-        return HealthStatusResult.Unhealthy;
+        return HealthStatus.Unhealthy;
     }
 
     private async Task<(string Name, bool Essential, CheckResult Status, TimeSpan Elapsed, Exception Exception)> RunTaskAsync(string name, bool essential, Func<IServiceProvider, Task<CheckResult>> check)
