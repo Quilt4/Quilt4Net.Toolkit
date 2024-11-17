@@ -17,8 +17,8 @@ public enum HealthStatusResult
     /// </summary>
     Unhealthy,
 
-    /// <summary>
-    /// The service is intentionally under maintenance and may not perform all operations.
-    /// </summary>
-    Maintenance
+    ///// <summary>
+    ///// The service is intentionally under maintenance and may not perform all operations.
+    ///// </summary>
+    //Maintenance
 }

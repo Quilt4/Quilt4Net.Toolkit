@@ -4,6 +4,13 @@ namespace Quilt4Net.Toolkit.Api;
 
 internal class CustomRouteDescriptorProvider : IActionDescriptorProvider
 {
+    private readonly Quilt4NetApiOptions _options;
+
+    public CustomRouteDescriptorProvider(Quilt4NetApiOptions options)
+    {
+        _options = options;
+    }
+
     public int Order => -1000; // Ensure it runs early
 
     public void OnProvidersExecuted(ActionDescriptorProviderContext context)
@@ -12,7 +19,7 @@ internal class CustomRouteDescriptorProvider : IActionDescriptorProvider
         {
             if (descriptor.RouteValues["controller"] == "Health")
             {
-                descriptor.RouteValues["controller"] = Quilt4NetRegistration.Options.ControllerName; // Replace route value
+                descriptor.RouteValues["controller"] = _options.ControllerName;
             }
         }
     }

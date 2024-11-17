@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 
 namespace Quilt4Net.Toolkit.Api;
@@ -8,16 +10,18 @@ namespace Quilt4Net.Toolkit.Api;
 public static class Quilt4NetRegistration
 {
     private static Quilt4NetApiOptions _options;
-    internal static Quilt4NetApiOptions Options => _options ?? throw new InvalidOperationException($"Register Quilt4Net.Toolkit by using {nameof(Quilt4NetRegistration)}.{nameof(AddQuilt4Net)} before starting to use it.");
 
-    public static void AddQuilt4Net(this IServiceCollection services, Quilt4NetApiOptions options = default)
+    public static void AddQuilt4Net(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = default)
     {
-        _options = options ?? new Quilt4NetApiOptions();
+        AddQuilt4Net(builder.Services, builder.Configuration, options);
+    }
 
-        if (!Options.Pattern.EndsWith('/')) Options.Pattern = $"{Options.Pattern}/";
-        if (!Options.Pattern.StartsWith('/')) Options.Pattern = $"/{Options.Pattern}";
+    public static void AddQuilt4Net(this IServiceCollection services, IConfiguration configuration = default, Action<Quilt4NetApiOptions> options = default)
+    {
+        _options = BuildOptions(configuration, options);
+        services.AddSingleton(_ => _options);
 
-        if (Options.ShowInSwagger)
+        if (_options.ShowInSwagger)
         {
             services.AddSwaggerGen(c => { c.DocumentFilter<Quilt4NetControllerFilter>(); });
         }
@@ -25,6 +29,18 @@ public static class Quilt4NetRegistration
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
 
         services.AddTransient<ILiveService, LiveService>();
+        services.AddTransient<IHealthService, HealthService>();
+    }
+
+    private static Quilt4NetApiOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApiOptions> options)
+    {
+        var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetApiOptions>() ?? new Quilt4NetApiOptions();
+        options?.Invoke(o);
+
+        if (!o.Pattern.EndsWith('/')) o.Pattern = $"{o.Pattern}/";
+        if (!o.Pattern.StartsWith('/')) o.Pattern = $"/{o.Pattern}";
+
+        return o;
     }
 
     public static void UseQuilt4Net(this WebApplication app)
@@ -41,8 +57,8 @@ public static class Quilt4NetRegistration
                 var routeName = method.Name.ToLower();
                 endpoints.MapControllerRoute(
                     name: $"Quilt4Net{routeName}Route",
-                    pattern: $"{Options.Pattern}{Options.ControllerName}/{routeName}",
-                    defaults: new { controller = Options.ControllerName, action = method.Name }
+                    pattern: $"{_options.Pattern}{_options.ControllerName}/{routeName}",
+                    defaults: new { controller = _options.ControllerName, action = method.Name }
                 );
             }
         });

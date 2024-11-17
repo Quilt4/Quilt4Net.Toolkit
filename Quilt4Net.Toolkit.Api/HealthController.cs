@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 
 namespace Quilt4Net.Toolkit.Api;
@@ -6,10 +7,12 @@ namespace Quilt4Net.Toolkit.Api;
 public class HealthController : ControllerBase
 {
     private readonly ILiveService _liveService;
+    private readonly IHealthService _healthService;
 
-    public HealthController(ILiveService liveService)
+    public HealthController(ILiveService liveService, IHealthService healthService)
     {
         _liveService = liveService;
+        _healthService = healthService;
     }
 
     /// <summary>
@@ -51,44 +54,23 @@ public class HealthController : ControllerBase
     //    });
     //}
 
-    ///// <summary>
-    ///// Purpose: Provides detailed information about the health of the service and its dependencies. This can include overall status and specific details about databases, queues, external APIs, etc.
-    ///// Use Case: Primarily used for monitoring systems like Prometheus, Grafana, or custom dashboards to track application health.
-    ///// </summary>
-    ///// <returns></returns>
-    //public IActionResult Health()
-    //{
-    //    //TODO: Implement this pattern
-    //    /*
-    //    {
-    //      "status": "healthy",
-    //      "components": {
-    //        "database": {
-    //          "status": "healthy",
-    //          "details": { "responseTime": "50ms" }
-    //        },
-    //        "cache": {
-    //          "status": "degraded",
-    //          "details": { "responseTime": "500ms" }
-    //        },
-    //        "externalApi": {
-    //          "status": "unhealthy",
-    //          "details": { "error": "Timeout" }
-    //        }
-    //      }
-    //    }
-    //     */
+    /// <summary>
+    /// Purpose: Provides detailed information about the health of the service and its dependencies. This can include overall status and specific details about databases, queues, external APIs, etc.
+    /// Use Case: Primarily used for monitoring systems like Prometheus, Grafana, or custom dashboards to track application health.
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public async Task<IActionResult> Health(CancellationToken cancellationToken)
+    {
+        var result = await _healthService.GetStatusAsync(cancellationToken);
 
-    //    return Ok(new
-    //    {
-    //        status = "healthy",
-    //        components = new Dictionary<string, dynamic>
-    //        {
-    //            { "database", new { status = "healthy" } },
-    //            { "cache", new { status = "healthy" } },
-    //        },
-    //    });
-    //}
+        if (result.Status == HealthStatusResult.Unhealthy)
+        {
+            return StatusCode(503, result);
+        }
+
+        return Ok(result);
+    }
 
     ///// <summary>
     ///// Purpose: Indicates whether the application has completed its startup routine and is ready to perform other checks. This is especially useful for containerized or microservice-based applications.
