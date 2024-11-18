@@ -4,6 +4,7 @@ using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Version;
+using Microsoft.AspNetCore.Http;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -18,6 +19,8 @@ public class HealthController : ControllerBase
     private readonly IVersionService _versionService;
     private readonly IMetricsService _metricsService;
     private readonly Quilt4NetApiOptions _options;
+
+    private HttpContext _httpContext;
 
     /// <summary>
     /// Health Controller constructor.
@@ -38,6 +41,12 @@ public class HealthController : ControllerBase
         _options = options;
     }
 
+    internal new HttpContext HttpContext
+    {
+        get => _httpContext ?? base.HttpContext;
+        set => _httpContext = value;
+    }
+
     /// <summary>
     /// Purpose: Checks if the application is running (basic process check). It should return 200 OK if the service is up, regardless of its ability to handle requests.
     /// Use Case: Typically used by Kubernetes liveness probes to restart the container if it becomes unresponsive.
@@ -45,7 +54,16 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Live()
     {
-        return Ok(await _liveService.GetStatusAsync());
+        var response = await _liveService.GetStatusAsync();
+
+        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
+
+        if (HttpContext.Request.Method == HttpMethods.Head)
+        {
+            return Ok();
+        }
+
+        return Ok(response);
     }
 
     /// <summary>

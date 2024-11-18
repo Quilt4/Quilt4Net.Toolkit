@@ -49,6 +49,13 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                     Description = information.Description,
                     Responses = information.Responses,
                     Tags = [new OpenApiTag { Name = _options.ControllerName }]
+                },
+                [OperationType.Head] = new()
+                {
+                    Summary = information.Summary,
+                    Description = information.Description,
+                    Responses = information.Responses,
+                    Tags = [new OpenApiTag { Name = _options.ControllerName }]
                 }
             },
         };

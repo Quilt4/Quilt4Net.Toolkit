@@ -1,4 +1,5 @@
 ﻿using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Quilt4Net.Toolkit.Api.Features.Health;
@@ -19,25 +20,41 @@ public class HealthControllerTests
     private readonly Mock<IMetricsService> _metricsService = new (MockBehavior.Strict);
     private readonly Quilt4NetApiOptions _options = Mock.Of<Quilt4NetApiOptions>();
 
-    [Fact]
-    public async Task Live()
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("HEAD")]
+    public async Task Live(string method)
     {
         //Arrange
+        var httpContext = new DefaultHttpContext { Request = { Method = method } };
         var data = new LiveResponse { Status = LiveStatus.Alive };
         _liveService.Setup(x => x.GetStatusAsync()).ReturnsAsync(data);
-        var sub = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, _options);
+        var sub = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, _options)
+        {
+            HttpContext = httpContext
+        };
 
         //Act
         var response = await sub.Live();
 
         //Assert
         response.Should().NotBeNull();
-        var result = Assert.IsType<OkObjectResult>(response);
-        Assert.Equal(200, result.StatusCode);
+        if (method == HttpMethods.Get)
+        {
+            var result = Assert.IsType<OkObjectResult>(response);
+            Assert.Equal(200, result.StatusCode);
 
-        var payload = Assert.IsType<LiveResponse>(result.Value);
-        payload.Status.Should().Be(data.Status);
+            var payload = Assert.IsType<LiveResponse>(result.Value);
+            payload.Status.Should().Be(data.Status);
+        }
+        else if (method == HttpMethods.Head)
+        {
+            var result = Assert.IsType<OkResult>(response);
+            Assert.Equal(200, result.StatusCode);
+        }
 
+        //data
+        httpContext.Response.Headers[nameof(LiveResponse.Status)].Single().Should().Be($"{data.Status}");
         _liveService.Verify(x => x.GetStatusAsync(), Times.Once);
     }
 
