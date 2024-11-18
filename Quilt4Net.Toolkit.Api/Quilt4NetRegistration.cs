@@ -76,8 +76,6 @@ public static class Quilt4NetRegistration
     /// <param name="app"></param>
     public static void UseQuilt4Net(this WebApplication app)
     {
-        app.UseRouting();
-
         app.UseEndpoints(endpoints =>
         {
             var methods = typeof(HealthController).GetMethods()
