@@ -55,15 +55,9 @@ public class HealthController : ControllerBase
     public async Task<IActionResult> Live()
     {
         var response = await _liveService.GetStatusAsync();
-
         HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
 
-        if (HttpContext.Request.Method == HttpMethods.Head)
-        {
-            return Ok();
-        }
-
-        return Ok(response);
+        return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
     }
 
     /// <summary>
@@ -73,14 +67,15 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Ready(CancellationToken cancellationToken)
     {
-        var result = await _readyService.GetStatusAsync(cancellationToken);
+        var response = await _readyService.GetStatusAsync(cancellationToken);
+        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
 
-        if (result.Status == ReadyStatus.Unready || (result.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
+        if (response.Status == ReadyStatus.Unready || (response.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
         {
-            return StatusCode(503, result);
+            return HttpContext.Request.Method == HttpMethods.Head ? StatusCode(503) : StatusCode(503, response);
         }
 
-        return Ok(result);
+        return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
     }
 
     /// <summary>
@@ -91,14 +86,15 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Health(CancellationToken cancellationToken)
     {
-        var result = await _healthService.GetStatusAsync(cancellationToken);
+        var response = await _healthService.GetStatusAsync(cancellationToken);
+        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
 
-        if (result.Status == HealthStatus.Unhealthy)
+        if (response.Status == HealthStatus.Unhealthy)
         {
-            return StatusCode(503, result);
+            return HttpContext.Request.Method == HttpMethods.Head ? StatusCode(503) : StatusCode(503, response);
         }
 
-        return Ok(result);
+        return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
     }
 
     ///// <summary>

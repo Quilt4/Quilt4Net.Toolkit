@@ -1,17 +1,18 @@
 ﻿using System.Text.Json.Serialization;
+using Quilt4Net.Toolkit.Api.Features.Ready;
 
 namespace Quilt4Net.Toolkit.Api.Features.Health;
 
 /// <summary>
 /// Response for Health.
 /// </summary>
-public record HealthResponse
+public record HealthResponse : ResponseBase<HealthStatus>
 {
     /// <summary>
     /// Overall status.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required HealthStatus Status { get; init; }
+    public override required HealthStatus Status { get; init; }
 
     /// <summary>
     /// Components that have been checked.
