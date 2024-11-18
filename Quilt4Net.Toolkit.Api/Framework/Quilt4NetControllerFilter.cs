@@ -39,29 +39,32 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
     {
         var information = GetInformation(method);
 
-        return new OpenApiPathItem
+        var operations = new Dictionary<OperationType, OpenApiOperation>
         {
-            Operations = new Dictionary<OperationType, OpenApiOperation>
+            [OperationType.Get] = new()
             {
-                [OperationType.Get] = new()
-                {
-                    Summary = information.Summary,
-                    Description = information.Description,
-                    Responses = information.Responses,
-                    Tags = [new OpenApiTag { Name = _options.ControllerName }]
-                },
-                [OperationType.Head] = new()
-                {
-                    Summary = information.Summary,
-                    Description = information.Description,
-                    Responses = information.Responses,
-                    Tags = [new OpenApiTag { Name = _options.ControllerName }]
-                }
-            },
+                Summary = information.Summary,
+                Description = information.Description,
+                Responses = information.Responses,
+                Tags = [new OpenApiTag { Name = _options.ControllerName }]
+            }
         };
+
+        if (information.SupportHead)
+        {
+            operations.Add(OperationType.Head, new()
+            {
+                Summary = information.Summary,
+                Description = information.Description,
+                Responses = information.Responses,
+                Tags = [new OpenApiTag { Name = _options.ControllerName }]
+            });
+        }
+
+        return new OpenApiPathItem { Operations = operations };
     }
 
-    private static (string Summary, string Description, OpenApiResponses Responses) GetInformation(MethodInfo method)
+    private static (string Summary, string Description, OpenApiResponses Responses, bool SupportHead) GetInformation(MethodInfo method)
     {
         switch (method.Name)
         {
@@ -71,7 +74,8 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" },
-                    });
+                    },
+                    true);
             case nameof(HealthController.Ready):
                 return ("Readiness",
                     $"Checks if the service is ready for traffic.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<ReadyStatus>())}",
@@ -79,7 +83,8 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                     {
                         ["200"] = new() { Description = "Success" },
                         ["503"] = new() { Description = "Service Unavailable" }
-                    });
+                    },
+                    true);
             case nameof(HealthController.Health):
                 return ("Health",
                     $"Comprehensive health check of the service and dependencies.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<HealthStatus>())}",
@@ -87,7 +92,8 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                     {
                         ["200"] = new() { Description = "Success" },
                         ["503"] = new() { Description = "Service Unavailable" }
-                    });
+                    },
+                    true);
             //case nameof(HealthController.Startup):
             //    summary = "Startup";
             //    description = "Indicates whether the service has started successfully.";
@@ -98,20 +104,22 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" }
-                    });
+                    },
+                    false);
             case nameof(HealthController.Version):
                 return ("Version",
                     "Shows the application version and environment information.",
                     new OpenApiResponses
                     {
                         ["200"] = new() { Description = "Success" }
-                    });
+                    },
+                    false);
             //case nameof(HealthController.Dependencies):
             //    summary = "Dependencies";
             //    description = "Lists the health of critical dependencies.";
             //    break;
             default:
-                return (null, null, new OpenApiResponses { ["200"] = new() { Description = "Success" } });
+                return (null, null, new OpenApiResponses { ["200"] = new() { Description = "Success" } }, false);
         }
     }
 }

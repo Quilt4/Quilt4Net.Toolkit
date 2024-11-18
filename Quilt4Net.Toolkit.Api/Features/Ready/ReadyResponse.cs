@@ -1,11 +1,7 @@
-﻿using System.Text.Json.Serialization;
+﻿using Quilt4Net.Toolkit.Api.Framework;
+using System.Text.Json.Serialization;
 
 namespace Quilt4Net.Toolkit.Api.Features.Ready;
-
-public abstract record ResponseBase<TStatus> where TStatus : Enum
-{
-    public abstract required TStatus Status { get; init; }
-}
 
 /// <summary>
 /// Response for Ready.

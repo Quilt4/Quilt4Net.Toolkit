@@ -1,5 +1,5 @@
 ﻿using System.Text.Json.Serialization;
-using Quilt4Net.Toolkit.Api.Features.Ready;
+using Quilt4Net.Toolkit.Api.Framework;
 
 namespace Quilt4Net.Toolkit.Api.Features.Live;
 

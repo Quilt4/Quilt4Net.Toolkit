@@ -8,6 +8,7 @@ using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
+using Quilt4Net.Toolkit.Api.Framework;
 using System.Net.Http;
 using Xunit;
 using static System.Runtime.InteropServices.JavaScript.JSType;
