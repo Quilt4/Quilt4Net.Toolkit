@@ -55,7 +55,7 @@ public class HealthController : ControllerBase
     public async Task<IActionResult> Live()
     {
         var response = await _liveService.GetStatusAsync();
-        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
+        HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
         return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
     }
@@ -68,7 +68,7 @@ public class HealthController : ControllerBase
     public async Task<IActionResult> Ready(CancellationToken cancellationToken)
     {
         var response = await _readyService.GetStatusAsync(cancellationToken);
-        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
+        HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
         if (response.Status == ReadyStatus.Unready || (response.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
         {
