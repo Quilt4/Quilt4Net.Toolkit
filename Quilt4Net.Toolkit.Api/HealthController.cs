@@ -4,6 +4,7 @@ using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Version;
+using Microsoft.AspNetCore.Http;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -18,6 +19,8 @@ public class HealthController : ControllerBase
     private readonly IVersionService _versionService;
     private readonly IMetricsService _metricsService;
     private readonly Quilt4NetApiOptions _options;
+
+    private HttpContext _httpContext;
 
     /// <summary>
     /// Health Controller constructor.
@@ -38,6 +41,12 @@ public class HealthController : ControllerBase
         _options = options;
     }
 
+    internal new HttpContext HttpContext
+    {
+        get => _httpContext ?? base.HttpContext;
+        set => _httpContext = value;
+    }
+
     /// <summary>
     /// Purpose: Checks if the application is running (basic process check). It should return 200 OK if the service is up, regardless of its ability to handle requests.
     /// Use Case: Typically used by Kubernetes liveness probes to restart the container if it becomes unresponsive.
@@ -45,7 +54,10 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Live()
     {
-        return Ok(await _liveService.GetStatusAsync());
+        var response = await _liveService.GetStatusAsync();
+        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
+
+        return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
     }
 
     /// <summary>
@@ -55,14 +67,15 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Ready(CancellationToken cancellationToken)
     {
-        var result = await _readyService.GetStatusAsync(cancellationToken);
+        var response = await _readyService.GetStatusAsync(cancellationToken);
+        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
 
-        if (result.Status == ReadyStatus.Unready || (result.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
+        if (response.Status == ReadyStatus.Unready || (response.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
         {
-            return StatusCode(503, result);
+            return HttpContext.Request.Method == HttpMethods.Head ? StatusCode(503) : StatusCode(503, response);
         }
 
-        return Ok(result);
+        return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
     }
 
     /// <summary>
@@ -73,14 +86,15 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Health(CancellationToken cancellationToken)
     {
-        var result = await _healthService.GetStatusAsync(cancellationToken);
+        var response = await _healthService.GetStatusAsync(cancellationToken);
+        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
 
-        if (result.Status == HealthStatus.Unhealthy)
+        if (response.Status == HealthStatus.Unhealthy)
         {
-            return StatusCode(503, result);
+            return HttpContext.Request.Method == HttpMethods.Head ? StatusCode(503) : StatusCode(503, response);
         }
 
-        return Ok(result);
+        return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
     }
 
     ///// <summary>

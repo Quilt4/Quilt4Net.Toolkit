@@ -1,17 +1,18 @@
-﻿using System.Text.Json.Serialization;
+﻿using Quilt4Net.Toolkit.Api.Framework;
+using System.Text.Json.Serialization;
 
 namespace Quilt4Net.Toolkit.Api.Features.Ready;
 
 /// <summary>
 /// Response for Ready.
 /// </summary>
-public record ReadyResponse
+public record ReadyResponse : ResponseBase<ReadyStatus>
 {
     /// <summary>
     /// Overall status.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required ReadyStatus Status { get; init; }
+    public override required ReadyStatus Status { get; init; }
 
     /// <summary>
     /// Components that have been checked.
