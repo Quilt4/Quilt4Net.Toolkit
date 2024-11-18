@@ -10,19 +10,19 @@ After having installed the nuget package.
 Register *AddQuilt4Net* as a service and use it in the app.
 ```
 var builder = WebApplication.CreateBuilder(args);
-
 ...
-
-builder.Services.AddQuilt4Net();
+builder.AddQuilt4Net();
 
 var app = builder.Build();
-
 ...
-
+app.UseRouting();
+...
 app.UseQuilt4Net();
 
 app.Run();
 ```
+You have to call `AddQuilt4Net` in any order on the *builder* (or *builder.Services*).
+On the app you have to call `UseRouting` before `UseQuilt4Net`.
 
 ### Register service check
 This is a basic way of adding a service check. This check will be performed when calling *Health*, *Ready* or *Dependencies*.
@@ -62,6 +62,9 @@ Configuration in *appsettings.json*.
 ```
 For values without configuration default values are used.
 
+- ShowInSwagger: Turns on visibility in swagger.
+- FailReadyWhenDegraded: When calling *Ready* and the service is *Degraded* it sill by default return *200*. If this is set to *true*, the response will be *503* for degraded components.
+
 ### Endpoints
 Use the endpoint in different scenarios.
 
@@ -79,6 +82,12 @@ Use this endpoint to check if a new instance sould be started. Commonly used in 
 `~/api/Health/ready`
 
 Use this endpoint to check if the instance is ready to perform work.
+
+## Troubleshooting
+Error at startup with the message:
+`Unhandled exception. System.InvalidOperationException: EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware and so must be added to the request execution pipeline before EndpointMiddleware. Please add EndpointRoutingMiddleware by calling 'IApplicationBuilder.UseRouting' inside the call to 'Configure(...)' in the application startup code.`
+
+The solution is to add `app.UseRouting();` before `app.UseQuilt4Net();` in *Program.cs*.
 
 ## Planned
 - IP-Address lookup

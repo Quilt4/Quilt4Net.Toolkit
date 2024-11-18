@@ -12,18 +12,36 @@ internal class VersionService : IVersionService
         _hostEnvironment = hostEnvironment;
     }
 
-    public Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken)
+    public async Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken)
     {
         var asm = Assembly.GetEntryAssembly();
         var name = _hostEnvironment.EnvironmentName;
+        var ipAddress = await GetExternalIpAsync(true);
 
         var result = new VersionResponse
         {
             Version = $"{asm?.GetName().Version}",
             Machine = Environment.MachineName,
-            Environment = name
+            Environment = name,
+            IpAddress = ipAddress
         };
 
-        return Task.FromResult(result);
+        return result;
+    }
+
+    private async Task<string> GetExternalIpAsync(bool showIp)
+    {
+        if (!showIp) return null;
+
+        try
+        {
+            using var client = new HttpClient();
+            var result = await client.GetStringAsync(new Uri("http://ipv4.icanhazip.com/"));
+            return result.TrimEnd('\n');
+        }
+        catch (Exception e)
+        {
+            return $"Unknown ({e.Message})";
+        }
     }
 }

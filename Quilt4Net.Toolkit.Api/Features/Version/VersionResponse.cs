@@ -19,4 +19,9 @@ public record VersionResponse
     /// Environment for the application.
     /// </summary>
     public required string Environment { get; init; }
+
+    /// <summary>
+    /// Public IP-address for the application.
+    /// </summary>
+    public required string IpAddress { get; init; }
 }

@@ -19,27 +19,39 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
     public void Apply(OpenApiDocument swaggerDoc, DocumentFilterContext context)
     {
         var methods = typeof(HealthController).GetMethods()
-            .Where(m => m.DeclaringType == typeof(HealthController) && !m.IsSpecialName);
+            .Where(m => m.DeclaringType == typeof(HealthController) && !m.IsSpecialName)
+            .ToArray();
+
+        //NOTE: Also add the default endpoint
+        var defaultMethd = methods.FirstOrDefault(x => x.Name.Equals(_options.DefaultAction, StringComparison.InvariantCultureIgnoreCase));
+        if (defaultMethd != null)
+        {
+            swaggerDoc.Paths.Add($"{_options.Pattern}{_options.ControllerName}", BuildOpenApiPathItem(defaultMethd));
+        }
 
         foreach (var method in methods)
         {
-            var information = GetInformation(method);
-
-            swaggerDoc.Paths.Add($"{_options.Pattern}{_options.ControllerName}/{method.Name.ToLower()}",
-                new OpenApiPathItem
-                {
-                    Operations = new Dictionary<OperationType, OpenApiOperation>
-                    {
-                        [OperationType.Get] = new()
-                        {
-                            Summary = information.Summary,
-                            Description = information.Description,
-                            Responses = information.Responses,
-                            Tags = [new OpenApiTag { Name = _options.ControllerName }]
-                        }
-                    },
-                });
+            swaggerDoc.Paths.Add($"{_options.Pattern}{_options.ControllerName}/{method.Name.ToLower()}", BuildOpenApiPathItem(method));
         }
+    }
+
+    private OpenApiPathItem BuildOpenApiPathItem(MethodInfo method)
+    {
+        var information = GetInformation(method);
+
+        return new OpenApiPathItem
+        {
+            Operations = new Dictionary<OperationType, OpenApiOperation>
+            {
+                [OperationType.Get] = new()
+                {
+                    Summary = information.Summary,
+                    Description = information.Description,
+                    Responses = information.Responses,
+                    Tags = [new OpenApiTag { Name = _options.ControllerName }]
+                }
+            },
+        };
     }
 
     private static (string Summary, string Description, OpenApiResponses Responses) GetInformation(MethodInfo method)
