@@ -89,6 +89,16 @@ public static class Quilt4NetRegistration
                     pattern: $"{_options.Pattern}{_options.ControllerName}/{routeName}",
                     defaults: new { controller = _options.ControllerName, action = method.Name }
                 );
+
+                //NOTE: Also add the default endpoint
+                if (method.Name.Equals(_options.DefaultAction, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    endpoints.MapControllerRoute(
+                        name: $"Quilt4Net{routeName}Route_default",
+                        pattern: $"{_options.Pattern}{_options.ControllerName}",
+                        defaults: new { controller = _options.ControllerName, action = method.Name }
+                    );
+                }
             }
         });
     }

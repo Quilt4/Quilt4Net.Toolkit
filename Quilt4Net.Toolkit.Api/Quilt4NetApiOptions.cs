@@ -30,6 +30,14 @@ public record Quilt4NetApiOptions
     public string ControllerName { get; set; } = "Health";
 
     /// <summary>
+    /// Assign a default action if no action is provided.
+    /// Possible values are Live, Ready, Health, Metrics or Version.
+    /// If set to empty string no default is routed.
+    /// Default is Health.
+    /// </summary>
+    public string DefaultAction { get; set; } = "Health";
+
+    /// <summary>
     /// If set to true, Ready will return 503 when the system is degraded.
     /// If set to false Ready will return 200 when the system is degraded.
     /// Default is false.
