@@ -23,7 +23,7 @@ public static class Quilt4NetRegistration
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4Net(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = default)
+    public static void AddQuilt4NetApi(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = default)
     {
         AddQuilt4Net(builder.Services, builder.Configuration, options);
     }
@@ -74,7 +74,7 @@ public static class Quilt4NetRegistration
     /// Sets up routing to the Quilt4Net health checks.
     /// </summary>
     /// <param name="app"></param>
-    public static void UseQuilt4Net(this WebApplication app)
+    public static void UseQuilt4NetApi(this WebApplication app)
     {
         app.UseEndpoints(endpoints =>
         {

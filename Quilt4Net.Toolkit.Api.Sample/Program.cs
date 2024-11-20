@@ -1,3 +1,4 @@
+using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Component = Quilt4Net.Toolkit.Api.Component;
 
@@ -6,8 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddSwaggerGen();
 
-//Add AddQuilt4Net
-builder.AddQuilt4Net(o =>
+//Add AddQuilt4NetApi
+builder.AddQuilt4NetApi(o =>
 {
     o.FailReadyWhenDegraded = true;
 
@@ -25,6 +26,9 @@ builder.AddQuilt4Net(o =>
             };
         }
     });
+});
+builder.AddQuilt4NetClient(o =>
+{
 });
 
 builder.Services.AddOpenApi();
@@ -47,6 +51,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.UseQuilt4Net();
+app.UseQuilt4NetApi();
 
 app.Run();
