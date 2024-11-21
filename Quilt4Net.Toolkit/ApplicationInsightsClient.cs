@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
@@ -34,18 +33,6 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
                 yield return logErrorData;
             }
         }
-
-        //foreach (var group in data
-        //             //.Where(x => x.AppRoleName == "app-eplicta-newaggregator-prod")
-        //             //.Where(x => x.AppRoleName == "app-eplicta-agent-test")
-        //             .GroupBy(x => new { RoleName = x.AppRoleName, x.SeverityLevel, x.ProblemId })
-        //             .OrderByDescending(x => x.First().SeverityLevel)
-        //             .ThenByDescending(x => x.Sum(y => y.IssueCount))
-        //        )
-        //{
-        //    Console.WriteLine($"{group.Key.RoleName} (Severity: {group.Key.SeverityLevel}, {group.Sum(x => x.IssueCount)} issues) for {group.First().ProblemId}");
-        //}
-        //Console.WriteLine($"Total issue count: {data.Sum(x => x.IssueCount)}");
     }
 
     private LogsQueryClient GetClient()
@@ -62,7 +49,6 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
 
         //NOTE: This is to make a detailed query about one issue
         var detailedResponse = await client.QueryWorkspaceAsync(_options.WorkspaceId, detailQuery, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
-        var columns = detailedResponse.Value.Table.Columns;
         var rows = detailedResponse.Value.Table.Rows;
         var row = rows.First();
         var js = ConvertRowToJson(row, detailedResponse.Value.Table.Columns);
