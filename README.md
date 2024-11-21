@@ -7,27 +7,27 @@
 
 ## Get started
 After having installed the nuget package.
-Register *AddQuilt4Net* as a service and use it in the app.
+Register *AddQuilt4NetApi* as a service and use it in the app.
 ```
 var builder = WebApplication.CreateBuilder(args);
 ...
-builder.AddQuilt4Net();
+builder.AddQuilt4NetApi();
 
 var app = builder.Build();
 ...
 app.UseRouting();
 ...
-app.UseQuilt4Net();
+app.UseQuilt4NetApi();
 
 app.Run();
 ```
-You have to call `AddQuilt4Net` in any order on the *builder* (or *builder.Services*).
-On the app you have to call `UseRouting` before `UseQuilt4Net`.
+You have to call `AddQuilt4NetApi` in any order on the *builder* (or *builder.Services*).
+On the app you have to call `UseRouting` before `UseQuilt4NetApi`.
 
 ### Register service check
 This is a basic way of adding a service check. This check will be performed when calling *Health*, *Ready* or *Dependencies*.
 ```
-builder.AddQuilt4Net(o =>
+builder.AddQuilt4NetApi(o =>
 {
     o.AddComponent(new Component
     {
@@ -45,7 +45,7 @@ builder.AddQuilt4Net(o =>
 ### Configuration options
 Configuration can be configured by code. This will override any other configuration.
 ```
-builder.AddQuilt4Net(o =>
+builder.AddQuilt4NetApi(o =>
 {
     o.ShowInSwagger = false;
     o.FailReadyWhenDegraded = true;
@@ -87,13 +87,13 @@ Use this endpoint to check if the instance is ready to perform work.
 Error at startup with the message:
 `Unhandled exception. System.InvalidOperationException: EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware and so must be added to the request execution pipeline before EndpointMiddleware. Please add EndpointRoutingMiddleware by calling 'IApplicationBuilder.UseRouting' inside the call to 'Configure(...)' in the application startup code.`
 
-The solution is to add `app.UseRouting();` before `app.UseQuilt4Net();` in *Program.cs*.
+The solution is to add `app.UseRouting();` before `app.UseQuilt4NetApi();` in *Program.cs*.
 
 ## Planned
 - IP-Address lookup
 - Authentication for endpoints (Use project auth or API-Key for different methods.)
 - Feature to check if background services are running or if they have crashed.
-- Monitor service that can be implemented so that components does not have to be added with 'AddComponent' in 'AddQuilt4Net'.
+- Monitor service that can be implemented so that components does not have to be added with 'AddComponent' in 'AddQuilt4NetApi'.
 - Possible to create custom implementation of services
 
 <!--# Quilt4Net Toolkit
