@@ -96,9 +96,10 @@ The solution is to add `app.UseRouting();` before `app.UseQuilt4NetApi();` in *P
 - Monitor service that can be implemented so that components does not have to be added with 'AddComponent' in 'AddQuilt4NetApi'.
 - Possible to create custom implementation of services
 
-<!--# Quilt4Net Toolkit
-[![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit)](https://www.nuget.org/packages/Quilt4Net.Toolkit)
-![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit)
+# Quilt4Net Toolkit Client
+[![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Client)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Client)
+![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Client)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-This package can be used on the client side to consume the result of *Quilt4Net Toolkit Api*-->
+Client toolkit for Quilt4Net that can access *Application Insights*
+and consume the result of *Quilt4Net Toolkit Api*
