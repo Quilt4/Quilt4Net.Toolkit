@@ -5,6 +5,8 @@ using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Microsoft.AspNetCore.Http;
+using Quilt4Net.Toolkit.Health;
+using Quilt4Net.Toolkit.Ready;
 
 namespace Quilt4Net.Toolkit.Api;
 

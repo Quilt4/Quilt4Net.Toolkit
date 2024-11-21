@@ -1,7 +1,6 @@
 ﻿using System.Text.Json.Serialization;
-using Quilt4Net.Toolkit.Api.Framework;
 
-namespace Quilt4Net.Toolkit.Api.Features.Live;
+namespace Quilt4Net.Toolkit.Live;
 
 /// <summary>
 /// Response for Live.

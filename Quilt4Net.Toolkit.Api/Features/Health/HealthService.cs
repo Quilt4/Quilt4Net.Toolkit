@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Quilt4Net.Toolkit.Health;
 
 namespace Quilt4Net.Toolkit.Api.Features.Health;
 
@@ -26,7 +27,7 @@ internal class HealthService : IHealthService
         Task.WaitAll(tasks.ToArray<Task>(), cancellationToken);
         var components = tasks.Select(x =>
         {
-            var result = new KeyValuePair<string, Component>(x.Result.Name, new Component
+            var result = new KeyValuePair<string, Toolkit.Health.Component>(x.Result.Name, new Toolkit.Health.Component
             {
                 Status = BuildStatus(x.Result.Status.Success, x.Result.Essential),
                 Details = new Dictionary<string, string>

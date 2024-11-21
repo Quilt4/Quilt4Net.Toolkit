@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Quilt4Net.Toolkit.Api.Features.Health;
+using Quilt4Net.Toolkit.Health;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Api.Tests;

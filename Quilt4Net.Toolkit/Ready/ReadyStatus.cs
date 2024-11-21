@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Api.Features.Ready;
+﻿namespace Quilt4Net.Toolkit.Ready;
 
 /// <summary>
 /// Status for Ready.

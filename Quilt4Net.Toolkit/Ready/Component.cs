@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Api.Features.Ready;
+namespace Quilt4Net.Toolkit.Ready;
 
 /// <summary>
 /// Component for Ready check.

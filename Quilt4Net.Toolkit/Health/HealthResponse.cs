@@ -1,7 +1,6 @@
 ﻿using System.Text.Json.Serialization;
-using Quilt4Net.Toolkit.Api.Framework;
 
-namespace Quilt4Net.Toolkit.Api.Features.Health;
+namespace Quilt4Net.Toolkit.Health;
 
 /// <summary>
 /// Response for Health.

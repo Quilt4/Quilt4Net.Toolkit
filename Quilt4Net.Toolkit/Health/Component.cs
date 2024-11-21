@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Api.Features.Health;
+namespace Quilt4Net.Toolkit.Health;
 
 /// <summary>
 /// Component for Health check.

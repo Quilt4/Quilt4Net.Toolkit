@@ -1,5 +1,6 @@
 ﻿using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Framework;
+using Quilt4Net.Toolkit.Ready;
 
 namespace Quilt4Net.Toolkit.Api.Features.Ready;
 
@@ -19,7 +20,7 @@ internal class ReadyService : IReadyService
         return new ReadyResponse
         {
             Status = result.Status.ToReadyStatusResult(),
-            Components = result.Components.ToDictionary(x => x.Key, x => new Component
+            Components = result.Components.ToDictionary(x => x.Key, x => new Quilt4Net.Toolkit.Ready.Component
             {
                 Status = x.Value.Status.ToReadyStatusResult()
             })

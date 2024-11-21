@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Quilt4Net.Toolkit;
+namespace Quilt4Net.Toolkit.Client;
 
 public static class ApplicationInsightsRegistration
 {
@@ -17,6 +17,7 @@ public static class ApplicationInsightsRegistration
         serviceCollection.AddSingleton(_ => o);
 
         serviceCollection.AddTransient<IApplicationInsightsClient, ApplicationInsightsClient>();
+        serviceCollection.AddTransient<IHealthClieht, HealthClieht>();
     }
 
     private static Quilt4NetOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetOptions> options)

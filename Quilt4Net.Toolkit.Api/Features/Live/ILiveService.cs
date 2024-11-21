@@ -1,4 +1,6 @@
-﻿namespace Quilt4Net.Toolkit.Api.Features.Live;
+﻿using Quilt4Net.Toolkit.Live;
+
+namespace Quilt4Net.Toolkit.Api.Features.Live;
 
 /// <summary>
 /// Service for Live.

@@ -3,7 +3,7 @@ using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
 
-namespace Quilt4Net.Toolkit;
+namespace Quilt4Net.Toolkit.Client;
 
 internal class ApplicationInsightsClient : IApplicationInsightsClient
 {

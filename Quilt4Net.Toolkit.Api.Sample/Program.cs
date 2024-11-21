@@ -1,6 +1,6 @@
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
-using Component = Quilt4Net.Toolkit.Api.Component;
+using Quilt4Net.Toolkit.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +29,7 @@ builder.AddQuilt4NetApi(o =>
 });
 builder.AddQuilt4NetClient(o =>
 {
+    o.HealthAddress = new Uri("https://localhost:7119/api/Health/");
 });
 
 builder.Services.AddOpenApi();

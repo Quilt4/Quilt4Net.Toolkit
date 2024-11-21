@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit;
+﻿namespace Quilt4Net.Toolkit.Client;
 
 public record Quilt4NetOptions
 {
@@ -6,4 +6,5 @@ public record Quilt4NetOptions
     public string ClientId { get; set; }
     public string ClientSecret { get; set; }
     public string WorkspaceId { get; set; }
+    public Uri HealthAddress { get; set; }
 }

@@ -1,4 +1,6 @@
-﻿namespace Quilt4Net.Toolkit.Api.Features.Health;
+﻿using Quilt4Net.Toolkit.Health;
+
+namespace Quilt4Net.Toolkit.Api.Features.Health;
 
 /// <summary>
 /// Service for Health.

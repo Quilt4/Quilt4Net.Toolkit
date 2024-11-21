@@ -1,4 +1,6 @@
-﻿namespace Quilt4Net.Toolkit.Api.Features.Ready;
+﻿using Quilt4Net.Toolkit.Ready;
+
+namespace Quilt4Net.Toolkit.Api.Features.Ready;
 
 /// <summary>
 /// Service for Ready.

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Quilt4Net.Toolkit.Client;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers
 {
@@ -7,10 +8,12 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
     public class ApplicationInsightsController : ControllerBase
     {
         private readonly IApplicationInsightsClient _applicationInsightsClient;
+        private readonly IHealthClieht _healthClieht;
 
-        public ApplicationInsightsController(IApplicationInsightsClient applicationInsightsClient)
+        public ApplicationInsightsController(IApplicationInsightsClient applicationInsightsClient, IHealthClieht healthClieht)
         {
             _applicationInsightsClient = applicationInsightsClient;
+            _healthClieht = healthClieht;
         }
 
         [HttpGet]
@@ -34,5 +37,46 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
             var result = await _applicationInsightsClient.GetDetails(environment, appRoleName, problemId);
             return Ok(result);
         }
+
+        [HttpGet]
+        [Route("live-proxy")]
+        public async Task<IActionResult> GetLive(CancellationToken cancellationToken)
+        {
+            var result = await _healthClieht.GetLiveAsync(cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Route("ready-proxy")]
+        public async Task<IActionResult> GetReady(CancellationToken cancellationToken)
+        {
+            var result = await _healthClieht.GetReadyAsync(cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Route("health-proxy")]
+        public async Task<IActionResult> GetHealth(CancellationToken cancellationToken)
+        {
+            var result = await _healthClieht.GetHealthAsync(cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Route("metrics-proxy")]
+        public async Task<IActionResult> GetMetrics(CancellationToken cancellationToken)
+        {
+            var result = await _healthClieht.GetMetricsAsync(cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Route("version-proxy")]
+        public async Task<IActionResult> GetVersion(CancellationToken cancellationToken)
+        {
+            var result = await _healthClieht.GetVersionAsync(cancellationToken);
+            return Ok(result);
+        }
+
     }
 }

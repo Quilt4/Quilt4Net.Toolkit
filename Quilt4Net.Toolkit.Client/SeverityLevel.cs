@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit;
+﻿namespace Quilt4Net.Toolkit.Client;
 
 public enum SeverityLevel
 {

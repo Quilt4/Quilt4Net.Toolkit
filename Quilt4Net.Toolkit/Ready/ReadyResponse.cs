@@ -1,7 +1,6 @@
-﻿using Quilt4Net.Toolkit.Api.Framework;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Api.Features.Ready;
+namespace Quilt4Net.Toolkit.Ready;
 
 /// <summary>
 /// Response for Ready.
