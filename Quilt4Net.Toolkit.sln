@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35506.116
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit", "Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj", "{D099F8AA-267D-4CB5-874D-99E84176EE0E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Client", "Quilt4Net.Toolkit.Client\Quilt4Net.Toolkit.Client.csproj", "{D099F8AA-267D-4CB5-874D-99E84176EE0E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Tests", "Quilt4Net.Toolkit.Tests\Quilt4Net.Toolkit.Tests.csproj", "{B32C08ED-780A-48C5-9FC1-581D6C44B425}"
 EndProject
