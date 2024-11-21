@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Api.Features.Version;
+﻿namespace Quilt4Net.Toolkit.Version;
 
 /// <summary>
 /// Response for Version.

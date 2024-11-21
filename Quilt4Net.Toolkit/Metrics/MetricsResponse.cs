@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Api.Features.Metrics;
+﻿namespace Quilt4Net.Toolkit.Metrics;
 
 /// <summary>
 /// Response for Metrics.

@@ -1,8 +1,5 @@
 ﻿using System.Reflection;
 using Microsoft.OpenApi.Models;
-using Quilt4Net.Toolkit.Api.Features.Health;
-using Quilt4Net.Toolkit.Api.Features.Live;
-using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Health;
 using Quilt4Net.Toolkit.Live;
 using Quilt4Net.Toolkit.Ready;

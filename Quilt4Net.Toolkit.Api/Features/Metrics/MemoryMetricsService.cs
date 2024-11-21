@@ -2,6 +2,7 @@
 using System.Management;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
+using Quilt4Net.Toolkit.Metrics;
 
 namespace Quilt4Net.Toolkit.Api.Features.Metrics;
 

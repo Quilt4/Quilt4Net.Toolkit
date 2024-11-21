@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Api.Features.Metrics;
+namespace Quilt4Net.Toolkit.Metrics;
 
 /// <summary>
 /// Processor information

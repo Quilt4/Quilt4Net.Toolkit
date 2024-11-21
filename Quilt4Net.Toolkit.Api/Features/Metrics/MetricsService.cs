@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Quilt4Net.Toolkit.Metrics;
 
 namespace Quilt4Net.Toolkit.Api.Features.Metrics;
 
