@@ -57,9 +57,6 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
 
     public async Task<LogDetails> GetDetails(string environment, string appRoleName, string problemId)
     {
-        //System.InvalidCastException at Eplicta.Fido.Features.GetPublication.PublicationAccessNotifyAggregatorBehavior.UpdateCache
-        //app-eplicta-fido-prod
-
         var client = GetClient();
         var detailQuery = $@"AppTraces | union AppExceptions | where ProblemId == '{problemId}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where AppRoleName == '{appRoleName}' | order by TimeGenerated desc | take 1";
 
@@ -69,10 +66,12 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
         var rows = detailedResponse.Value.Table.Rows;
         var row = rows.First();
         var js = ConvertRowToJson(row, detailedResponse.Value.Table.Columns);
-        //Console.WriteLine(js);
+        var result = JsonSerializer.Deserialize<LogDetails>(js, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
 
-        Debugger.Break();
-        throw new NotImplementedException();
+        return result;
     }
 
     static string ConvertRowToJson(LogsTableRow row, IReadOnlyList<LogsTableColumn> columns)
