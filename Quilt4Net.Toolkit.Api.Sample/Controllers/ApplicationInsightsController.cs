@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using Quilt4Net.Toolkit.Client;
+using Quilt4Net.Toolkit.Features.ApplicationInsights;
+using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers
 {

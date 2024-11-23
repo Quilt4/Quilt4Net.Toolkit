@@ -32,13 +32,15 @@
 	<ItemGroup>
 		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Tests" />
 		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api" />
+		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
 		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <PackageReference Include="Azure.Identity" Version="1.13.1" />
 	  <PackageReference Include="Azure.Monitor.Query" Version="1.5.0" />
-	  <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="7.0.0" />
+	  <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.0" />
+	  <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
 	  <PackageReference Include="System.Linq.Async" Version="6.0.1" />
 	</ItemGroup>
 

@@ -1,12 +1,16 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Metrics;
+namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Memory information
 /// </summary>
 public record Memory
 {
+    internal Memory()
+    {
+    }
+
     /// <summary>
     /// Memory usage of the application, in MB.
     /// </summary>

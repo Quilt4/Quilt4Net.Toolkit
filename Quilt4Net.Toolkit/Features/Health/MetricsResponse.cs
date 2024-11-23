@@ -1,10 +1,14 @@
-﻿namespace Quilt4Net.Toolkit.Metrics;
+﻿namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Response for Metrics.
 /// </summary>
 public record MetricsResponse
 {
+    internal MetricsResponse()
+    {
+    }
+
     /// <summary>
     /// The time that the application has been running.
     /// </summary>

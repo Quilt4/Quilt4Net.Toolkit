@@ -1,12 +1,16 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Metrics;
+namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Processor information
 /// </summary>
 public record Processor
 {
+    internal Processor()
+    {
+    }
+
     /// <summary>
     /// Total CPU-time for the process.
     /// </summary>

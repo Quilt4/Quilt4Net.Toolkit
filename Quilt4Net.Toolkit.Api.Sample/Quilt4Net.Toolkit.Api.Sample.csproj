@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
@@ -13,7 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Quilt4Net.Toolkit.Api\Quilt4Net.Toolkit.Api.csproj" />
-    <ProjectReference Include="..\Quilt4Net.Toolkit.Client\Quilt4Net.Toolkit.csproj" />
+    <ProjectReference Include="..\Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj" />
   </ItemGroup>
 
 </Project>

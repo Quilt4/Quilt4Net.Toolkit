@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Ready;
+﻿namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Status for Ready.

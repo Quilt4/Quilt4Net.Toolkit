@@ -1,7 +1,4 @@
-﻿using Quilt4Net.Toolkit.Api.Features.Health;
-using Quilt4Net.Toolkit.Api.Features.Ready;
-using Quilt4Net.Toolkit.Health;
-using Quilt4Net.Toolkit.Ready;
+﻿using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api.Framework;
 
@@ -27,5 +24,4 @@ internal static class StatusConverter
 
         return status;
     }
-
 }

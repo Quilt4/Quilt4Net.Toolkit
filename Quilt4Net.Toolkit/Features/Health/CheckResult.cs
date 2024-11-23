@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit;
+﻿namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Result of component check

@@ -1,4 +1,4 @@
-﻿using Quilt4Net.Toolkit.Ready;
+﻿using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api.Features.Ready;
 

@@ -1,4 +1,4 @@
-﻿using Quilt4Net.Toolkit.Live;
+﻿using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api.Features.Live;
 

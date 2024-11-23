@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api;
 

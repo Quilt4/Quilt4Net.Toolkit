@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Client;
+namespace Quilt4Net.Toolkit;
 
 public record LogDetails
 {

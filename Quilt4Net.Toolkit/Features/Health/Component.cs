@@ -1,21 +1,23 @@
-﻿using System.Text.Json.Serialization;
-
-namespace Quilt4Net.Toolkit.Health;
+﻿namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
-/// Component for Health check.
+/// Component for availability checking.
 /// </summary>
 public record Component
 {
     /// <summary>
-    /// Status for the component check.
+    /// Name of the component. This name needs to be unique.
     /// </summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required HealthStatus Status { get; init; }
+    public required string Name { get; init; }
 
     /// <summary>
-    /// Extra details for the health checks.
+    /// Non-essential component will be considered Degraded if they fail.
+    /// Essential components will be considered to Unhealthy/Unready that will result in 503 response.
     /// </summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public required Dictionary<string, string> Details { get; init; }
+    public required bool Essential { get; init; }
+
+    /// <summary>
+    /// Method that performs the check for the component.
+    /// </summary>
+    public required Func<IServiceProvider, Task<CheckResult>> CheckAsync { get; init; }
 }

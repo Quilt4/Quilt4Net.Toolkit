@@ -7,10 +7,7 @@ using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
-using Quilt4Net.Toolkit.Api.Framework;
-using Quilt4Net.Toolkit.Health;
-using Quilt4Net.Toolkit.Live;
-using Quilt4Net.Toolkit.Ready;
+using Quilt4Net.Toolkit.Features.Health;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Api.Tests;

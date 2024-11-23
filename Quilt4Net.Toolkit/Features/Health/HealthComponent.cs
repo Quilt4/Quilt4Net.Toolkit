@@ -3,23 +3,23 @@
 namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
-/// Response for Health.
+/// Component for Health check.
 /// </summary>
-public record HealthResponse : ResponseBase<HealthStatus>
+public record HealthComponent
 {
-    internal HealthResponse()
+    internal HealthComponent()
     {
     }
 
     /// <summary>
-    /// Overall status.
+    /// Status for the component check.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public override required HealthStatus Status { get; init; }
+    public required HealthStatus Status { get; init; }
 
     /// <summary>
-    /// Components that have been checked.
+    /// Extra details for the health checks.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public required Dictionary<string, HealthComponent> Components { get; init; }
+    public required Dictionary<string, string> Details { get; init; }
 }

@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Client;
+namespace Quilt4Net.Toolkit;
 
 public record SummaryData
 {
@@ -9,4 +9,6 @@ public record SummaryData
     public SeverityLevel SeverityLevel { get; init; }
     public string ProblemId { get; init; }
     public int IssueCount { get; init; }
+    public string Message { get; init; }
+    public string UniqueId { get; init; }
 }

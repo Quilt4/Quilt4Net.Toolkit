@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit;
+﻿namespace Quilt4Net.Toolkit.Features.Health;
 
 public abstract record ResponseBase<TStatus> where TStatus : Enum
 {

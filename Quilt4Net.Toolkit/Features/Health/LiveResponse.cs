@@ -1,12 +1,16 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Live;
+namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Response for Live.
 /// </summary>
 public record LiveResponse : ResponseBase<LiveStatus>
 {
+    internal LiveResponse()
+    {
+    }
+
     /// <summary>
     /// Overall status.
     /// </summary>

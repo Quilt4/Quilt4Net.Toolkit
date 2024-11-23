@@ -28,13 +28,18 @@ public static class Quilt4NetRegistration
         AddQuilt4Net(builder.Services, builder.Configuration, options);
     }
 
+    public static void AddQuilt4Net(this IServiceCollection services, Action<Quilt4NetApiOptions> options = default)
+    {
+        AddQuilt4Net(services, default, options);
+    }
+
     /// <summary>
     /// Register using IServiceCollection and optional IConfiguration.
     /// </summary>
     /// <param name="services"></param>
     /// <param name="configuration"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4Net(this IServiceCollection services, IConfiguration configuration = default, Action<Quilt4NetApiOptions> options = default)
+    public static void AddQuilt4Net(this IServiceCollection services, IConfiguration configuration, Action<Quilt4NetApiOptions> options = default)
     {
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);

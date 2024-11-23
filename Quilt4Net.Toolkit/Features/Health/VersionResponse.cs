@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Version;
+﻿namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Response for Version.

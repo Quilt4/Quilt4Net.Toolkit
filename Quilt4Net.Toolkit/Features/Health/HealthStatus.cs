@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Health;
+﻿namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Status for Health.

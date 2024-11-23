@@ -1,8 +1,6 @@
 ﻿using System.Reflection;
 using Microsoft.OpenApi.Models;
-using Quilt4Net.Toolkit.Health;
-using Quilt4Net.Toolkit.Live;
-using Quilt4Net.Toolkit.Ready;
+using Quilt4Net.Toolkit.Features.Health;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Quilt4Net.Toolkit.Api.Framework;
