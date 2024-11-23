@@ -63,10 +63,10 @@ stages:
         coverageVariance: '5'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Pack Quilt4Net.Toolkit.Client'
+      displayName: 'Pack Quilt4Net.Toolkit'
       inputs:
         command: 'pack'
-        packagesToPack: '**/Quilt4Net.Toolkit.Client.csproj'
+        packagesToPack: '**/Quilt4Net.Toolkit.csproj'
         versioningScheme: 'byBuildNumber'
 
     - task: DotNetCoreCLI@2

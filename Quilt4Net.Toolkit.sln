@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35506.116
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Client", "Quilt4Net.Toolkit.Client\Quilt4Net.Toolkit.Client.csproj", "{D099F8AA-267D-4CB5-874D-99E84176EE0E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit", "Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj", "{D099F8AA-267D-4CB5-874D-99E84176EE0E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Tests", "Quilt4Net.Toolkit.Tests\Quilt4Net.Toolkit.Tests.csproj", "{B32C08ED-780A-48C5-9FC1-581D6C44B425}"
 EndProject
@@ -21,8 +21,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Sample", "Sample", "{DE636D86-71E3-48D1-9C27-86D3A30F1256}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Api.Sample", "Quilt4Net.Toolkit.Api.Sample\Quilt4Net.Toolkit.Api.Sample.csproj", "{0D4E18BF-F54E-4B67-859B-8D3E01D4F0FB}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit", "Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj", "{84262DB9-D954-497C-B955-B8D206197207}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -50,10 +48,6 @@ Global
 		{0D4E18BF-F54E-4B67-859B-8D3E01D4F0FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D4E18BF-F54E-4B67-859B-8D3E01D4F0FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D4E18BF-F54E-4B67-859B-8D3E01D4F0FB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{84262DB9-D954-497C-B955-B8D206197207}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{84262DB9-D954-497C-B955-B8D206197207}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{84262DB9-D954-497C-B955-B8D206197207}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{84262DB9-D954-497C-B955-B8D206197207}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
