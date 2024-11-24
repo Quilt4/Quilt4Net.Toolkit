@@ -19,28 +19,28 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
     {
         var client = GetClient();
 
-        ////NOTE: Pull data from exceptions
-        ////var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | summarize IssueCount=count() by AppRoleName, SeverityLevel, ProblemId";
-        ////var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = coalesce(ProblemId, Message, 'Unknown') | summarize IssueCount=count() by AppRoleName, SeverityLevel, ProblemIdentifier";
-        ////var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = coalesce(ProblemId, Message) | summarize IssueCount=count(), Message = arg_min(timestamp, Message), UniqueId = arg_min(timestamp, Id) by AppRoleName, SeverityLevel, ProblemIdentifier";
-        //var query = $"AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = ProblemId | summarize IssueCount=count() | MessageId = arg_min(timestamp, outerMessage) by AppRoleName, SeverityLevel, ProblemIdentifier";
+        //NOTE: Pull data from exceptions
+        //var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | summarize IssueCount=count() by AppRoleName, SeverityLevel, ProblemId";
+        //var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = coalesce(ProblemId, Message, 'Unknown') | summarize IssueCount=count() by AppRoleName, SeverityLevel, ProblemIdentifier";
+        //var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = coalesce(ProblemId, Message) | summarize IssueCount=count(), Message = arg_min(timestamp, Message), UniqueId = arg_min(timestamp, Id) by AppRoleName, SeverityLevel, ProblemIdentifier";
+        var query = $"AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = ProblemId | summarize IssueCount=count(), Message = take_any(OuterMessage) by AppRoleName, SeverityLevel, ProblemIdentifier";
 
-        //var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
-        //foreach (var table in response.Value.AllTables)
-        //{
-        //    foreach (var logErrorData in table.Rows.Select(x => new SummaryData
-        //             {
-        //                 SummaryIdentifier = BuildSummaryIdentifier(x, LogType.Exception),
-        //                 Type = LogType.Exception,
-        //                 Application = x["AppRoleName"].ToString(),
-        //                 SeverityLevel = (SeverityLevel)Convert.ToInt32(x["SeverityLevel"]),
-        //                 IssueCount = Convert.ToInt32(x["IssueCount"]),
-        //                 Message = x["Message"].ToString()
-        //    }))
-        //    {
-        //        yield return logErrorData;
-        //    }
-        //}
+        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        foreach (var table in response.Value.AllTables)
+        {
+            foreach (var logErrorData in table.Rows.Select(x => new SummaryData
+            {
+                SummaryIdentifier = BuildSummaryIdentifier(x, LogType.Exception),
+                Type = LogType.Exception,
+                Application = x["AppRoleName"].ToString(),
+                SeverityLevel = (SeverityLevel)Convert.ToInt32(x["SeverityLevel"]),
+                IssueCount = Convert.ToInt32(x["IssueCount"]),
+                Message = x["Message"].ToString()
+            }))
+            {
+                yield return logErrorData;
+            }
+        }
 
         //NOTE: Pull data from traces
         //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | summarize IssueCount=count() by AppRoleName, SeverityLevel"; //WORKS
@@ -50,20 +50,20 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
         //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | summarize IssueCount=count() by AppRoleName, SeverityLevel"; //WORKS
         //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | summarize IssueCount=count(), FirstMessag=take_any(OriginalMessage) by AppRoleName, SeverityLevel"; //WORKS
         //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | summarize IssueCount=count(), Message=take_any(OriginalMessage) by AppRoleName, SeverityLevel"; //WORKS
-        var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat'])| extend MessageId = coalesce(OperationId,tostring(hash(Message))) | summarize IssueCount=count(), Message=take_any(OriginalMessage), MessageId=take_any(MessageId) by AppRoleName, SeverityLevel";
+        query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat'])| extend MessageId = coalesce(OperationId,tostring(hash(Message))) | summarize IssueCount=count(), Message=take_any(OriginalMessage), MessageId=take_any(MessageId) by AppRoleName, SeverityLevel";
         //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | summarize IssueCount=count(), FirstMessage=take_any(msg) by AppRoleName, SeverityLevel";
-        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
             foreach (var logErrorData in table.Rows.Select(x => new SummaryData
-                     {
-                         SummaryIdentifier = BuildSummaryIdentifier(x, LogType.Trace),
-                         Type = LogType.Trace,
-                         Application = x["AppRoleName"].ToString(),
-                         SeverityLevel = (SeverityLevel)Convert.ToInt32(x["SeverityLevel"]),
-                         IssueCount = Convert.ToInt32(x["IssueCount"]),
-                         Message = Convert.ToString(x["Message"]),
-                     }))
+            {
+                SummaryIdentifier = BuildSummaryIdentifier(x, LogType.Trace),
+                Type = LogType.Trace,
+                Application = x["AppRoleName"].ToString(),
+                SeverityLevel = (SeverityLevel)Convert.ToInt32(x["SeverityLevel"]),
+                IssueCount = Convert.ToInt32(x["IssueCount"]),
+                Message = Convert.ToString(x["Message"]),
+            }))
             {
                 yield return logErrorData;
             }
