@@ -7,9 +7,10 @@ internal class HealthClieht : IHealthClieht
 {
     private readonly Quilt4NetHealthOptions _options;
 
-    public HealthClieht(Quilt4NetHealthOptions options)
+    //NOTE: The options needs to be default, if not used, this will fail at startup if not registered.
+    public HealthClieht(Quilt4NetHealthOptions options = default)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     public async Task<LiveResponse> GetLiveAsync(CancellationToken cancellationToken)

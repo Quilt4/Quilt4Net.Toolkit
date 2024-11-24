@@ -68,5 +68,5 @@ public record Quilt4NetApiOptions
     /// Default for Development environment is StackTrace.
     /// For all other environments default is Message.
     /// </summary>
-    public ExceptionDataLevel? ExceptionDataLevel { get; set; }
+    public ExceptionDetailLevel? ExceptionDetail { get; set; }
 }

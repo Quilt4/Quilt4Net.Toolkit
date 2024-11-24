@@ -7,7 +7,7 @@ namespace Quilt4Net.Toolkit;
 
 public static class ApplicationInsightsRegistration
 {
-    public static void AddQuilt4NetClient(this IServiceCollection serviceCollection, Action<Quilt4NetApplicationInsightsOptions> options = default)
+    public static void AddQuilt4NetApplicationInsights(this IServiceCollection serviceCollection, Action<Quilt4NetApplicationInsightsOptions> options = default)
     {
         serviceCollection.AddSingleton(s =>
         {
@@ -21,7 +21,7 @@ public static class ApplicationInsightsRegistration
 
     private static Quilt4NetApplicationInsightsOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApplicationInsightsOptions> options)
     {
-        var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetApplicationInsightsOptions>() ?? new Quilt4NetApplicationInsightsOptions();
+        var o = configuration?.GetSection("Quilt4Net:ApplicationInsights").Get<Quilt4NetApplicationInsightsOptions>() ?? new Quilt4NetApplicationInsightsOptions();
         options?.Invoke(o);
         return o;
     }
