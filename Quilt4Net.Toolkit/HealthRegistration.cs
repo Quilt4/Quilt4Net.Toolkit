@@ -6,7 +6,7 @@ namespace Quilt4Net.Toolkit;
 
 public static class HealthRegistration
 {
-    public static void AddHealthClieht(this IServiceCollection serviceCollection, Action<IServiceProvider, Quilt4NetOptions> options = default)
+    public static void AddHealthClieht(this IServiceCollection serviceCollection, Action<IServiceProvider, Quilt4NetHealthOptions> options = default)
     {
         serviceCollection.AddSingleton(s =>
         {
@@ -17,12 +17,12 @@ public static class HealthRegistration
 
         serviceCollection.AddTransient<IHealthClieht>(s =>
         {
-            var o = s.GetService<Quilt4NetOptions>();
+            var o = s.GetService<Quilt4NetHealthOptions>();
             return new HealthClieht(o);
         });
     }
 
-    public static void AddHealthClieht(this IServiceCollection serviceCollection, Action<Quilt4NetOptions> options = default)
+    public static void AddHealthClieht(this IServiceCollection serviceCollection, Action<Quilt4NetHealthOptions> options = default)
     {
         serviceCollection.AddSingleton(s =>
         {
@@ -33,14 +33,14 @@ public static class HealthRegistration
 
         serviceCollection.AddTransient<IHealthClieht>(s =>
         {
-            var o = s.GetService<Quilt4NetOptions>();
+            var o = s.GetService<Quilt4NetHealthOptions>();
             return new HealthClieht(o);
         });
     }
 
-    private static Quilt4NetOptions BuildOptions(IConfiguration configuration, IServiceProvider s, Action<IServiceProvider, Quilt4NetOptions> options)
+    private static Quilt4NetHealthOptions BuildOptions(IConfiguration configuration, IServiceProvider s, Action<IServiceProvider, Quilt4NetHealthOptions> options)
     {
-        var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetOptions>() ?? new Quilt4NetOptions();
+        var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetHealthOptions>() ?? new Quilt4NetHealthOptions();
         options?.Invoke(s, o);
         return o;
     }

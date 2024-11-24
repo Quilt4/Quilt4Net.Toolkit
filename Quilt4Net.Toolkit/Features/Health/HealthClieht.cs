@@ -5,9 +5,9 @@ namespace Quilt4Net.Toolkit.Features.Health;
 
 internal class HealthClieht : IHealthClieht
 {
-    private readonly Quilt4NetOptions _options;
+    private readonly Quilt4NetHealthOptions _options;
 
-    public HealthClieht(Quilt4NetOptions options)
+    public HealthClieht(Quilt4NetHealthOptions options)
     {
         _options = options;
     }

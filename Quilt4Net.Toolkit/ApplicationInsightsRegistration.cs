@@ -7,7 +7,7 @@ namespace Quilt4Net.Toolkit;
 
 public static class ApplicationInsightsRegistration
 {
-    public static void AddQuilt4NetClient(this IServiceCollection serviceCollection, Action<Quilt4NetOptions> options = default)
+    public static void AddQuilt4NetClient(this IServiceCollection serviceCollection, Action<Quilt4NetApplicationInsightsOptions> options = default)
     {
         serviceCollection.AddSingleton(s =>
         {
@@ -19,9 +19,9 @@ public static class ApplicationInsightsRegistration
         serviceCollection.AddTransient<IHealthClieht, HealthClieht>();
     }
 
-    private static Quilt4NetOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetOptions> options)
+    private static Quilt4NetApplicationInsightsOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApplicationInsightsOptions> options)
     {
-        var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetOptions>() ?? new Quilt4NetOptions();
+        var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetApplicationInsightsOptions>() ?? new Quilt4NetApplicationInsightsOptions();
         options?.Invoke(o);
         return o;
     }

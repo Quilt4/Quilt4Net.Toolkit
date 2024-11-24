@@ -8,9 +8,9 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 internal class ApplicationInsightsClient : IApplicationInsightsClient
 {
-    private readonly Quilt4NetOptions _options;
+    private readonly Quilt4NetApplicationInsightsOptions _options;
 
-    public ApplicationInsightsClient(Quilt4NetOptions options)
+    public ApplicationInsightsClient(Quilt4NetApplicationInsightsOptions options)
     {
         _options = options;
     }
