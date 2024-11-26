@@ -27,7 +27,7 @@ builder.AddQuilt4NetApi(o =>
         }
     });
 });
-builder.Services.AddHealthClieht(o =>
+builder.Services.AddQuilt4NetHealthClient(o =>
 {
     o.HealthAddress = new Uri("https://localhost:7119/api/Health/");
 });

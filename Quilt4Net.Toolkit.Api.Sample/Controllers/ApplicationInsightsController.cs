@@ -19,7 +19,7 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
 
         [HttpGet]
         [Route("summary")]
-        public async Task<IActionResult> GetSummary(string environment = default)
+        public async Task<IActionResult> GetSummary(string environment)
         {
             if (string.IsNullOrEmpty(environment)) environment = "Production";
 
@@ -29,13 +29,11 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
 
         [HttpGet]
         [Route("details")]
-        public async Task<IActionResult> GetDetails(string environment = default, string appRoleName = default, string problemId = default)
+        public async Task<IActionResult> GetDetails(string environment, string summaryIdentifier)
         {
             if (string.IsNullOrEmpty(environment)) environment = "Production";
-            if (string.IsNullOrEmpty(appRoleName)) appRoleName = "app-eplicta-fido-prod";
-            if (string.IsNullOrEmpty(problemId)) problemId = "System.InvalidCastException at Eplicta.Fido.Features.GetPublication.PublicationAccessNotifyAggregatorBehavior.UpdateCache";
 
-            var result = await _applicationInsightsClient.GetDetails(environment, appRoleName, problemId);
+            var result = await _applicationInsightsClient.GetDetails(environment, summaryIdentifier);
             return Ok(result);
         }
 

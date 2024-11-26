@@ -90,10 +90,10 @@ public class HealthServiceTests
     }
 
     [Theory]
-    [InlineData(ExceptionDataLevel.Hidden)]
-    [InlineData(ExceptionDataLevel.Message)]
-    [InlineData(ExceptionDataLevel.StackTrace)]
-    public async Task CustomExceptionDataLevel(ExceptionDataLevel exceptionDataLevel)
+    [InlineData(ExceptionDetailLevel.Hidden)]
+    [InlineData(ExceptionDetailLevel.Message)]
+    [InlineData(ExceptionDetailLevel.StackTrace)]
+    public async Task CustomExceptionDataLevel(ExceptionDetailLevel exceptionDetailLevel)
     {
         //Arrange
         var component = new Component
@@ -104,7 +104,7 @@ public class HealthServiceTests
         };
         var option = new Quilt4NetApiOptions();
         option.AddComponent(component);
-        option.ExceptionDataLevel = exceptionDataLevel;
+        option.ExceptionDetail = exceptionDetailLevel;
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
@@ -115,33 +115,33 @@ public class HealthServiceTests
         result.Status.Should().Be(HealthStatus.Unhealthy);
         result.Components.Single().Key.Should().Be(component.Name);
         result.Components.Single().Value.Status.Should().Be(HealthStatus.Unhealthy);
-        switch (exceptionDataLevel)
+        switch (exceptionDetailLevel)
         {
-            case ExceptionDataLevel.Hidden:
+            case ExceptionDetailLevel.Hidden:
                 result.Components.Single().Value.Details.Count.Should().Be(2);
                 result.Components.Single().Value.Details.First(x => x.Key == "exception.message").Value.Should().StartWith("Hidden exception.");
                 result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "exception.stacktrace").Value.Should().BeNull();
                 break;
-            case ExceptionDataLevel.Message:
+            case ExceptionDetailLevel.Message:
                 result.Components.Single().Value.Details.Count.Should().Be(2);
                 result.Components.Single().Value.Details.First(x => x.Key == "exception.message").Value.Should().StartWith("some issue");
                 result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "exception.stacktrace").Value.Should().BeNull();
                 break;
-            case ExceptionDataLevel.StackTrace:
+            case ExceptionDetailLevel.StackTrace:
                 result.Components.Single().Value.Details.Count.Should().Be(3);
                 result.Components.Single().Value.Details.First(x => x.Key == "exception.message").Value.Should().StartWith("some issue");
                 result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "exception.stacktrace").Value.Should().StartWith("   at");
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(exceptionDataLevel), exceptionDataLevel, null);
+                throw new ArgumentOutOfRangeException(nameof(exceptionDetailLevel), exceptionDetailLevel, null);
         }
     }
 
     [Theory]
-    [InlineData("Production", ExceptionDataLevel.Hidden)]
-    [InlineData("Development", ExceptionDataLevel.StackTrace)]
-    [InlineData("AllOtherEnvironments", ExceptionDataLevel.Message)]
-    public async Task DefaultExceptionDataLevel(string environment, ExceptionDataLevel expectedExceptionDataLevel)
+    [InlineData("Production", ExceptionDetailLevel.Hidden)]
+    [InlineData("Development", ExceptionDetailLevel.StackTrace)]
+    [InlineData("AllOtherEnvironments", ExceptionDetailLevel.Message)]
+    public async Task DefaultExceptionDataLevel(string environment, ExceptionDetailLevel exceptionDetailLevel)
     {
         //Arrange
         var component = new Component
@@ -163,25 +163,25 @@ public class HealthServiceTests
         result.Status.Should().Be(HealthStatus.Unhealthy);
         result.Components.Single().Key.Should().Be(component.Name);
         result.Components.Single().Value.Status.Should().Be(HealthStatus.Unhealthy);
-        switch (expectedExceptionDataLevel)
+        switch (exceptionDetailLevel)
         {
-            case ExceptionDataLevel.Hidden:
+            case ExceptionDetailLevel.Hidden:
                 result.Components.Single().Value.Details.Count.Should().Be(2);
                 result.Components.Single().Value.Details.First(x => x.Key == "exception.message").Value.Should().StartWith("Hidden exception.");
                 result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "exception.stacktrace").Value.Should().BeNull();
                 break;
-            case ExceptionDataLevel.Message:
+            case ExceptionDetailLevel.Message:
                 result.Components.Single().Value.Details.Count.Should().Be(2);
                 result.Components.Single().Value.Details.First(x => x.Key == "exception.message").Value.Should().StartWith("some issue");
                 result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "exception.stacktrace").Value.Should().BeNull();
                 break;
-            case ExceptionDataLevel.StackTrace:
+            case ExceptionDetailLevel.StackTrace:
                 result.Components.Single().Value.Details.Count.Should().Be(3);
                 result.Components.Single().Value.Details.First(x => x.Key == "exception.message").Value.Should().StartWith("some issue");
                 result.Components.Single().Value.Details.FirstOrDefault(x => x.Key == "exception.stacktrace").Value.Should().StartWith("   at");
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(option.ExceptionDataLevel), option.ExceptionDataLevel, null);
+                throw new ArgumentOutOfRangeException(nameof(option.ExceptionDetail), option.ExceptionDetail, null);
         }
     }
 }
