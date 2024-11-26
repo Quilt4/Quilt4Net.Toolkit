@@ -4,11 +4,25 @@ namespace Quilt4Net.Toolkit;
 
 public record SummaryData
 {
-    public string AppRoleName { get; init; }
+    public required string SummaryIdentifier { get; init; }
+    public required string Application { get; init; }
+    public required LogType Type { get; init; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public SeverityLevel SeverityLevel { get; init; }
-    public string ProblemId { get; init; }
-    public int IssueCount { get; init; }
-    public string Message { get; init; }
-    public string UniqueId { get; init; }
+    public required SeverityLevel SeverityLevel { get; init; }
+    public required int IssueCount { get; init; }
+    public required string Message { get; init; }
+}
+
+public record SummaryDataIdentifier
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public required LogType Type { get; init; }
+    public required string Identifier { get; init; }
+    public required string Application { get; init; }
+}
+
+public enum LogType
+{
+    Exception,
+    Trace
 }

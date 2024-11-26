@@ -3,13 +3,14 @@ using System.Text.Json;
 
 namespace Quilt4Net.Toolkit.Features.Health;
 
-internal class HealthClieht : IHealthClieht
+internal class HealthClient : IHealthClient
 {
-    private readonly Quilt4NetOptions _options;
+    private readonly Quilt4NetHealthOptions _options;
 
-    public HealthClieht(Quilt4NetOptions options)
+    //NOTE: The options needs to be default, if not used, this will fail at startup if not registered.
+    public HealthClient(Quilt4NetHealthOptions options = default)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     public async Task<LiveResponse> GetLiveAsync(CancellationToken cancellationToken)

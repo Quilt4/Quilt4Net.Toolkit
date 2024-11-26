@@ -44,21 +44,21 @@ internal class HealthService : IHealthService
             if (x.Result.Exception != null)
             {
                 var correlationIdMessage = BuildCorrelationIdMessage(x.Result.CorrelationId);
-                var exceptionDataLevel = _option.ExceptionDataLevel ?? GetDefaultExceptionLevel();
+                var exceptionDataLevel = _option.ExceptionDetail ?? GetDefaultExceptionLevel();
                 switch (exceptionDataLevel)
                 {
-                    case ExceptionDataLevel.Hidden:
+                    case ExceptionDetailLevel.Hidden:
                         result.Value.Details.TryAdd("exception.message", $"Hidden exception. {correlationIdMessage}");
                         break;
-                    case ExceptionDataLevel.Message:
+                    case ExceptionDetailLevel.Message:
                         result.Value.Details.TryAdd("exception.message", $"{x.Result.Exception.Message} {correlationIdMessage}");
                         break;
-                    case ExceptionDataLevel.StackTrace:
+                    case ExceptionDetailLevel.StackTrace:
                         result.Value.Details.TryAdd("exception.message", $"{x.Result.Exception.Message} {correlationIdMessage}");
                         result.Value.Details.TryAdd("exception.stacktrace", x.Result.Exception.StackTrace);
                         break;
                     default:
-                        throw new ArgumentOutOfRangeException(nameof(_option.ExceptionDataLevel), _option.ExceptionDataLevel, null);
+                        throw new ArgumentOutOfRangeException(nameof(_option.ExceptionDetail), _option.ExceptionDetail, null);
                 }
             }
 
@@ -76,11 +76,11 @@ internal class HealthService : IHealthService
         });
     }
 
-    private ExceptionDataLevel? GetDefaultExceptionLevel()
+    private ExceptionDetailLevel? GetDefaultExceptionLevel()
     {
-        if (_hostEnvironment.IsProduction()) return ExceptionDataLevel.Hidden;
-        if (_hostEnvironment.IsDevelopment()) return ExceptionDataLevel.StackTrace;
-        return ExceptionDataLevel.Message;
+        if (_hostEnvironment.IsProduction()) return ExceptionDetailLevel.Hidden;
+        if (_hostEnvironment.IsDevelopment()) return ExceptionDetailLevel.StackTrace;
+        return ExceptionDetailLevel.Message;
     }
 
     private static string BuildCorrelationIdMessage(Guid? correlationId)

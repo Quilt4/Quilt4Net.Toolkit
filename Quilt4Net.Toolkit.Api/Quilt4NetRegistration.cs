@@ -25,12 +25,12 @@ public static class Quilt4NetRegistration
     /// <param name="options"></param>
     public static void AddQuilt4NetApi(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = default)
     {
-        AddQuilt4Net(builder.Services, builder.Configuration, options);
+        AddQuilt4NetApi(builder.Services, builder.Configuration, options);
     }
 
-    public static void AddQuilt4Net(this IServiceCollection services, Action<Quilt4NetApiOptions> options = default)
+    public static void AddQuilt4NetApi(this IServiceCollection services, Action<Quilt4NetApiOptions> options = default)
     {
-        AddQuilt4Net(services, default, options);
+        AddQuilt4NetApi(services, default, options);
     }
 
     /// <summary>
@@ -39,7 +39,7 @@ public static class Quilt4NetRegistration
     /// <param name="services"></param>
     /// <param name="configuration"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4Net(this IServiceCollection services, IConfiguration configuration, Action<Quilt4NetApiOptions> options = default)
+    public static void AddQuilt4NetApi(this IServiceCollection services, IConfiguration configuration, Action<Quilt4NetApiOptions> options = default)
     {
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
@@ -62,7 +62,7 @@ public static class Quilt4NetRegistration
 
     private static Quilt4NetApiOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApiOptions> options)
     {
-        var o = configuration?.GetSection("Quilt4Net").Get<Quilt4NetApiOptions>() ?? new Quilt4NetApiOptions();
+        var o = configuration?.GetSection("Quilt4Net:Api").Get<Quilt4NetApiOptions>() ?? new Quilt4NetApiOptions();
         options?.Invoke(o);
 
         //NOTE: the pattern needs to start and end with '/'.
