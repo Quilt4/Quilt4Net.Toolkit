@@ -16,7 +16,7 @@ public static class ApplicationInsightsRegistration
             return o;
         });
         serviceCollection.AddTransient<IApplicationInsightsClient, ApplicationInsightsClient>();
-        serviceCollection.AddTransient<IHealthClieht, HealthClieht>();
+        serviceCollection.AddTransient<IHealthClient, HealthClient>();
     }
 
     private static Quilt4NetApplicationInsightsOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApplicationInsightsOptions> options)

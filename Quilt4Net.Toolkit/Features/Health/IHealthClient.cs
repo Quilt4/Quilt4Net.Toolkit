@@ -1,6 +1,6 @@
 ﻿namespace Quilt4Net.Toolkit.Features.Health;
 
-public interface IHealthClieht
+public interface IHealthClient
 {
     Task<LiveResponse> GetLiveAsync(CancellationToken cancellationToken);
     Task<ReadyResponse> GetReadyAsync(CancellationToken cancellationToken);

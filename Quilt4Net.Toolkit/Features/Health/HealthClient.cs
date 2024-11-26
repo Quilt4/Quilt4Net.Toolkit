@@ -3,12 +3,12 @@ using System.Text.Json;
 
 namespace Quilt4Net.Toolkit.Features.Health;
 
-internal class HealthClieht : IHealthClieht
+internal class HealthClient : IHealthClient
 {
     private readonly Quilt4NetHealthOptions _options;
 
     //NOTE: The options needs to be default, if not used, this will fail at startup if not registered.
-    public HealthClieht(Quilt4NetHealthOptions options = default)
+    public HealthClient(Quilt4NetHealthOptions options = default)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }

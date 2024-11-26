@@ -15,10 +15,10 @@ public static class HealthRegistration
             return o;
         });
 
-        serviceCollection.AddTransient<IHealthClieht>(s =>
+        serviceCollection.AddTransient<IHealthClient>(s =>
         {
             var o = s.GetService<Quilt4NetHealthOptions>();
-            return new HealthClieht(o);
+            return new HealthClient(o);
         });
     }
 
@@ -31,10 +31,10 @@ public static class HealthRegistration
             return o;
         });
 
-        serviceCollection.AddTransient<IHealthClieht>(s =>
+        serviceCollection.AddTransient<IHealthClient>(s =>
         {
             var o = s.GetService<Quilt4NetHealthOptions>();
-            return new HealthClieht(o);
+            return new HealthClient(o);
         });
     }
 
