@@ -13,8 +13,9 @@ public record Component
     /// <summary>
     /// Non-essential component will be considered Degraded if they fail.
     /// Essential components will be considered to Unhealthy/Unready that will result in 503 response.
+    /// Default is true.
     /// </summary>
-    public required bool Essential { get; init; }
+    public bool Essential { get; init; } = true;
 
     /// <summary>
     /// Method that performs the check for the component.

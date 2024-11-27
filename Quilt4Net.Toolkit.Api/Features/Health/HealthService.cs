@@ -22,7 +22,9 @@ internal class HealthService : IHealthService
 
     public Task<HealthResponse> GetStatusAsync(CancellationToken cancellationToken)
     {
-        var tasks = _option.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync)).ToArray();
+        var tasksFromServices = _option.ComponentServices.SelectMany(x => ((IComponentService)_serviceProvider.GetService(x))?.GetComponents()).Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
+        var tasksFromAdd = _option.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
+        var tasks = tasksFromServices.Union(tasksFromAdd).ToArray();
 
         Task.WaitAll(tasks.ToArray<Task>(), cancellationToken);
         var components = tasks.Select(x =>
@@ -72,7 +74,7 @@ internal class HealthService : IHealthService
         return Task.FromResult(new HealthResponse
         {
             Status = status,
-            Components = components.ToDictionary(x => x.Key, x => x.Value)
+            Components = components.ToUniqueDictionary()
         });
     }
 
@@ -106,6 +108,8 @@ internal class HealthService : IHealthService
     {
         var stopwatch = Stopwatch.StartNew();
 
+        if (string.IsNullOrEmpty(name)) name = "Component";
+
         try
         {
             _logger?.LogTrace("Starting check for {name} component.", name);
@@ -130,4 +134,59 @@ internal class HealthService : IHealthService
             stopwatch.Stop();
         }
     }
+}
+
+internal static class UniqueDictionaryBuilder
+{
+    public static Dictionary<string, HealthComponent> ToUniqueDictionary(this KeyValuePair<string, HealthComponent>[] components)
+    {
+        var result = new Dictionary<string, HealthComponent>();
+        var keyCounts = new Dictionary<string, int>(); // Track occurrences of each key
+
+        foreach (var component in components)
+        {
+            var key = component.Key;
+
+            keyCounts.TryAdd(key, 0);
+            keyCounts[key]++;
+
+            // Append suffix if there are duplicates
+            if (keyCounts[key] == 1 && components.Count(c => c.Key == key) > 1)
+            {
+                key = $"{key}.0"; // First duplicate occurrence gets .0
+            }
+            else if (keyCounts[key] > 1)
+            {
+                key = $"{key}.{keyCounts[key] - 1}"; // Subsequent occurrences get .1, .2, etc.
+            }
+
+            result.Add(key, component.Value);
+        }
+
+        return result;
+    }
+
+
+    //public static Dictionary<string, HealthComponent> ToUniqueDictionary(this KeyValuePair<string, HealthComponent>[] components)
+    //{
+    //    var result = new Dictionary<string, HealthComponent>();
+    //    var keyCounters = new Dictionary<string, int>(); // Track counters for each key
+
+    //    foreach (var component in components)
+    //    {
+    //        var key = component.Key ?? "Component";
+
+    //        if (result.ContainsKey(key))
+    //        {
+    //            keyCounters.TryAdd(key, 1);
+
+    //            keyCounters[key]++;
+    //            key = $"{key}.{keyCounters[key] - 1}"; // Append suffix
+    //        }
+
+    //        result.Add(key, component.Value);
+    //    }
+
+    //    return result;
+    //}
 }

@@ -13,7 +13,7 @@ internal class HealthClient : IHealthClient
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
-    public async Task<LiveResponse> GetLiveAsync(CancellationToken cancellationToken)
+    public async Task<LiveResponse> GetLiveAsync(CancellationToken cancellationToken = default)
     {
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
@@ -21,7 +21,7 @@ internal class HealthClient : IHealthClient
         return result;
     }
 
-    public async Task<ReadyResponse> GetReadyAsync(CancellationToken cancellationToken)
+    public async Task<ReadyResponse> GetReadyAsync(CancellationToken cancellationToken = default)
     {
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
@@ -29,7 +29,7 @@ internal class HealthClient : IHealthClient
         return result;
     }
 
-    public async Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken)
+    public async Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken = default)
     {
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
@@ -37,7 +37,7 @@ internal class HealthClient : IHealthClient
         return result;
     }
 
-    public async Task<MetricsResponse> GetMetricsAsync(CancellationToken cancellationToken)
+    public async Task<MetricsResponse> GetMetricsAsync(CancellationToken cancellationToken = default)
     {
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
@@ -45,7 +45,7 @@ internal class HealthClient : IHealthClient
         return result;
     }
 
-    public async Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken)
+    public async Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken = default)
     {
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;

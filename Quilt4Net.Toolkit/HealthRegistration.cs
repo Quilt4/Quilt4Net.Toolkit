@@ -12,6 +12,7 @@ public static class HealthRegistration
         {
             var configuration = s.GetService<IConfiguration>();
             var o = BuildOptions(configuration, s, (_, o) => options?.Invoke(o));
+            if (!o.HealthAddress.AbsoluteUri.EndsWith("/")) o.HealthAddress = new Uri($"{o.HealthAddress.AbsoluteUri}/");
             return o;
         });
 

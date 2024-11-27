@@ -58,6 +58,16 @@ public static class Quilt4NetRegistration
         services.AddTransient<IMetricsService, MetricsService>();
         services.AddTransient<IMemoryMetricsService, MemoryMetricsService>();
         services.AddTransient<IProcessorMetricsService, ProcessorMetricsService>();
+
+        foreach (var componentServices in _options.ComponentServices)
+        {
+            services.AddTransient(componentServices);
+        }
+
+        if (_options.ComponentServices.Count() == 1)
+        {
+            services.AddTransient(s => (IComponentService)s.GetService(_options.ComponentServices.Single()));
+        }
     }
 
     private static Quilt4NetApiOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApiOptions> options)

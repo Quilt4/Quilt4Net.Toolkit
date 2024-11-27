@@ -9,6 +9,7 @@ namespace Quilt4Net.Toolkit.Api;
 public record Quilt4NetApiOptions
 {
     private readonly ConcurrentDictionary<string, Component> _components = new ();
+    private readonly ConcurrentDictionary<Type, Type> _componentServices = new ();
 
     /// <summary>
     /// If this is set to true the documentation is added to swagger.
@@ -54,13 +55,21 @@ public record Quilt4NetApiOptions
     /// <exception cref="ArgumentException"></exception>
     public bool AddComponent(Component component)
     {
-        if (string.IsNullOrEmpty(component.Name)) throw new ArgumentNullException(nameof(component.Name));
-        if (_components.ContainsKey(component.Name)) throw new ArgumentException($"Component with name '{component.Name}' has already been added.");
+        var name = component.Name ?? string.Empty;
+        if (_components.ContainsKey(name)) throw new ArgumentException($"Component with name '{name}' has already been added.");
 
-        return _components.TryAdd(component.Name, component);
+        return _components.TryAdd(name, component);
+    }
+
+    public bool AddComponentService<TService>() where TService : IComponentService
+    {
+        if (_componentServices.ContainsKey(typeof(TService))) throw new ArgumentException($"Componentservice of type '{typeof(TService).Name}' has already been added.");
+
+        return _componentServices.TryAdd(typeof(TService), typeof(TService));
     }
 
     internal IEnumerable<Component> Components => _components.Values;
+    internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
 
     /// <summary>
     /// Level of detail returned when an exception occurs.
