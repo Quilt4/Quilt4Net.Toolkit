@@ -7,8 +7,8 @@
 		<Authors>Thargelion AB</Authors>
 		<Company>Thargelion AB</Company>
 		<Product>Quilt4Net Toolkit Client</Product>
-		<Tag></Tag>
-		<Description></Description>
+		<Tag>Health ApplicationInsights</Tag>
+		<Description>Tools for Health checks via Quilt4Net.Toolkit.Api and Application Insigts.</Description>
 		<PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<PackageReadmeFile>README.md</PackageReadmeFile>

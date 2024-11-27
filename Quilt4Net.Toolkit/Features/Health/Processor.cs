@@ -7,10 +7,6 @@ namespace Quilt4Net.Toolkit.Features.Health;
 /// </summary>
 public record Processor
 {
-    internal Processor()
-    {
-    }
-
     /// <summary>
     /// Total CPU-time for the process.
     /// </summary>

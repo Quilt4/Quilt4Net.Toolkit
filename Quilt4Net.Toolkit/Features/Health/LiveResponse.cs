@@ -7,10 +7,6 @@ namespace Quilt4Net.Toolkit.Features.Health;
 /// </summary>
 public record LiveResponse : ResponseBase<LiveStatus>
 {
-    internal LiveResponse()
-    {
-    }
-
     /// <summary>
     /// Overall status.
     /// </summary>

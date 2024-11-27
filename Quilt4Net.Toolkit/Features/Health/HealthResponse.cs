@@ -7,10 +7,6 @@ namespace Quilt4Net.Toolkit.Features.Health;
 /// </summary>
 public record HealthResponse : ResponseBase<HealthStatus>
 {
-    internal HealthResponse()
-    {
-    }
-
     /// <summary>
     /// Overall status.
     /// </summary>

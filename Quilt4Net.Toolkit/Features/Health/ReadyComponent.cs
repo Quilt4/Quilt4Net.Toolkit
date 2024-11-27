@@ -7,10 +7,6 @@ namespace Quilt4Net.Toolkit.Features.Health;
 /// </summary>
 public record ReadyComponent
 {
-    internal ReadyComponent()
-    {
-    }
-
     /// <summary>
     /// Status for the component check.
     /// </summary>

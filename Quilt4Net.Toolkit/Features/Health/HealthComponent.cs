@@ -7,10 +7,6 @@ namespace Quilt4Net.Toolkit.Features.Health;
 /// </summary>
 public record HealthComponent
 {
-    internal HealthComponent()
-    {
-    }
-
     /// <summary>
     /// Status for the component check.
     /// </summary>

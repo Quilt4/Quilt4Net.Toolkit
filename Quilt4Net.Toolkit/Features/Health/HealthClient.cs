@@ -15,41 +15,56 @@ internal class HealthClient : IHealthClient
 
     public async Task<LiveResponse> GetLiveAsync(CancellationToken cancellationToken = default)
     {
+        if (_options.HealthAddress == null) throw new ArgumentNullException(nameof(Quilt4NetHealthOptions.HealthAddress), $"No {nameof(Quilt4NetHealthOptions.HealthAddress)} configured.");
+
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
-        var result = await client.GetFromJsonAsync<LiveResponse>("live", new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
-        return result;
+        using var result = await client.GetAsync("live", cancellationToken);
+        var content = await result.Content.ReadFromJsonAsync<LiveResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
+        return content;
     }
 
     public async Task<ReadyResponse> GetReadyAsync(CancellationToken cancellationToken = default)
     {
+        if (_options.HealthAddress == null) throw new ArgumentNullException(nameof(Quilt4NetHealthOptions.HealthAddress), $"No {nameof(Quilt4NetHealthOptions.HealthAddress)} configured.");
+
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
-        var result = await client.GetFromJsonAsync<ReadyResponse>("ready", new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
-        return result;
+        using var result = await client.GetAsync("ready", cancellationToken);
+        var content = await result.Content.ReadFromJsonAsync<ReadyResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
+        return content;
     }
 
     public async Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken = default)
     {
+        if (_options.HealthAddress == null) throw new ArgumentNullException(nameof(Quilt4NetHealthOptions.HealthAddress), $"No {nameof(Quilt4NetHealthOptions.HealthAddress)} configured.");
+
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
-        var result = await client.GetFromJsonAsync<HealthResponse>("health", new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
-        return result;
+        using var result = await client.GetAsync("health", cancellationToken);
+        var content = await result.Content.ReadFromJsonAsync<HealthResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
+        return content;
     }
 
     public async Task<MetricsResponse> GetMetricsAsync(CancellationToken cancellationToken = default)
     {
+        if (_options.HealthAddress == null) throw new ArgumentNullException(nameof(Quilt4NetHealthOptions.HealthAddress), $"No {nameof(Quilt4NetHealthOptions.HealthAddress)} configured.");
+
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
-        var result = await client.GetFromJsonAsync<MetricsResponse>("metrics", new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
-        return result;
+        using var result = await client.GetAsync("metrics", cancellationToken);
+        var content = await result.Content.ReadFromJsonAsync<MetricsResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
+        return content;
     }
 
     public async Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken = default)
     {
+        if (_options.HealthAddress == null) throw new ArgumentNullException(nameof(Quilt4NetHealthOptions.HealthAddress), $"No {nameof(Quilt4NetHealthOptions.HealthAddress)} configured.");
+
         using var client = new HttpClient();
         client.BaseAddress = _options.HealthAddress;
-        var result = await client.GetFromJsonAsync<VersionResponse>("version", new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
-        return result;
+        using var result = await client.GetAsync("version", cancellationToken);
+        var content = await result.Content.ReadFromJsonAsync<VersionResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
+        return content;
     }
 }

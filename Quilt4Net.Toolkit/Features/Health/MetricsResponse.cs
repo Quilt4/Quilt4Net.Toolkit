@@ -5,10 +5,6 @@
 /// </summary>
 public record MetricsResponse
 {
-    internal MetricsResponse()
-    {
-    }
-
     /// <summary>
     /// The time that the application has been running.
     /// </summary>

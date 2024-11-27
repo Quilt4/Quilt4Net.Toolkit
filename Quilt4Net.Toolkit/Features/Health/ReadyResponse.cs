@@ -7,10 +7,6 @@ namespace Quilt4Net.Toolkit.Features.Health;
 /// </summary>
 public record ReadyResponse : ResponseBase<ReadyStatus>
 {
-    internal ReadyResponse()
-    {
-    }
-
     /// <summary>
     /// Overall status.
     /// </summary>

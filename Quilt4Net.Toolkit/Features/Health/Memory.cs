@@ -7,10 +7,6 @@ namespace Quilt4Net.Toolkit.Features.Health;
 /// </summary>
 public record Memory
 {
-    internal Memory()
-    {
-    }
-
     /// <summary>
     /// Memory usage of the application, in MB.
     /// </summary>
