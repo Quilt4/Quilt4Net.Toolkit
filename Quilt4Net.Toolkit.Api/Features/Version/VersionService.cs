@@ -17,7 +17,7 @@ internal class VersionService : IVersionService
     {
         var asm = Assembly.GetEntryAssembly();
         var name = _hostEnvironment.EnvironmentName;
-        var ipAddress = await GetExternalIpAsync(true);
+        var ipAddress = await GetExternalIpAsync(true); //TODO: This should be optional
 
         var result = new VersionResponse
         {

@@ -68,7 +68,14 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Ready(CancellationToken cancellationToken)
     {
-        var response = await _readyService.GetStatusAsync(cancellationToken);
+        var responses = await _readyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
+        var response = responses.ToReadyResponse();
+        //var response = new ReadyResponse
+        //{
+        //    Status = ReadyStatus.Unready,
+        //    Components = responses.ToDictionary(x => x.Key, x => x.Value)
+        //};
+
         HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
         if (response.Status == ReadyStatus.Unready || (response.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded))
@@ -87,8 +94,11 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Health(CancellationToken cancellationToken)
     {
-        var response = await _healthService.GetStatusAsync(cancellationToken);
-        HttpContext.Response.Headers.Add(nameof(response.Status), $"{response.Status}");
+        var responses = await _healthService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
+
+        var response = responses.ToHealthResponse();
+
+        HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
         if (response.Status == HealthStatus.Unhealthy)
         {

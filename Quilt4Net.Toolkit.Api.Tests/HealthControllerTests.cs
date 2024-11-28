@@ -7,6 +7,7 @@ using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
+using Quilt4Net.Toolkit.Api.Framework;
 using Quilt4Net.Toolkit.Features.Health;
 using Xunit;
 
@@ -45,7 +46,6 @@ public class HealthControllerTests
         _liveService.Verify(x => x.GetStatusAsync(), Times.Once);
     }
 
-    //TODO: Build a method to generate this
     [Theory]
     [InlineData(ReadyStatus.Ready, 200, false, "GET")]
     [InlineData(ReadyStatus.Degraded, 200, false, "GET")]
@@ -65,7 +65,8 @@ public class HealthControllerTests
         var httpContext = new DefaultHttpContext { Request = { Method = method } };
         var options = new Quilt4NetApiOptions { FailReadyWhenDegraded = failReadyWhenDegraded };
         var data = new ReadyResponse { Status = status, Components = [] };
-        _readyService.Setup(x => x.GetStatusAsync(It.IsAny<CancellationToken>())).ReturnsAsync(data);
+        _readyService.Setup(x => x.GetStatusAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => new[] { new KeyValuePair<string, ReadyComponent>("A", new ReadyComponent { Status = status }) }.ToAsyncEnumerable());
         var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, options)
         {
             HttpContext = httpContext
@@ -93,8 +94,8 @@ public class HealthControllerTests
         //Arrange
         var httpContext = new DefaultHttpContext { Request = { Method = method } };
         var options = new Quilt4NetApiOptions();
-        var data = new HealthResponse { Status = status, Components = [] };
-        _healthService.Setup(x => x.GetStatusAsync(It.IsAny<CancellationToken>())).ReturnsAsync(data);
+        _healthService.Setup(x => x.GetStatusAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => new[] { new KeyValuePair<string, HealthComponent>("A", new HealthComponent { Status = status, Details = [] }) }.ToAsyncEnumerable());
         var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, options)
         {
             HttpContext = httpContext
@@ -105,8 +106,8 @@ public class HealthControllerTests
 
         //Assert
         response.Should().NotBeNull();
-        AssertStatusResponse<HealthResponse, HealthStatus>(method, response, data.Status, statusCode);
-        httpContext.Response.Headers[nameof(ReadyResponse.Status)].Single().Should().Be($"{data.Status}");
+        AssertStatusResponse<HealthResponse, HealthStatus>(method, response, status, statusCode);
+        httpContext.Response.Headers[nameof(ReadyResponse.Status)].Single().Should().Be($"{status}");
         _healthService.Verify(x => x.GetStatusAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 

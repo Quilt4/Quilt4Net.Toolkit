@@ -4,24 +4,18 @@ namespace Quilt4Net.Toolkit.Api.Framework;
 
 internal static class StatusConverter
 {
-    public static ReadyStatus ToReadyStatusResult(this HealthStatus result)
+    public static ReadyStatus ToReadyStatusResult(this HealthStatus healthStatus)
     {
-        ReadyStatus status;
-        switch (result)
+        switch (healthStatus)
         {
             case HealthStatus.Healthy:
-                status = ReadyStatus.Ready;
-                break;
+                return ReadyStatus.Ready;
             case HealthStatus.Degraded:
-                status = ReadyStatus.Degraded;
-                break;
+                return ReadyStatus.Degraded;
             case HealthStatus.Unhealthy:
-                status = ReadyStatus.Unready;
-                break;
+                return ReadyStatus.Unready;
             default:
-                throw new ArgumentOutOfRangeException();
+                throw new ArgumentOutOfRangeException(nameof(healthStatus), healthStatus, null);
         }
-
-        return status;
     }
 }

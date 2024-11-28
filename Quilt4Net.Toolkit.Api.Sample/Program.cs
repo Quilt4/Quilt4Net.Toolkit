@@ -11,7 +11,7 @@ builder.Services.AddSwaggerGen();
 //Add AddQuilt4NetApi
 builder.AddQuilt4NetApi(o =>
 {
-    o.FailReadyWhenDegraded = true;
+    //o.FailReadyWhenDegraded = true;
 
     o.AddComponent(new Component
     {

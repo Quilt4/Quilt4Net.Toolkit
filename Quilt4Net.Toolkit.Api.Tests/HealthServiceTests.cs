@@ -1,4 +1,5 @@
-﻿using AutoFixture;
+﻿using System.Diagnostics;
+using AutoFixture;
 using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _option.Object, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -51,7 +52,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -80,7 +81,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -109,7 +110,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -157,7 +158,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -201,7 +202,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -234,7 +235,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -267,7 +268,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -302,7 +303,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -327,7 +328,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None);
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -335,5 +336,64 @@ public class HealthServiceTests
         result.Components.First().Key.Should().Be("A.0");
         result.Components.Where(x => x.Key.StartsWith("A.")).Should().HaveCount(5);
         _ = result.Components.Select((x, i) => x.Key.Should().Be($"A.{i}")).ToArray();
+    }
+
+    [Fact]
+    public async Task ChecksShouldRunInParallel()
+    {
+        //Arrange
+        var sw = Stopwatch.StartNew();
+        var option = new Quilt4NetApiOptions();
+        option.AddComponentService<ManyComponentService>();
+        _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new ManyComponentService("A", 10, TimeSpan.FromSeconds(1)));
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+
+        //Act
+        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+
+        //Assert
+        result.Components.Count.Should().Be(10);
+        sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+    }
+
+    //[Fact]
+    //public async Task ChecksShouldBeStreamed2()
+    //{
+    //    //Arrange
+    //    var sw = Stopwatch.StartNew();
+    //    var option = new Quilt4NetApiOptions();
+    //    option.AddComponent(new Component { Name = "Slow", CheckAsync = async _ => { await Task.Delay(TimeSpan.FromSeconds(3)); return new CheckResult { Success = true, Message = "Slow component." }; } });
+    //    option.AddComponent(new Component { Name = "Fast", CheckAsync = async _ => new CheckResult { Success = true, Message = "Fast component." } });
+    //    var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+
+    //    //Act
+    //    var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+
+    //    //Assert
+    //    result.Components.First().Key.Should().Be("Fast");
+    //    result.Components.Last().Key.Should().Be("Slow");
+    //}
+
+    [Fact]
+    public async Task ChecksShouldBeStreamed()
+    {
+        //Arrange
+        var sw = Stopwatch.StartNew();
+        var option = new Quilt4NetApiOptions();
+        option.AddComponent(new Component { Name = "Slow", CheckAsync = async s =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3));
+                return new CheckResult { Success = true, Message = "Slow component." };
+            }
+        });
+        option.AddComponent(new Component { Name = "Fast", CheckAsync = async s => new CheckResult { Success = true, Message = "Fast component." } });
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+
+        //Act
+        var result = await sut.GetStatusAsync(CancellationToken.None).FirstAsync();
+
+        //Assert
+        result.Key.Should().Be("Fast");
+        sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(1));
     }
 }

@@ -13,17 +13,11 @@ internal class ReadyService : IReadyService
         _healthService = healthService;
     }
 
-    public async Task<ReadyResponse> GetStatusAsync(CancellationToken cancellationToken)
+    public async IAsyncEnumerable<KeyValuePair<string, ReadyComponent>> GetStatusAsync(CancellationToken cancellationToken)
     {
-        var result = await _healthService.GetStatusAsync(cancellationToken);
-
-        return new ReadyResponse
+        await foreach (var variable in _healthService.GetStatusAsync(cancellationToken))
         {
-            Status = result.Status.ToReadyStatusResult(),
-            Components = result.Components.ToDictionary(x => x.Key, x => new ReadyComponent
-            {
-                Status = x.Value.Status.ToReadyStatusResult()
-            })
-        };
+            yield return new KeyValuePair<string, ReadyComponent>(variable.Key, new ReadyComponent { Status = variable.Value.Status.ToReadyStatusResult() });
+        }
     }
 }

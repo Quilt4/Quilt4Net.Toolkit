@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Features.Health;
@@ -20,62 +21,58 @@ internal class HealthService : IHealthService
         _logger = logger;
     }
 
-    public Task<HealthResponse> GetStatusAsync(CancellationToken cancellationToken)
+    public async IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var tasksFromServices = _option.ComponentServices.SelectMany(x => ((IComponentService)_serviceProvider.GetService(x))?.GetComponents()).Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
         var tasksFromAdd = _option.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
-        var tasks = tasksFromServices.Union(tasksFromAdd).ToArray();
+        var taskList = tasksFromServices.Union(tasksFromAdd).ToList();
 
-        Task.WaitAll(tasks.ToArray<Task>(), cancellationToken);
-        var components = tasks.Select(x =>
+        while (taskList.Count > 0)
         {
-            var result = new KeyValuePair<string, HealthComponent>(x.Result.Name, new HealthComponent
-            {
-                Status = BuildStatus(x.Result.Status.Success, x.Result.Essential),
-                Details = new Dictionary<string, string>
-                {
-                    { "elapsed", $"{x.Result.Elapsed}" },
-                }
-            });
+            var completedTask = await Task.WhenAny(taskList); // Get the first task that completes
+            yield return BuildResponse(completedTask); // Return the completed task
+            taskList.Remove(completedTask); // Remove the completed task from the list
+        }
+    }
 
-            if (!string.IsNullOrEmpty(x.Result.Status.Message))
-            {
-                result.Value.Details.TryAdd("message", x.Result.Status.Message);
-            }
-
-            if (x.Result.Exception != null)
-            {
-                var correlationIdMessage = BuildCorrelationIdMessage(x.Result.CorrelationId);
-                var exceptionDataLevel = _option.ExceptionDetail ?? GetDefaultExceptionLevel();
-                switch (exceptionDataLevel)
-                {
-                    case ExceptionDetailLevel.Hidden:
-                        result.Value.Details.TryAdd("exception.message", $"Hidden exception. {correlationIdMessage}");
-                        break;
-                    case ExceptionDetailLevel.Message:
-                        result.Value.Details.TryAdd("exception.message", $"{x.Result.Exception.Message} {correlationIdMessage}");
-                        break;
-                    case ExceptionDetailLevel.StackTrace:
-                        result.Value.Details.TryAdd("exception.message", $"{x.Result.Exception.Message} {correlationIdMessage}");
-                        result.Value.Details.TryAdd("exception.stacktrace", x.Result.Exception.StackTrace);
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(_option.ExceptionDetail), _option.ExceptionDetail, null);
-                }
-            }
-
-            return result;
-        }).ToArray();
-
-        var status = components.Any()
-            ? components.Max(x => x.Value.Status)
-            : HealthStatus.Healthy;
-
-        return Task.FromResult(new HealthResponse
+    private KeyValuePair<string, HealthComponent> BuildResponse(Task<RunTaskResult> x)
+    {
+        var result = new KeyValuePair<string, HealthComponent>(x.Result.Name, new HealthComponent
         {
-            Status = status,
-            Components = components.ToUniqueDictionary()
+            Status = BuildStatus(x.Result.Result.Success, x.Result.Essential),
+            Details = new Dictionary<string, string>
+            {
+                { "elapsed", $"{x.Result.Elapsed}" },
+            }
         });
+
+        if (!string.IsNullOrEmpty(x.Result.Result.Message))
+        {
+            result.Value.Details.TryAdd("message", x.Result.Result.Message);
+        }
+
+        if (x.Result.Exception != null)
+        {
+            var correlationIdMessage = BuildCorrelationIdMessage(x.Result.CorrelationId);
+            var exceptionDataLevel = _option.ExceptionDetail ?? GetDefaultExceptionLevel();
+            switch (exceptionDataLevel)
+            {
+                case ExceptionDetailLevel.Hidden:
+                    result.Value.Details.TryAdd("exception.message", $"Hidden exception. {correlationIdMessage}");
+                    break;
+                case ExceptionDetailLevel.Message:
+                    result.Value.Details.TryAdd("exception.message", $"{x.Result.Exception.Message} {correlationIdMessage}");
+                    break;
+                case ExceptionDetailLevel.StackTrace:
+                    result.Value.Details.TryAdd("exception.message", $"{x.Result.Exception.Message} {correlationIdMessage}");
+                    result.Value.Details.TryAdd("exception.stacktrace", x.Result.Exception.StackTrace);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(_option.ExceptionDetail), _option.ExceptionDetail, null);
+            }
+        }
+
+        return result;
     }
 
     private ExceptionDetailLevel? GetDefaultExceptionLevel()
@@ -104,7 +101,7 @@ internal class HealthService : IHealthService
         return HealthStatus.Unhealthy;
     }
 
-    private async Task<(string Name, bool Essential, CheckResult Status, TimeSpan Elapsed, Exception Exception, Guid? CorrelationId)> RunTaskAsync(string name, bool essential, Func<IServiceProvider, Task<CheckResult>> check)
+    private async Task<RunTaskResult> RunTaskAsync(string name, bool essential, Func<IServiceProvider, Task<CheckResult>> check)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -113,10 +110,10 @@ internal class HealthService : IHealthService
         try
         {
             _logger?.LogTrace("Starting check for {name} component.", name);
-            var result = await check.Invoke(_serviceProvider);
+            var status = await check.Invoke(_serviceProvider);
             stopwatch.Stop();
             _logger?.LogTrace("Complete check for {name} component after {elapsed}.", name, stopwatch.Elapsed);
-            return (name, essential, result, stopwatch.Elapsed, null, null);
+            return new RunTaskResult { Name = name, Essential = essential, Result = status, Elapsed = stopwatch.Elapsed };
         }
         catch (Exception exception)
         {
@@ -127,66 +124,21 @@ internal class HealthService : IHealthService
                 _logger.LogError("Failed check for {name} component after {elapsed}. {message} [CorrelationId: {correlationId}]", name, stopwatch.Elapsed, exception.Message, correlationId);
             }
 
-            return (name, essential, new CheckResult { Success = false }, stopwatch.Elapsed, exception, correlationId);
+            return new RunTaskResult { Name = name, Essential = essential, Result = new CheckResult { Success = false }, Elapsed = stopwatch.Elapsed, Exception = exception, CorrelationId = correlationId };
         }
         finally
         {
             stopwatch.Stop();
         }
     }
-}
 
-internal static class UniqueDictionaryBuilder
-{
-    public static Dictionary<string, HealthComponent> ToUniqueDictionary(this KeyValuePair<string, HealthComponent>[] components)
+    private record RunTaskResult
     {
-        var result = new Dictionary<string, HealthComponent>();
-        var keyCounts = new Dictionary<string, int>(); // Track occurrences of each key
-
-        foreach (var component in components)
-        {
-            var key = component.Key;
-
-            keyCounts.TryAdd(key, 0);
-            keyCounts[key]++;
-
-            // Append suffix if there are duplicates
-            if (keyCounts[key] == 1 && components.Count(c => c.Key == key) > 1)
-            {
-                key = $"{key}.0"; // First duplicate occurrence gets .0
-            }
-            else if (keyCounts[key] > 1)
-            {
-                key = $"{key}.{keyCounts[key] - 1}"; // Subsequent occurrences get .1, .2, etc.
-            }
-
-            result.Add(key, component.Value);
-        }
-
-        return result;
+        public required string Name { get; init; }
+        public required bool Essential { get; init; }
+        public required CheckResult Result { get; init; }
+        public required TimeSpan Elapsed { get; init; }
+        public Exception Exception { get; init; }
+        public Guid? CorrelationId { get; init; }
     }
-
-
-    //public static Dictionary<string, HealthComponent> ToUniqueDictionary(this KeyValuePair<string, HealthComponent>[] components)
-    //{
-    //    var result = new Dictionary<string, HealthComponent>();
-    //    var keyCounters = new Dictionary<string, int>(); // Track counters for each key
-
-    //    foreach (var component in components)
-    //    {
-    //        var key = component.Key ?? "Component";
-
-    //        if (result.ContainsKey(key))
-    //        {
-    //            keyCounters.TryAdd(key, 1);
-
-    //            keyCounters[key]++;
-    //            key = $"{key}.{keyCounters[key] - 1}"; // Append suffix
-    //        }
-
-    //        result.Add(key, component.Value);
-    //    }
-
-    //    return result;
-    //}
 }

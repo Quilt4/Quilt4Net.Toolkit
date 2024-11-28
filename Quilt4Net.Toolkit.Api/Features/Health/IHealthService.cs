@@ -12,5 +12,5 @@ public interface IHealthService
     /// </summary>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<HealthResponse> GetStatusAsync(CancellationToken cancellationToken);
+    IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync(CancellationToken cancellationToken);
 }
