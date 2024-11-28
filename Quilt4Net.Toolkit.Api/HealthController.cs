@@ -5,6 +5,7 @@ using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Microsoft.AspNetCore.Http;
+using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api;
@@ -19,6 +20,7 @@ public class HealthController : ControllerBase
     private readonly IHealthService _healthService;
     private readonly IVersionService _versionService;
     private readonly IMetricsService _metricsService;
+    private readonly IDependencyService _dependencyService;
     private readonly Quilt4NetApiOptions _options;
 
     private HttpContext _httpContext;
@@ -31,14 +33,16 @@ public class HealthController : ControllerBase
     /// <param name="healthService"></param>
     /// <param name="versionService"></param>
     /// <param name="metricsService"></param>
+    /// <param name="dependencyService"></param>
     /// <param name="options"></param>
-    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService, IVersionService versionService, IMetricsService metricsService, Quilt4NetApiOptions options)
+    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService, IVersionService versionService, IMetricsService metricsService, IDependencyService dependencyService, Quilt4NetApiOptions options)
     {
         _liveService = liveService;
         _readyService = readyService;
         _healthService = healthService;
         _versionService = versionService;
         _metricsService = metricsService;
+        _dependencyService = dependencyService;
         _options = options;
     }
 
@@ -70,11 +74,6 @@ public class HealthController : ControllerBase
     {
         var responses = await _readyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
         var response = responses.ToReadyResponse();
-        //var response = new ReadyResponse
-        //{
-        //    Status = ReadyStatus.Unready,
-        //    Components = responses.ToDictionary(x => x.Key, x => x.Value)
-        //};
 
         HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
@@ -95,7 +94,6 @@ public class HealthController : ControllerBase
     public async Task<IActionResult> Health(CancellationToken cancellationToken)
     {
         var responses = await _healthService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
-
         var response = responses.ToHealthResponse();
 
         HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
@@ -119,6 +117,26 @@ public class HealthController : ControllerBase
     //}
 
     /// <summary>
+    /// Purpose: Lists all critical dependencies and their statuses.
+    /// Use Case: Provides a higher-level overview of the service’s environment and dependency health.
+    /// </summary>
+    /// <returns></returns>
+    public async Task<IActionResult> Dependencies(CancellationToken cancellationToken)
+    {
+        var responses = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
+        var response = responses.ToDependencyResponse();
+
+        HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
+
+        if (response.Status == HealthStatus.Unhealthy)
+        {
+            return HttpContext.Request.Method == HttpMethods.Head ? StatusCode(503) : StatusCode(503, response);
+        }
+
+        return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
+    }
+
+    /// <summary>
     /// Purpose: Provides metrics for monitoring and observability systems like Prometheus. The format is often specific to the monitoring tool (e.g., Prometheus metrics format).
     /// Use Case: Used to track detailed performance metrics, such as request rates, error rates, CPU/memory usage, and more.
     /// </summary>
@@ -140,24 +158,4 @@ public class HealthController : ControllerBase
         var result = await _versionService.GetVersionAsync(cancellationToken);
         return Ok(result);
     }
-
-    ///// <summary>
-    ///// Purpose: Lists all critical dependencies and their statuses.
-    ///// Use Case: Provides a higher-level overview of the service’s environment and dependency health.
-    ///// </summary>
-    ///// <returns></returns>
-    //public IActionResult Dependencies()
-    //{
-    //    /*
-    //    {
-    //      "dependencies": {
-    //        "database": { "status": "healthy" },
-    //        "messageQueue": { "status": "degraded" },
-    //        "authService": { "status": "healthy" }
-    //      }
-    //    }
-    //     */
-
-    //    throw new NotImplementedException();
-    //}
 }

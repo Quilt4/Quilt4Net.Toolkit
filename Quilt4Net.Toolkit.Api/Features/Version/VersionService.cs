@@ -7,17 +7,19 @@ namespace Quilt4Net.Toolkit.Api.Features.Version;
 internal class VersionService : IVersionService
 {
     private readonly IHostEnvironment _hostEnvironment;
+    private readonly Quilt4NetApiOptions _options;
 
-    public VersionService(IHostEnvironment hostEnvironment)
+    public VersionService(IHostEnvironment hostEnvironment, Quilt4NetApiOptions options)
     {
         _hostEnvironment = hostEnvironment;
+        _options = options;
     }
 
     public async Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken)
     {
         var asm = Assembly.GetEntryAssembly();
         var name = _hostEnvironment.EnvironmentName;
-        var ipAddress = await GetExternalIpAsync(true); //TODO: This should be optional
+        var ipAddress = await GetExternalIpAsync(_options.IpAddressCheckUri);
 
         var result = new VersionResponse
         {
@@ -30,14 +32,14 @@ internal class VersionService : IVersionService
         return result;
     }
 
-    private async Task<string> GetExternalIpAsync(bool showIp)
+    private async Task<string> GetExternalIpAsync(Uri ipAddressCheck)
     {
-        if (!showIp) return null;
+        if (ipAddressCheck == null) return null;
 
         try
         {
             using var client = new HttpClient();
-            var result = await client.GetStringAsync(new Uri("http://ipv4.icanhazip.com/"));
+            var result = await client.GetStringAsync(ipAddressCheck);
             return result.TrimEnd('\n');
         }
         catch (Exception e)

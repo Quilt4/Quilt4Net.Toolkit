@@ -29,6 +29,19 @@ builder.AddQuilt4NetApi(o =>
     });
 
     o.AddComponentService<MyComponentService>();
+
+    o.AddDependency(new Dependency
+    {
+        Name = "A",
+        Essential = true,
+        Uri = new Uri("https://localhost:7119/api/Health/")
+    });
+    o.AddDependency(new Dependency
+    {
+        Name = "B",
+        Essential = false,
+        Uri = new Uri("https://localhost:7119/api/Health/")
+    });
 });
 builder.Services.AddQuilt4NetHealthClient(o =>
 {

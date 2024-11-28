@@ -1,12 +1,10 @@
-﻿using Quilt4Net.Toolkit.Features.Health;
-
-namespace Quilt4Net.Toolkit.Api.Framework;
+﻿namespace Quilt4Net.Toolkit.Api.Framework;
 
 internal static class UniqueDictionaryBuilder
 {
-    public static Dictionary<string, HealthComponent> ToUniqueDictionary(this KeyValuePair<string, HealthComponent>[] components)
+    public static Dictionary<string, T> ToUniqueDictionary<T>(this KeyValuePair<string, T>[] components)
     {
-        var result = new Dictionary<string, HealthComponent>();
+        var result = new Dictionary<string, T>();
         var keyCounts = new Dictionary<string, int>(); // Track occurrences of each key
 
         foreach (var component in components)

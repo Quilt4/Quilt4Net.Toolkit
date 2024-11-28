@@ -380,13 +380,13 @@ public class HealthServiceTests
         //Arrange
         var sw = Stopwatch.StartNew();
         var option = new Quilt4NetApiOptions();
-        option.AddComponent(new Component { Name = "Slow", CheckAsync = async s =>
+        option.AddComponent(new Component { Name = "Slow", CheckAsync = async _ =>
             {
                 await Task.Delay(TimeSpan.FromSeconds(3));
                 return new CheckResult { Success = true, Message = "Slow component." };
             }
         });
-        option.AddComponent(new Component { Name = "Fast", CheckAsync = async s => new CheckResult { Success = true, Message = "Fast component." } });
+        option.AddComponent(new Component { Name = "Fast", CheckAsync = _ => Task.FromResult(new CheckResult { Success = true, Message = "Fast component." }) });
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
 
         //Act

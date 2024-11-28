@@ -112,10 +112,15 @@ internal class Quilt4NetControllerFilter : IDocumentFilter
                         ["200"] = new() { Description = "Success" }
                     },
                     false);
-            //case nameof(HealthController.Dependencies):
-            //    summary = "Dependencies";
-            //    description = "Lists the health of critical dependencies.";
-            //    break;
+            case nameof(HealthController.Dependencies):
+                return ("Dependencies",
+                    $"health check of dependent services.\n\nStatus values\n- {string.Join("\n- ", Enum.GetValues<HealthStatus>())}",
+                    new OpenApiResponses
+                    {
+                        ["200"] = new() { Description = "Success" },
+                        ["503"] = new() { Description = "Service Unavailable" }
+                    },
+                    true);
             default:
                 return (null, null, new OpenApiResponses { ["200"] = new() { Description = "Success" } }, false);
         }

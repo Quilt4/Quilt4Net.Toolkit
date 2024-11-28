@@ -103,7 +103,7 @@ internal class MemoryMetricsService : IMemoryMetricsService
 
     private static double ParseMemInfoLine(string line)
     {
-        var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var parts = line.Split([' '], StringSplitOptions.RemoveEmptyEntries);
         return double.TryParse(parts[1], out var value) ? value : 0; // Extract value in KB
     }
 }

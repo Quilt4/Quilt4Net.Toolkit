@@ -29,10 +29,22 @@ public static class ResponseExtensions
         var response = new ReadyResponse
         {
             Status = status,
-            //Components = responses?.ToUniqueDictionary() ?? [],
-            Components = responses?.ToDictionary() ?? [],
+            Components = responses?.ToUniqueDictionary() ?? [],
         };
 
         return response;
+    }
+
+    public static DependencyResponse ToDependencyResponse(this KeyValuePair<string, DependencyComponent>[] responses)
+    {
+        var status = responses != null && responses.Any()
+            ? responses.Max(x => x.Value.Status)
+            : HealthStatus.Healthy;
+
+        return new DependencyResponse
+        {
+            Status = status,
+            Components = responses?.ToUniqueDictionary() ?? [],
+        };
     }
 }

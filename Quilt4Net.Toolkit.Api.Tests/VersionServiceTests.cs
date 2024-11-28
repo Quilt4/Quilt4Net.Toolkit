@@ -16,7 +16,7 @@ public class VersionServiceTests
         var environmentName = new Fixture().Create<string>();
         var hostEnvironment = new Mock<IHostEnvironment>(MockBehavior.Strict);
         hostEnvironment.SetupGet(x => x.EnvironmentName).Returns(environmentName);
-        var sut = new VersionService(hostEnvironment.Object);
+        var sut = new VersionService(hostEnvironment.Object, new Quilt4NetApiOptions());
 
         //Act
         var result = await sut.GetVersionAsync(CancellationToken.None);

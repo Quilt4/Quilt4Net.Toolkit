@@ -10,6 +10,7 @@ public record Quilt4NetApiOptions
 {
     private readonly ConcurrentDictionary<string, Component> _components = new ();
     private readonly ConcurrentDictionary<Type, Type> _componentServices = new ();
+    private readonly ConcurrentDictionary<string, Dependency> _dependencies = new ();
 
     /// <summary>
     /// If this is set to true the documentation is added to swagger.
@@ -61,15 +62,25 @@ public record Quilt4NetApiOptions
         return _components.TryAdd(name, component);
     }
 
+    /// <summary>
+    /// External dependency to be checked in one level (Does not check dependencies on the dependency)
+    /// </summary>
+    /// <param name="dependency"></param>
+    /// <exception cref="ArgumentException"></exception>
+    public bool AddDependency(Dependency dependency)
+    {
+        var name = dependency.Name ?? string.Empty;
+        if (_dependencies.ContainsKey(name)) throw new ArgumentException($"Dependency with name '{name}' has already been added.");
+
+        return _dependencies.TryAdd(name, dependency);
+    }
+
     public bool AddComponentService<TService>() where TService : IComponentService
     {
         if (_componentServices.ContainsKey(typeof(TService))) throw new ArgumentException($"Componentservice of type '{typeof(TService).Name}' has already been added.");
 
         return _componentServices.TryAdd(typeof(TService), typeof(TService));
     }
-
-    internal IEnumerable<Component> Components => _components.Values;
-    internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
 
     /// <summary>
     /// Level of detail returned when an exception occurs.
@@ -78,4 +89,13 @@ public record Quilt4NetApiOptions
     /// For all other environments default is Message.
     /// </summary>
     public ExceptionDetailLevel? ExceptionDetail { get; set; }
+
+    /// <summary>
+    /// Address of check for ip address, like http://ipv4.icanhazip.com/.
+    /// </summary>
+    public Uri IpAddressCheckUri { get; set; }
+
+    internal IEnumerable<Component> Components => _components.Values;
+    internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
+    internal IEnumerable<Dependency> Dependencies => _dependencies.Values;
 }

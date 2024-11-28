@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
@@ -28,6 +29,11 @@ public static class Quilt4NetRegistration
         AddQuilt4NetApi(builder.Services, builder.Configuration, options);
     }
 
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="options"></param>
     public static void AddQuilt4NetApi(this IServiceCollection services, Action<Quilt4NetApiOptions> options = default)
     {
         AddQuilt4NetApi(services, default, options);
@@ -54,6 +60,7 @@ public static class Quilt4NetRegistration
         services.AddTransient<ILiveService, LiveService>();
         services.AddTransient<IReadyService, ReadyService>();
         services.AddTransient<IHealthService, HealthService>();
+        services.AddTransient<IDependencyService, DependencyService>();
         services.AddTransient<IVersionService, VersionService>();
         services.AddTransient<IMetricsService, MetricsService>();
         services.AddTransient<IMemoryMetricsService, MemoryMetricsService>();

@@ -13,5 +13,4 @@ public interface IReadyService
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     IAsyncEnumerable<KeyValuePair<string, ReadyComponent>> GetStatusAsync(CancellationToken cancellationToken);
-    //Task<ReadyResponse> GetStatusAsync(CancellationToken cancellationToken);
 }

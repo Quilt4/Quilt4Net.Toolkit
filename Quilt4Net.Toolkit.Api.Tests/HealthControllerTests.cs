@@ -2,12 +2,12 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
-using Quilt4Net.Toolkit.Api.Framework;
 using Quilt4Net.Toolkit.Features.Health;
 using Xunit;
 
@@ -20,6 +20,7 @@ public class HealthControllerTests
     private readonly Mock<IHealthService> _healthService = new (MockBehavior.Strict);
     private readonly Mock<IVersionService> _versionService = new (MockBehavior.Strict);
     private readonly Mock<IMetricsService> _metricsService = new (MockBehavior.Strict);
+    private readonly Mock<IDependencyService> _dependencyService = new(MockBehavior.Strict);
     private readonly Quilt4NetApiOptions _options = Mock.Of<Quilt4NetApiOptions>();
 
     [Theory]
@@ -31,7 +32,7 @@ public class HealthControllerTests
         var httpContext = new DefaultHttpContext { Request = { Method = method } };
         var data = new LiveResponse { Status = LiveStatus.Alive };
         _liveService.Setup(x => x.GetStatusAsync()).ReturnsAsync(data);
-        var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, _options)
+        var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, _dependencyService.Object, _options)
         {
             HttpContext = httpContext
         };
@@ -67,7 +68,7 @@ public class HealthControllerTests
         var data = new ReadyResponse { Status = status, Components = [] };
         _readyService.Setup(x => x.GetStatusAsync(It.IsAny<CancellationToken>()))
             .Returns(() => new[] { new KeyValuePair<string, ReadyComponent>("A", new ReadyComponent { Status = status }) }.ToAsyncEnumerable());
-        var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, options)
+        var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, _dependencyService.Object, options)
         {
             HttpContext = httpContext
         };
@@ -96,7 +97,7 @@ public class HealthControllerTests
         var options = new Quilt4NetApiOptions();
         _healthService.Setup(x => x.GetStatusAsync(It.IsAny<CancellationToken>()))
             .Returns(() => new[] { new KeyValuePair<string, HealthComponent>("A", new HealthComponent { Status = status, Details = [] }) }.ToAsyncEnumerable());
-        var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, options)
+        var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, _dependencyService.Object, options)
         {
             HttpContext = httpContext
         };

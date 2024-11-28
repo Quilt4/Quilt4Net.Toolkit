@@ -127,7 +127,7 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
         if (row == null) return default;
 
         var js = ConvertRowToJson(row, detailedResponse.Value.Table.Columns);
-        var result = JsonSerializer.Deserialize<LogDetails>(js, new JsonSerializerOptions //TODO: Kan vara olika details beroende på om det är exception eller trace.
+        var result = JsonSerializer.Deserialize<LogDetails>(js, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
