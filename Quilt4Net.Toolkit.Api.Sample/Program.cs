@@ -8,6 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddHostedService<MyBackgroundService>();
+builder.Services.AddHostedService<MyHostedService>();
+
 //Add AddQuilt4NetApi
 builder.AddQuilt4NetApi(o =>
 {
@@ -42,6 +45,8 @@ builder.AddQuilt4NetApi(o =>
         Essential = false,
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
+
+
 });
 builder.Services.AddQuilt4NetHealthClient(o =>
 {

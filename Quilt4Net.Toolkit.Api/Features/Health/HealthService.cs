@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Quilt4Net.Toolkit.Api.Features.Probe;
 using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api.Features.Health;
@@ -10,19 +11,26 @@ internal class HealthService : IHealthService
 {
     private readonly IHostEnvironment _hostEnvironment;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IHostedServiceProbeRegistry _hostedServiceProbeRegistry;
     private readonly Quilt4NetApiOptions _option;
     private readonly ILogger<HealthService> _logger;
 
-    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, Quilt4NetApiOptions option, ILogger<HealthService> logger = default)
+    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, IHostedServiceProbeRegistry hostedServiceProbeRegistry, Quilt4NetApiOptions option, ILogger<HealthService> logger = default)
     {
         _hostEnvironment = hostEnvironment;
         _serviceProvider = serviceProvider;
+        _hostedServiceProbeRegistry = hostedServiceProbeRegistry;
         _option = option;
         _logger = logger;
     }
 
     public async IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        await foreach (var probe in _hostedServiceProbeRegistry.GetProbesAsync().WithCancellation(cancellationToken))
+        {
+            yield return probe;
+        }
+
         var tasksFromServices = _option.ComponentServices.SelectMany(x => ((IComponentService)_serviceProvider.GetService(x))?.GetComponents()).Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
         var tasksFromAdd = _option.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
         var taskList = tasksFromServices.Union(tasksFromAdd).ToList();

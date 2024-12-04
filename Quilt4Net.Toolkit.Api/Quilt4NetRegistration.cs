@@ -6,6 +6,7 @@ using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
+using Quilt4Net.Toolkit.Api.Features.Probe;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
@@ -56,6 +57,7 @@ public static class Quilt4NetRegistration
         }
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
+        services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
 
         services.AddTransient<ILiveService, LiveService>();
         services.AddTransient<IReadyService, ReadyService>();
@@ -65,6 +67,8 @@ public static class Quilt4NetRegistration
         services.AddTransient<IMetricsService, MetricsService>();
         services.AddTransient<IMemoryMetricsService, MemoryMetricsService>();
         services.AddTransient<IProcessorMetricsService, ProcessorMetricsService>();
+        services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
+        services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
 
         foreach (var componentServices in _options.ComponentServices)
         {

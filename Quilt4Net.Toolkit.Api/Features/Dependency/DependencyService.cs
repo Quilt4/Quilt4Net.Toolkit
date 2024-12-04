@@ -18,7 +18,7 @@ internal class DependencyService : IDependencyService
         var tasks = _options.Dependencies.Select(x => Task.Run(async () =>
         {
             using var httpClient = new HttpClient();
-            if (!Uri.TryCreate(x.Uri, "Health", out var uri))
+            if (!Uri.TryCreate(x.Uri, "Health?noDependencies=true", out var uri))
             {
                 throw new InvalidOperationException($"Cannot build uri from '{x.Uri}' and 'Health'.");
             }

@@ -89,11 +89,24 @@ public class HealthController : ControllerBase
     /// Purpose: Provides detailed information about the health of the service and its dependencies. This can include overall status and specific details about databases, queues, external APIs, etc.
     /// Use Case: Primarily used for monitoring systems like Prometheus, Grafana, or custom dashboards to track application health.
     /// </summary>
+    /// <param name="noDependencies"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public async Task<IActionResult> Health(CancellationToken cancellationToken)
+    public async Task<IActionResult> Health([FromQuery] bool noDependencies, CancellationToken cancellationToken)
     {
-        var responses = await _healthService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
+        var responses = await _healthService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
+
+        if (!noDependencies)
+        {
+            var deps = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
+            IEnumerable<KeyValuePair<string, HealthComponent>> dds = deps.SelectMany(x => x.Value.DependencyComponents).Select(x => new KeyValuePair<string, HealthComponent>());
+            //var reps = deps.SelectMany(x => new KeyValuePair<string, HealthComponent>(x.Key, new HealthComponent
+            //{
+            //    Status = x.Value.Status,
+            //    Details = x.Value.
+            //}));
+        }
+
         var response = responses.ToHealthResponse();
 
         HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");

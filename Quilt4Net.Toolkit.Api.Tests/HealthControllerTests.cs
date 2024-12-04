@@ -97,13 +97,15 @@ public class HealthControllerTests
         var options = new Quilt4NetApiOptions();
         _healthService.Setup(x => x.GetStatusAsync(It.IsAny<CancellationToken>()))
             .Returns(() => new[] { new KeyValuePair<string, HealthComponent>("A", new HealthComponent { Status = status, Details = [] }) }.ToAsyncEnumerable());
+        _dependencyService.Setup(x => x.GetStatusAsync(CancellationToken.None))
+            .Returns(() => Array.Empty<KeyValuePair<string, DependencyComponent>>().ToAsyncEnumerable());
         var sut = new HealthController(_liveService.Object, _readyService.Object, _healthService.Object, _versionService.Object, _metricsService.Object, _dependencyService.Object, options)
         {
             HttpContext = httpContext
         };
 
         //Act
-        var response = await sut.Health(CancellationToken.None);
+        var response = await sut.Health(default, CancellationToken.None);
 
         //Assert
         response.Should().NotBeNull();

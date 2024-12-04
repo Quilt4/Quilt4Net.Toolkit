@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Quilt4Net.Toolkit.Api.Features.Health;
+using Quilt4Net.Toolkit.Api.Features.Probe;
 using Quilt4Net.Toolkit.Api.Tests.Helper;
 using Quilt4Net.Toolkit.Features.Health;
 using Xunit;
@@ -17,12 +18,19 @@ public class HealthServiceTests
     private readonly Mock<Quilt4NetApiOptions> _option = new(MockBehavior.Strict);
     private readonly Mock<ILogger<HealthService>> _logger = new(MockBehavior.Loose);
     private readonly Mock<IHostEnvironment> _hostEnvironment = new(MockBehavior.Strict);
+    private readonly Mock<IHostedServiceProbeRegistry> _hostedServiceProbeRegistry = new(MockBehavior.Strict);
+
+    public HealthServiceTests()
+    {
+        _hostedServiceProbeRegistry.Setup(x => x.GetProbesAsync())
+            .Returns(() => Array.Empty<KeyValuePair<string, HealthComponent>>().ToAsyncEnumerable());
+    }
 
     [Fact]
     public async Task NoComponents()
     {
         //Arrange
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _option.Object, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, _option.Object, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -49,7 +57,7 @@ public class HealthServiceTests
         };
         var option = new Quilt4NetApiOptions();
         option.AddComponent(component);
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -78,7 +86,7 @@ public class HealthServiceTests
         var option = new Quilt4NetApiOptions();
         option.AddComponent(component);
         _hostEnvironment.Setup(x => x.EnvironmentName).Returns("Production");
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -107,7 +115,7 @@ public class HealthServiceTests
         var option = new Quilt4NetApiOptions();
         option.AddComponent(component);
         option.ExceptionDetail = exceptionDetailLevel;
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -155,7 +163,7 @@ public class HealthServiceTests
         var option = new Quilt4NetApiOptions();
         option.AddComponent(component);
         _hostEnvironment.Setup(x => x.EnvironmentName).Returns(environment);
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -199,7 +207,7 @@ public class HealthServiceTests
         var option = new Quilt4NetApiOptions();
         option.AddComponentService<OneComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new OneComponentService("One", success, essential, message));
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -232,7 +240,7 @@ public class HealthServiceTests
         option.AddComponent(component);
         option.AddComponentService<OneComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new OneComponentService("One", success, essential, message));
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -265,7 +273,7 @@ public class HealthServiceTests
         option.AddComponent(component);
         option.AddComponentService<OneComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new OneComponentService("One", true, true, message));
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -300,7 +308,7 @@ public class HealthServiceTests
         option.AddComponent(component);
         option.AddComponentService<OneComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new OneComponentService(name, true, true, message));
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -325,7 +333,7 @@ public class HealthServiceTests
         var option = new Quilt4NetApiOptions();
         option.AddComponentService<ManyComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new ManyComponentService("A", 5));
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -346,7 +354,7 @@ public class HealthServiceTests
         var option = new Quilt4NetApiOptions();
         option.AddComponentService<ManyComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new ManyComponentService("A", 10, TimeSpan.FromSeconds(1)));
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
@@ -387,7 +395,7 @@ public class HealthServiceTests
             }
         });
         option.AddComponent(new Component { Name = "Fast", CheckAsync = _ => Task.FromResult(new CheckResult { Success = true, Message = "Fast component." }) });
-        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
+        var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
         var result = await sut.GetStatusAsync(CancellationToken.None).FirstAsync();
