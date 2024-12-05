@@ -1,7 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Quilt4Net.Toolkit.Features.Health;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
+
+public record SampleData
+{
+    public int SomeInt { get; init; }
+    public DateTime SomeDate { get; init; }
+}
 
 [ApiController]
 [Route("[controller]")]

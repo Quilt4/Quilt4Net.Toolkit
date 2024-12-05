@@ -67,6 +67,8 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
+app.UseMiddleware<RequestBodyLoggingMiddleware>();
+
 app.UseRouting();
 
 app.UseAuthorization();
