@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit;
+namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 public record SummaryDataIdentifier
 {

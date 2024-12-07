@@ -34,7 +34,8 @@ internal class VersionService : IVersionService
 
     private async Task<string> GetExternalIpAsync(Uri ipAddressCheck)
     {
-        if (ipAddressCheck == null) return null;
+        //if (ipAddressCheck == null) return null;
+        ipAddressCheck ??= new Uri("http://ipv4.icanhazip.com/");
 
         try
         {

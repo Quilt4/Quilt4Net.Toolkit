@@ -15,10 +15,10 @@ builder.Services.AddHostedService<MyHostedService>();
 builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
 builder.Logging.AddApplicationInsights();
 
-//Add AddQuilt4NetApi
 builder.AddQuilt4NetApi(o =>
 {
     //o.FailReadyWhenDegraded = true;
+    o.LogHttpRequest = true;
 
     o.AddComponent(new Component
     {
@@ -49,8 +49,6 @@ builder.AddQuilt4NetApi(o =>
         Essential = false,
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
-
-
 });
 builder.Services.AddQuilt4NetHealthClient(o =>
 {
@@ -71,8 +69,6 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
-app.UseMiddleware<RequestResponseLoggingMiddleware>();
-
 app.UseRouting();
 
 app.UseAuthorization();
@@ -80,5 +76,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetApi();
+//app.UseQuilt4NetHealthClient();
+app.Services.UseQuilt4NetHealthClient();
 
 app.Run();

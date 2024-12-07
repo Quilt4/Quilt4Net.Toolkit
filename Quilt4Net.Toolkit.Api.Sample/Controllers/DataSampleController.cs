@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Quilt4Net.Toolkit.Features.Measure;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 
@@ -16,19 +17,20 @@ public class DataSampleController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> PostPayload([FromHeader] string header, [FromQuery] string query, [FromBody] SampleData data)
     {
-        //_logger.LogInformation("This is an informational log {header}.", header);
-        //_logger.LogWarning("This is a warning log {header}.", header);
-        //_logger.LogError("This is an error log {header}.", header);
+        return await _logger.MeasureAsync(nameof(PostPayload), async d =>
+        {
+            d.AddField("Something", "yeee");
 
-        HttpContext.Response.Headers.Add("Method", nameof(PostPayload));
-        return Ok(new { header, query, data });
+            HttpContext.Response.Headers.Add("Method", nameof(PostPayload));
+            return Ok(new { header, query, data });
+        });
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetPayload([FromHeader] string header, [FromQuery] string query)
+    public Task<IActionResult> GetPayload([FromHeader] string header, [FromQuery] string query)
     {
         var data = new SampleData { SomeInt = 42, SomeDate = DateTime.UtcNow };
         HttpContext.Response.Headers.Add("Method", nameof(GetPayload));
-        return Ok(new { header, query, data });
+        return Task.FromResult<IActionResult>(Ok(new { header, query, data }));
     }
 }
