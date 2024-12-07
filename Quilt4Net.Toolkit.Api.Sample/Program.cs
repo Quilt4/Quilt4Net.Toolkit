@@ -1,3 +1,4 @@
+using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
@@ -10,6 +11,9 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHostedService<MyBackgroundService>();
 builder.Services.AddHostedService<MyHostedService>();
+
+builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
+builder.Logging.AddApplicationInsights();
 
 //Add AddQuilt4NetApi
 builder.AddQuilt4NetApi(o =>
@@ -67,7 +71,7 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
-app.UseMiddleware<RequestBodyLoggingMiddleware>();
+app.UseMiddleware<RequestResponseLoggingMiddleware>();
 
 app.UseRouting();
 
