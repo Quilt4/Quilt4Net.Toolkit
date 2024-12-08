@@ -6,17 +6,19 @@ namespace Quilt4Net.Toolkit;
 
 public static class HealthRegistration
 {
+    private static Quilt4NetHealthOptions _options;
+
     public static void AddQuilt4NetHealthClient(this IServiceCollection serviceCollection, Action<Quilt4NetHealthOptions> options = default)
     {
         serviceCollection.AddSingleton(s =>
         {
             var configuration = s.GetService<IConfiguration>();
-            var o = BuildOptions(configuration, s, (_, o) => options?.Invoke(o));
-            if (!o.HealthAddress?.AbsoluteUri?.EndsWith("/") ?? false)
+            _options = BuildOptions(configuration, s, (_, o) => options?.Invoke(o));
+            if (!_options.HealthAddress?.AbsoluteUri.EndsWith("/") ?? false)
             {
-                o.HealthAddress = new Uri($"{o.HealthAddress.AbsoluteUri}/");
+                _options.HealthAddress = new Uri($"{_options.HealthAddress.AbsoluteUri}/");
             }
-            return o;
+            return _options;
         });
 
         serviceCollection.AddTransient<IHealthClient>(s =>
@@ -31,8 +33,8 @@ public static class HealthRegistration
         serviceCollection.AddSingleton(s =>
         {
             var configuration = s.GetService<IConfiguration>();
-            var o = BuildOptions(configuration, s, options);
-            return o;
+            _options = BuildOptions(configuration, s, options);
+            return _options;
         });
 
         serviceCollection.AddTransient<IHealthClient>(s =>
@@ -48,4 +50,24 @@ public static class HealthRegistration
         options?.Invoke(s, o);
         return o;
     }
+
+    public static Quilt4NetHealthOptions GetOptions()
+    {
+        return _options;
+    }
+
+    public static void UseQuilt4NetHealthClient(this IServiceProvider serviceProvider)
+    {
+        var x = serviceProvider.GetServices<Quilt4NetHealthOptions>();
+    }
+
+    //public static void UseQuilt4NetHealthClient(this IApplicationBuilder app)
+    //{
+    //    throw new NotImplementedException();
+    //}
+
+    //public static void UseQuilt4NetHealthClient(this IHost app)
+    //{
+    //    throw new NotImplementedException();
+    //}
 }

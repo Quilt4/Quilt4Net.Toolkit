@@ -102,6 +102,11 @@ public static class Quilt4NetRegistration
     /// <param name="app"></param>
     public static void UseQuilt4NetApi(this WebApplication app)
     {
+        if (_options.LogHttpRequest)
+        {
+            app.UseMiddleware<RequestResponseLoggingMiddleware>();
+        }
+
         app.UseEndpoints(endpoints =>
         {
             var methods = typeof(HealthController).GetMethods()

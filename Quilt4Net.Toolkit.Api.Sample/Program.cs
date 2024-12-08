@@ -1,3 +1,4 @@
+using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
@@ -11,10 +12,13 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHostedService<MyBackgroundService>();
 builder.Services.AddHostedService<MyHostedService>();
 
-//Add AddQuilt4NetApi
+builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
+builder.Logging.AddApplicationInsights();
+
 builder.AddQuilt4NetApi(o =>
 {
     //o.FailReadyWhenDegraded = true;
+    o.LogHttpRequest = true;
 
     o.AddComponent(new Component
     {
@@ -45,13 +49,12 @@ builder.AddQuilt4NetApi(o =>
         Essential = false,
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
-
-
 });
 builder.Services.AddQuilt4NetHealthClient(o =>
 {
     o.HealthAddress = new Uri("https://localhost:7119/api/Health");
 });
+builder.Services.AddQuilt4NetApplicationInsights();
 
 builder.Services.AddOpenApi();
 
@@ -74,5 +77,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetApi();
+//app.UseQuilt4NetHealthClient();
+app.Services.UseQuilt4NetHealthClient();
 
 app.Run();

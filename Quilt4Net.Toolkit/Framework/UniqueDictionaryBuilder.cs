@@ -1,13 +1,14 @@
-﻿namespace Quilt4Net.Toolkit.Api.Framework;
+﻿namespace Quilt4Net.Toolkit.Framework;
 
 internal static class UniqueDictionaryBuilder
 {
-    public static Dictionary<string, T> ToUniqueDictionary<T>(this KeyValuePair<string, T>[] components)
+    public static Dictionary<string, T> ToUniqueDictionary<T>(this IEnumerable<KeyValuePair<string, T>> components)
     {
         var result = new Dictionary<string, T>();
         var keyCounts = new Dictionary<string, int>(); // Track occurrences of each key
 
-        foreach (var component in components)
+        var arr = components as KeyValuePair<string, T>[] ?? components.ToArray();
+        foreach (var component in arr)
         {
             var key = component.Key;
 
@@ -15,7 +16,7 @@ internal static class UniqueDictionaryBuilder
             keyCounts[key]++;
 
             // Append suffix if there are duplicates
-            if (keyCounts[key] == 1 && components.Count(c => c.Key == key) > 1)
+            if (keyCounts[key] == 1 && arr.Count(c => c.Key == key) > 1)
             {
                 key = $"{key}.0"; // First duplicate occurrence gets .0
             }

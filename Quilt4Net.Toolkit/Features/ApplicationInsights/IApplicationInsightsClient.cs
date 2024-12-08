@@ -4,4 +4,5 @@ public interface IApplicationInsightsClient
 {
     IAsyncEnumerable<SummaryData> GetSummaryAsync(string environment);
     Task<LogDetails> GetDetails(string environment, string summaryIdentifier);
+    IAsyncEnumerable<LogMeasurement> GetMeasurements(string environment);
 }

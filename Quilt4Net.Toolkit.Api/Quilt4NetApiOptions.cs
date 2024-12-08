@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -94,6 +95,20 @@ public record Quilt4NetApiOptions
     /// Address of check for ip address, like http://ipv4.icanhazip.com/.
     /// </summary>
     public Uri IpAddressCheckUri { get; set; }
+
+    /// <summary>
+    /// Add logger for Http request and response with body, headers, query and results.
+    /// This feature also measures the call.
+    /// Default is true.
+    /// </summary>
+    public bool LogHttpRequest { get; set; } = true;
+
+    ///// <summary>
+    ///// Monitor name used to track log-items to selected monitor.
+    ///// If set to empty string the value will be omitted.
+    ///// Default is Quilt4Net.
+    ///// </summary>
+    //public string MonitorName { get; set; } = Constants.Monitor;
 
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;

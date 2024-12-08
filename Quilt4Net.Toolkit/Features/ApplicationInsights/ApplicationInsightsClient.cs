@@ -1,5 +1,4 @@
-﻿using System.Text;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
@@ -20,9 +19,6 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
         var client = GetClient();
 
         //NOTE: Pull data from exceptions
-        //var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | summarize IssueCount=count() by AppRoleName, SeverityLevel, ProblemId";
-        //var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = coalesce(ProblemId, Message, 'Unknown') | summarize IssueCount=count() by AppRoleName, SeverityLevel, ProblemIdentifier";
-        //var query = $"AppTraces | union AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = coalesce(ProblemId, Message) | summarize IssueCount=count(), Message = arg_min(timestamp, Message), UniqueId = arg_min(timestamp, Id) by AppRoleName, SeverityLevel, ProblemIdentifier";
         var query = $"AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = ProblemId | summarize IssueCount=count(), Message = take_any(OuterMessage) by AppRoleName, SeverityLevel, ProblemIdentifier";
 
         var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
@@ -43,15 +39,7 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
         }
 
         //NOTE: Pull data from traces
-        //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | summarize IssueCount=count() by AppRoleName, SeverityLevel"; //WORKS
-        //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend Message = tostring(Properties['OriginalFormat']) | summarize IssueCount=count() | MessageId = take_any(operation_Id) by AppRoleName, SeverityLevel, Message";
-        //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend Message = tostring(Properties['OriginalFormat']) | summarize IssueCount=count() | MessageId = arg_min(timestamp, Message) by AppRoleName, SeverityLevel, Message";
-        //var query = $"AppTraces | extend msg = tostring(Properties['OriginalFormat']) | summarize IssueCount = count(), FirstMessage = take_any(msg), severityLevel by AppRoleName, SeverityLevel";
-        //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | summarize IssueCount=count() by AppRoleName, SeverityLevel"; //WORKS
-        //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | summarize IssueCount=count(), FirstMessag=take_any(OriginalMessage) by AppRoleName, SeverityLevel"; //WORKS
-        //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | summarize IssueCount=count(), Message=take_any(OriginalMessage) by AppRoleName, SeverityLevel"; //WORKS
-        query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat'])| extend MessageId = coalesce(OperationId,tostring(hash(Message))) | summarize IssueCount=count(), Message=take_any(OriginalMessage), MessageId=take_any(MessageId) by AppRoleName, SeverityLevel";
-        //var query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | summarize IssueCount=count(), FirstMessage=take_any(msg) by AppRoleName, SeverityLevel";
+        query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | extend MessageId = coalesce(OperationId,tostring(hash(Message))) | summarize IssueCount=count(), Message=take_any(OriginalMessage), MessageId=take_any(MessageId) by AppRoleName, SeverityLevel";
         response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
@@ -110,10 +98,10 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
         switch (summaryDataIdentifier.Type)
         {
             case LogType.Exception:
-                detailQuery = $"union AppExceptions | where ProblemId == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where AppRoleName == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
+                detailQuery = $"AppExceptions | where ProblemId == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where AppRoleName == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
                 break;
             case LogType.Trace:
-                detailQuery = $"union AppTraces | where OperationId == '{summaryDataIdentifier.Identifier}' or tostring(hash(Message)) == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where AppRoleName == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
+                detailQuery = $"AppTraces | where OperationId == '{summaryDataIdentifier.Identifier}' or tostring(hash(Message)) == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where AppRoleName == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
                 break;
             default:
                 throw new ArgumentOutOfRangeException();
@@ -137,7 +125,61 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
         return result;
     }
 
-    static string ConvertRowToJson(LogsTableRow row, IReadOnlyList<LogsTableColumn> columns)
+    public async IAsyncEnumerable<LogMeasurement> GetMeasurements(string environment)
+    {
+        var client = GetClient();
+
+        var query = $"AppTraces | where isnotempty(Properties['Elapsed']) | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend Elapsed = Properties['Elapsed'] | extend Action = Properties['Action'] | extend Method = Properties['Method'] | extend Path = Properties['Path'] | extend DetailsMethod = Properties['Details'] | extend CategoryName = Properties['CategoryName'] | order by TimeGenerated desc";
+
+        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        foreach (var table in response.Value.AllTables)
+        {
+            //var cols = string.Join("###", table.Columns.Select(x => x.Name).ToArray());
+            //var row1 = string.Join("###", table.Rows.First().ToArray());
+            ////var aa = table.Rows.ToArray();
+            foreach (var logMeasurement in table.Rows.Select(x =>
+                     {
+                         var details = GetDetails(x);
+
+                         var action = x["Action"]?.ToString();
+                         var method = x["Method"]?.ToString();
+                         var path = x["Path"]?.ToString();
+
+                         return new LogMeasurement
+                         {
+                             Application = x["AppRoleName"].ToString(), //TODO: Add fallback
+                             TimeGenerated = DateTime.TryParse(x["TimeGenerated"].ToString(), out var tg) ? tg : DateTime.MinValue,
+                             Elapsed = TimeSpan.TryParse(x["Elapsed"].ToString(), out var d) ? d : TimeSpan.Zero,
+                             CategoryName = x["CategoryName"].ToString(),
+                             Method = details.Method,
+                             Action = action ?? $"{method}{path}",
+                         };
+                     }))
+            {
+                yield return logMeasurement;
+            }
+        }
+    }
+
+    private static (string Monitor, string Method) GetDetails(LogsTableRow x)
+    {
+        var dm = x["DetailsMethod"]?.ToString();
+        if (dm != null)
+        {
+            using JsonDocument jsonDoc = JsonDocument.Parse(dm);
+            var method = jsonDoc.RootElement.GetProperty("Method").GetString();
+            var monitor = jsonDoc.RootElement.GetProperty("Monitor").GetString();
+            return (monitor, method);
+        }
+
+        return (null, null);
+    }
+
+    //TODO: Create special http-request feature....
+    //"Request": "{\"Method\":\"GET\",\"Path\":\"/ApplicationInsights/measurements\",\"Headers\":{\"Accept\":\"*/*\",\"Host\":\"localhost:7119\",\"User-Agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\",\"Accept-Encoding\":\"gzip, deflate, br, zstd\",\"Accept-Language\":\"sv-SE,sv;q=0.9,en-SE;q=0.8,en-US;q=0.7,en;q=0.6\",\"Referer\":\"https://localhost:7119/swagger/index.html\",\"sec-ch-ua-platform\":\"\\u0022Windows\\u0022\",\"sec-ch-ua\":\"\\u0022Google Chrome\\u0022;v=\\u0022131\\u0022, \\u0022Chromium\\u0022;v=\\u0022131\\u0022, \\u0022Not_A Brand\\u0022;v=\\u002224\\u0022\",\"sec-ch-ua-mobile\":\"?0\",\"sec-fetch-site\":\"same-origin\",\"sec-fetch-mode\":\"cors\",\"sec-fetch-dest\":\"empty\",\"DNT\":\"1\",\"sec-gpc\":\"1\",\"priority\":\"u=1, i\"},\"Query\":{\"environment\":\"Development\"},\"Body\":\"\",\"ClientIp\":\"::1\"}",
+    //"Response": "{\"StatusCode\":200,\"Headers\":{\"Content-Type\":\"application/json; charset=utf-8\",\"Request-Context\":\"appId=cid-v1:7c2b7502-9c27-4c02-8bde-28b3eaec2a65\"},\"Body\":\"[{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022}]\"}",
+
+    private static string ConvertRowToJson(LogsTableRow row, IReadOnlyList<LogsTableColumn> columns)
     {
         // Create a dictionary to hold the column names and values
         var rowDictionary = new Dictionary<string, object>();
@@ -166,52 +208,5 @@ internal class ApplicationInsightsClient : IApplicationInsightsClient
             WriteIndented = true // Makes JSON output readable
         };
         return JsonSerializer.Serialize(rowDictionary, jsonOptions);
-    }
-}
-
-public class Base64UrlHelper
-{
-    public static string EncodeToBase64Url(string input)
-    {
-        if (string.IsNullOrEmpty(input))
-            return string.Empty;
-
-        // Convert the input string to bytes
-        byte[] bytes = Encoding.UTF8.GetBytes(input);
-
-        // Convert to Base64
-        string base64 = Convert.ToBase64String(bytes);
-
-        // Make it URL-safe by replacing special characters and removing padding
-        string base64Url = base64
-            .Replace("+", "-")  // Replace '+' with '-'
-            .Replace("/", "_")  // Replace '/' with '_'
-            .TrimEnd('=');      // Remove padding '='
-
-        return base64Url;
-    }
-
-    public static string DecodeFromBase64Url(string base64Url)
-    {
-        if (string.IsNullOrEmpty(base64Url))
-            return string.Empty;
-
-        // Convert Base64 URL-safe to standard Base64 by restoring characters and padding
-        string base64 = base64Url
-            .Replace("-", "+")  // Replace '-' with '+'
-            .Replace("_", "/"); // Replace '_' with '/'
-
-        // Add padding if necessary
-        switch (base64.Length % 4)
-        {
-            case 2: base64 += "=="; break;
-            case 3: base64 += "="; break;
-        }
-
-        // Convert the Base64 string back to bytes
-        byte[] bytes = Convert.FromBase64String(base64);
-
-        // Convert bytes to string
-        return Encoding.UTF8.GetString(bytes);
     }
 }
