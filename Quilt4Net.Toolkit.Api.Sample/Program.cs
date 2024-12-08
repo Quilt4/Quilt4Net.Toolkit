@@ -54,6 +54,7 @@ builder.Services.AddQuilt4NetHealthClient(o =>
 {
     o.HealthAddress = new Uri("https://localhost:7119/api/Health");
 });
+builder.Services.AddQuilt4NetApplicationInsights();
 
 builder.Services.AddOpenApi();
 

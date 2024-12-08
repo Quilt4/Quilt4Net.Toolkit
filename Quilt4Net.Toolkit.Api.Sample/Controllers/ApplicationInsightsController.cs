@@ -33,5 +33,15 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
             var result = await _applicationInsightsClient.GetDetails(environment, summaryIdentifier);
             return Ok(result);
         }
+
+        [HttpGet]
+        [Route("measurements")]
+        public async Task<IActionResult> GetMeasurements(string environment)
+        {
+            if (string.IsNullOrEmpty(environment)) environment = "Production";
+
+            var result = await _applicationInsightsClient.GetMeasurements(environment).ToArrayAsync();
+            return Ok(result);
+        }
     }
 }

@@ -6,6 +6,7 @@ public record SummaryData
 {
     public required string SummaryIdentifier { get; init; }
     public required string Application { get; init; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public required LogType Type { get; init; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required SeverityLevel SeverityLevel { get; init; }
