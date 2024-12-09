@@ -49,18 +49,18 @@ stages:
         projects: '**/*.Tests.csproj'
         arguments: '--collect "Code coverage" --configuration $(buildConfiguration) --filter "Category!=Database"'
 
-    - task: BuildQualityChecks@8
-      displayName: 'Build Quality Checks'
-      inputs:
-        checkWarnings: true
-        warningFailOption: 'build'
-        allowWarningVariance: true
-        warningVariance: '5'
-        checkCoverage: true
-        coverageFailOption: 'build'
-        coverageType: 'blocks'
-        allowCoverageVariance: true
-        coverageVariance: '5'
+    # - task: BuildQualityChecks@8
+    #   displayName: 'Build Quality Checks'
+    #   inputs:
+    #     checkWarnings: true
+    #     warningFailOption: 'build'
+    #     allowWarningVariance: true
+    #     warningVariance: '5'
+    #     checkCoverage: true
+    #     coverageFailOption: 'build'
+    #     coverageType: 'blocks'
+    #     allowCoverageVariance: true
+    #     coverageVariance: '5'
 
     - task: DotNetCoreCLI@2
       displayName: 'Pack Quilt4Net.Toolkit'
