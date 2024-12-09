@@ -98,10 +98,10 @@ public record Quilt4NetApiOptions
 
     /// <summary>
     /// Add logger for Http request and response with body, headers, query and results.
-    /// This feature also measures the call.
-    /// Default is true.
+    /// Default is append to Application Insights requests.
+    /// Remember to also add 'builder.Logging.AddApplicationInsights();' at startup and add connection string, if you are using ApplicationInsights.
     /// </summary>
-    public bool LogHttpRequest { get; set; } = true;
+    public HttpRequestLogMode LogHttpRequest { get; set; } = HttpRequestLogMode.ApplicationInsights;
 
     ///// <summary>
     ///// Monitor name used to track log-items to selected monitor.
