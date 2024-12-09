@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Features.Measure;
@@ -29,30 +31,41 @@ public class RequestResponseLoggingMiddleware
         // Intercept the response
         var originalResponseBodyStream = context.Response.Body;
 
-        var sw = Stopwatch.StartNew();
+        var sw = new Stopwatch();
+        var telemetry = context.Features.Get<RequestTelemetry>();
+
         try
         {
             using var responseBodyStream = new MemoryStream();
             // Replace the response body with a memory stream
             context.Response.Body = responseBodyStream;
 
-            // Call the next middleware
-            await _next(context);
+            telemetry.Properties["UserId"] = context.User.Identity?.Name ?? "Anonymous";
+            telemetry.Properties["Request"] = System.Text.Json.JsonSerializer.Serialize(requestDetails);
 
+            // Call the next middleware
+            sw.Start();
+            await _next(context);
             sw.Stop();
 
             // Read and capture the response details
             var responseDetails = await CaptureResponseDetailsAsync(context);
+            telemetry.Properties["Response"] = System.Text.Json.JsonSerializer.Serialize(responseDetails);
+            telemetry.Properties["Elapsed"] = $"{sw.Elapsed}";
+            telemetry.Properties["Details"] = BuildDetails(default);
 
             // Log both request and response in a single log entry
-            LogRequestAndResponse(requestDetails, responseDetails, sw.Elapsed);
+            //LogRequestAndResponse(requestDetails, responseDetails, sw.Elapsed);
 
             // Copy the response back to the original stream
             await responseBodyStream.CopyToAsync(originalResponseBodyStream);
         }
         catch (Exception e)
         {
-            LogRequestAndResponse(requestDetails, null, sw.Elapsed, e);
+            telemetry.Properties["StackTrace"] = e.StackTrace;
+            telemetry.Properties["Elapsed"] = $"{sw.Elapsed}";
+            telemetry.Properties["Details"] = BuildDetails(e);
+            //LogRequestAndResponse(requestDetails, null, sw.Elapsed, e);
             throw;
         }
         finally
@@ -121,21 +134,21 @@ public class RequestResponseLoggingMiddleware
         };
     }
 
-    private void LogRequestAndResponse(Request request, Response response, TimeSpan elapsed, Exception e = default)
-    {
-        var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
-        var responseJson = response != null ? System.Text.Json.JsonSerializer.Serialize(response) : null;
-        var details = BuildDetails(e);
+    //private void LogRequestAndResponse(Request request, Response response, TimeSpan elapsed, Exception e = default)
+    //{
+    //    var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
+    //    var responseJson = response != null ? System.Text.Json.JsonSerializer.Serialize(response) : null;
+    //    var details = BuildDetails(e);
 
-        if (e == null)
-        {
-            _logger.LogInformation("Http {Method} to {Path} in {Elapsed} ms. {Request} {Response} {Details}", request.Method, request.Path, elapsed, requestJson, responseJson, details);
-        }
-        else
-        {
-            _logger.LogError("Http {Method} to {Path} in {Elapsed} ms, failed {ErrorMessage} @{StackTrace}. {Request} {Details}", request.Method, request.Path, elapsed, e.Message, e.StackTrace, requestJson, details);
-        }
-    }
+    //    if (e == null)
+    //    {
+    //        _logger.LogInformation("Http {Method} to {Path} in {Elapsed} ms. {Request} {Response} {Details}", request.Method, request.Path, elapsed, requestJson, responseJson, details);
+    //    }
+    //    else
+    //    {
+    //        _logger.LogError("Http {Method} to {Path} in {Elapsed} ms, failed {ErrorMessage} @{StackTrace}. {Request} {Details}", request.Method, request.Path, elapsed, e.Message, e.StackTrace, requestJson, details);
+    //    }
+    //}
 
     private string BuildDetails(Exception e)
     {
