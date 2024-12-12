@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using Quilt4Net.Toolkit.Features.Health;
-using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -76,6 +75,12 @@ public record Quilt4NetApiOptions
         return _dependencies.TryAdd(name, dependency);
     }
 
+    /// <summary>
+    /// Add a service that will be used for creating components.
+    /// </summary>
+    /// <typeparam name="TService"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="ArgumentException"></exception>
     public bool AddComponentService<TService>() where TService : IComponentService
     {
         if (_componentServices.ContainsKey(typeof(TService))) throw new ArgumentException($"Componentservice of type '{typeof(TService).Name}' has already been added.");
@@ -90,6 +95,13 @@ public record Quilt4NetApiOptions
     /// For all other environments default is Message.
     /// </summary>
     public ExceptionDetailLevel? ExceptionDetail { get; set; }
+
+    /// <summary>
+    /// Level of detailed returned for different types of users.
+    /// Default for production is AuthenticatedOnly.
+    /// For all other environments default is EveryOne.
+    /// </summary>
+    public AuthDetailLevel? AuthDetail { get; set; }
 
     /// <summary>
     /// Address of check for ip address, like http://ipv4.icanhazip.com/.

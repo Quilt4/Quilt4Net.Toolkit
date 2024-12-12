@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Runtime.CompilerServices;
+using Microsoft.AspNetCore.Mvc;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
@@ -7,6 +8,8 @@ using Quilt4Net.Toolkit.Api.Features.Version;
 using Microsoft.AspNetCore.Http;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Features.Health;
+using Microsoft.Extensions.Hosting;
+using System.Linq;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -15,6 +18,7 @@ namespace Quilt4Net.Toolkit.Api;
 /// </summary>
 public class HealthController : ControllerBase
 {
+    private readonly IHostEnvironment _hostEnvironment;
     private readonly ILiveService _liveService;
     private readonly IReadyService _readyService;
     private readonly IHealthService _healthService;
@@ -35,8 +39,9 @@ public class HealthController : ControllerBase
     /// <param name="metricsService"></param>
     /// <param name="dependencyService"></param>
     /// <param name="options"></param>
-    public HealthController(ILiveService liveService, IReadyService readyService, IHealthService healthService, IVersionService versionService, IMetricsService metricsService, IDependencyService dependencyService, Quilt4NetApiOptions options)
+    public HealthController(IHostEnvironment hostEnvironment, ILiveService liveService, IReadyService readyService, IHealthService healthService, IVersionService versionService, IMetricsService metricsService, IDependencyService dependencyService, Quilt4NetApiOptions options)
     {
+        _hostEnvironment = hostEnvironment;
         _liveService = liveService;
         _readyService = readyService;
         _healthService = healthService;
@@ -99,17 +104,31 @@ public class HealthController : ControllerBase
         if (!noDependencies)
         {
             var deps = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
-            IEnumerable<KeyValuePair<string, HealthComponent>> dds = deps.SelectMany(x => x.Value.DependencyComponents).Select(x => new KeyValuePair<string, HealthComponent>());
-            //var reps = deps.SelectMany(x => new KeyValuePair<string, HealthComponent>(x.Key, new HealthComponent
-            //{
-            //    Status = x.Value.Status,
-            //    Details = x.Value.
-            //}));
+            var dependencies = deps.SelectMany(d => d.Value.DependencyComponents.ToDictionary(x => $"{d.Key}.{x.Key}", x => x.Value)).ToArray();
+            responses = responses.Union(dependencies).ToArray();
         }
 
         var response = responses.ToHealthResponse();
 
         HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
+
+        var isAuthenticated = HttpContext.User.Identity?.Name != null;
+        switch (_options.AuthDetail ?? (_hostEnvironment.IsProduction() ? AuthDetailLevel.AuthenticatedOnly : AuthDetailLevel.EveryOne))
+        {
+            case AuthDetailLevel.EveryOne:
+                break;
+            case AuthDetailLevel.AuthenticatedOnly:
+                if (!isAuthenticated)
+                {
+                    response = ClearDetails(response);
+                }
+                break;
+            case AuthDetailLevel.NoOne:
+                response = ClearDetails(response);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(_options.AuthDetail), _options.AuthDetail, null);
+        }
 
         if (response.Status == HealthStatus.Unhealthy)
         {
@@ -117,6 +136,14 @@ public class HealthController : ControllerBase
         }
 
         return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
+    }
+
+    private static HealthResponse ClearDetails(HealthResponse response)
+    {
+        return response with
+        {
+            Components = response.Components.ToDictionary(x => x.Key, x => x.Value with { Details = default })
+        };
     }
 
     ///// <summary>
@@ -136,7 +163,7 @@ public class HealthController : ControllerBase
     /// <returns></returns>
     public async Task<IActionResult> Dependencies(CancellationToken cancellationToken)
     {
-        var responses = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
+        var responses = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
         var response = responses.ToDependencyResponse();
 
         HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");

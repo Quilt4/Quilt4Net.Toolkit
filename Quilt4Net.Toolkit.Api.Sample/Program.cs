@@ -39,14 +39,8 @@ builder.AddQuilt4NetApi(o =>
 
     o.AddDependency(new Dependency
     {
-        Name = "A",
+        Name = "Self",
         Essential = true,
-        Uri = new Uri("https://localhost:7119/api/Health/")
-    });
-    o.AddDependency(new Dependency
-    {
-        Name = "B",
-        Essential = false,
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
 });
@@ -77,7 +71,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetApi();
-//app.UseQuilt4NetHealthClient();
 app.Services.UseQuilt4NetHealthClient();
 
 app.Run();
