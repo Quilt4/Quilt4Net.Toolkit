@@ -115,6 +115,14 @@ public record Quilt4NetApiOptions
     /// </summary>
     public HttpRequestLogMode LogHttpRequest { get; set; } = HttpRequestLogMode.ApplicationInsights;
 
+    /// <summary>
+    /// If this is added calls to the API picks up 'X-Correlation-ID' from the header and append that to logging on the server.
+    /// If there is no CorrelationId provided, one is added and returned with the response to the client.
+    /// If scoped, the CorrelationId can be added by...
+    /// On the client side use ...
+    /// </summary>
+    public bool UseCorrelationId { get; set; } = true;
+
     ///// <summary>
     ///// Monitor name used to track log-items to selected monitor.
     ///// If set to empty string the value will be omitted.
