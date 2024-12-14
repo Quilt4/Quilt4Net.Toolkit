@@ -40,6 +40,27 @@ builder.AddQuilt4NetApi(o =>
 });
 ```
 
+For more complex scenarios, implement *IComponentService* and add the servcice here to separate the setup from the implementation.
+```
+builder.AddQuilt4NetApi(o =>
+{
+    o.AddComponentService<MyComponentService>();
+});
+```
+
+To add dependency information to other services that uses *Quilt4Net API*. This will call the health check on the other service.
+```
+builder.AddQuilt4NetApi(o =>
+{
+    o.AddDependency(new Dependency
+    {
+        Name = "Dependency",
+        Essential = true,
+        Uri = new Uri("https://localhost:7119/api/Health/")
+    });
+});
+```
+
 ### Configuration options
 Configuration can be configured by code. This will override any other configuration.
 ```
@@ -86,16 +107,3 @@ Error at startup with the message:
 `Unhandled exception. System.InvalidOperationException: EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware and so must be added to the request execution pipeline before EndpointMiddleware. Please add EndpointRoutingMiddleware by calling 'IApplicationBuilder.UseRouting' inside the call to 'Configure(...)' in the application startup code.`
 
 The solution is to add `app.UseRouting();` before `app.UseQuilt4NetApi();` in *Program.cs*.
-
-## Planned
-- IP-Address lookup
-- Authentication for endpoints (Use project auth or API-Key for different methods.)
-- Feature to check if background services are running or if they have crashed.
-- Monitor service that can be implemented so that components does not have to be added with 'AddComponent' in 'AddQuilt4NetApi'.
-- Possible to create custom implementation of services
-- 
-Support for API health, liveness, readiness, startup, metrics, version and dependencies.
-
-Read more on the project site.
-
-[![GitHub repo](https://img.shields.io/github/repo-size/Quilt4/Quilt4Net.Toolkit?style=flat&logo=github&logoColor=red&label=Repo)](https://github.com/Quilt4/Quilt4Net.Toolkit)

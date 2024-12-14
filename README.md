@@ -17,4 +17,5 @@ Client consumer for *Quilt4Net Toolkit Api* and access for *Application Insights
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *Metrics* in .NET Web Applications.
+*Quilt4Net Toolkit* is part of this package.
 [Read more here](Quilt4Net.Toolkit.Api/README.md)
