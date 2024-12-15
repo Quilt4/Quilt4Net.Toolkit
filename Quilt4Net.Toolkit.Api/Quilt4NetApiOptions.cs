@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using Quilt4Net.Toolkit.Features.Health;
-using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -76,6 +75,12 @@ public record Quilt4NetApiOptions
         return _dependencies.TryAdd(name, dependency);
     }
 
+    /// <summary>
+    /// Add a service that will be used for creating components.
+    /// </summary>
+    /// <typeparam name="TService"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="ArgumentException"></exception>
     public bool AddComponentService<TService>() where TService : IComponentService
     {
         if (_componentServices.ContainsKey(typeof(TService))) throw new ArgumentException($"Componentservice of type '{typeof(TService).Name}' has already been added.");
@@ -92,6 +97,13 @@ public record Quilt4NetApiOptions
     public ExceptionDetailLevel? ExceptionDetail { get; set; }
 
     /// <summary>
+    /// Level of detailed returned for different types of users.
+    /// Default for production is AuthenticatedOnly.
+    /// For all other environments default is EveryOne.
+    /// </summary>
+    public AuthDetailLevel? AuthDetail { get; set; }
+
+    /// <summary>
     /// Address of check for ip address, like http://ipv4.icanhazip.com/.
     /// </summary>
     public Uri IpAddressCheckUri { get; set; }
@@ -102,6 +114,14 @@ public record Quilt4NetApiOptions
     /// Remember to also add 'builder.Logging.AddApplicationInsights();' at startup and add connection string, if you are using ApplicationInsights.
     /// </summary>
     public HttpRequestLogMode LogHttpRequest { get; set; } = HttpRequestLogMode.ApplicationInsights;
+
+    /// <summary>
+    /// If this is added calls to the API picks up 'X-Correlation-ID' from the header and append that to logging on the server.
+    /// If there is no CorrelationId provided, one is added and returned with the response to the client.
+    /// If scoped, the CorrelationId can be added by...
+    /// On the client side use ...
+    /// </summary>
+    public bool UseCorrelationId { get; set; } = true;
 
     ///// <summary>
     ///// Monitor name used to track log-items to selected monitor.

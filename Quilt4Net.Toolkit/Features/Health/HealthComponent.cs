@@ -17,5 +17,5 @@ public record HealthComponent
     /// Extra details for the health checks.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public required Dictionary<string, string> Details { get; init; }
+    public Dictionary<string, string> Details { get; init; }
 }

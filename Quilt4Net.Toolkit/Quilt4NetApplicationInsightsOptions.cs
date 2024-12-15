@@ -23,7 +23,7 @@ public record Quilt4NetApplicationInsightsOptions
     public string ClientId { get; set; }
 
     /// <summary>
-    /// Secret 
+    ///
     /// </summary>
     public string ClientSecret { get; set; }
 }

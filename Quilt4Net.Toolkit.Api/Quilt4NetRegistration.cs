@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
@@ -10,6 +11,7 @@ using Quilt4Net.Toolkit.Api.Features.Probe;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
+using System.Reflection;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -102,9 +104,40 @@ public static class Quilt4NetRegistration
     /// <param name="app"></param>
     public static void UseQuilt4NetApi(this WebApplication app)
     {
+        if (_options.UseCorrelationId)
+        {
+            app.UseMiddleware<CorrelationIdMiddleware>();
+        }
+
         if (_options.LogHttpRequest > 0)
         {
-            app.UseMiddleware<RequestResponseLoggingMiddleware>();
+            app.UseWhen(
+                context => context.Request.Path.StartsWithSegments("/Api"),
+                branch =>
+                {
+                    branch.UseMiddleware<RequestResponseLoggingMiddleware>();
+                }
+            );
+            //app.UseMiddleware<RequestResponseLoggingMiddleware>();
+        }
+
+        var asm = Assembly.GetEntryAssembly();
+        var nm = asm?.GetName();
+        if (nm != null)
+        {
+            //app.Use(async (context, next) =>
+            //{
+            //    using (context.RequestServices.GetRequiredService<ILoggerFactory>()
+            //               .CreateLogger("Scope")
+            //               .BeginScope(new Dictionary<string, object>
+            //               {
+            //                   ["ApplicationName"] = nm.Name,
+            //                   ["Version"] = nm.Version
+            //               }))
+            //    {
+            //        await next(context);
+            //    }
+            //});
         }
 
         app.UseEndpoints(endpoints =>

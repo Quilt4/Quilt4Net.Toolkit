@@ -3,5 +3,6 @@
 public enum LogType
 {
     Exception,
-    Trace
+    Trace,
+    Request
 }

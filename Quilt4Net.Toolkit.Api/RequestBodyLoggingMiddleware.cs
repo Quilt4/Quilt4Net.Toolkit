@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.Http;
@@ -26,6 +27,7 @@ public class RequestResponseLoggingMiddleware
         context.Request.EnableBuffering();
         var requestDetails = await CaptureRequestDetailsAsync(context);
         var originalResponseBodyStream = context.Response.Body;
+        var correlationId = context.Items.TryGetValue("CorrelationId", out var c) ? c?.ToString() : null;
 
         var sw = new Stopwatch();
         var telemetry = GetRequestTelemetry(context);
@@ -39,6 +41,14 @@ public class RequestResponseLoggingMiddleware
             {
                 telemetry.Properties["UserId"] = context.User.Identity?.Name ?? "Anonymous";
                 telemetry.Properties["Request"] = System.Text.Json.JsonSerializer.Serialize(requestDetails);
+                if (!string.IsNullOrEmpty(correlationId)) telemetry.Properties["CorrelationId"] = correlationId;
+                var asm = Assembly.GetEntryAssembly();
+                var nm = asm?.GetName();
+                if (nm != null)
+                {
+                    telemetry.Properties["ApplicationName"] = nm.Name;
+                    telemetry.Properties["Version"] = $"{nm.Version}";
+                }
             }
 
             sw.Start();
@@ -53,7 +63,7 @@ public class RequestResponseLoggingMiddleware
                 telemetry.Properties["Details"] = BuildDetails(default);
             }
 
-            LogRequestAndResponse(requestDetails, responseDetails, sw.Elapsed);
+            LogRequestAndResponse(requestDetails, responseDetails, sw.Elapsed, correlationId);
 
             await responseBodyStream.CopyToAsync(originalResponseBodyStream);
         }
@@ -66,7 +76,7 @@ public class RequestResponseLoggingMiddleware
                 telemetry.Properties["Details"] = BuildDetails(e);
             }
 
-            LogRequestAndResponse(requestDetails, null, sw.Elapsed, e);
+            LogRequestAndResponse(requestDetails, null, sw.Elapsed, correlationId, e);
             throw;
         }
         finally
@@ -145,7 +155,7 @@ public class RequestResponseLoggingMiddleware
         };
     }
 
-    private void LogRequestAndResponse(Request request, Response response, TimeSpan elapsed, Exception e = default)
+    private void LogRequestAndResponse(Request request, Response response, TimeSpan elapsed, string correlationId, Exception e = default)
     {
         if (!_options.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger)) return;
 
@@ -155,11 +165,11 @@ public class RequestResponseLoggingMiddleware
 
         if (e == null)
         {
-            _logger.LogInformation("Http {Method} to {Path} in {Elapsed} ms. {Request} {Response} {Details}", request.Method, request.Path, elapsed, requestJson, responseJson, details);
+            _logger.LogInformation("Http {Method} to {Path} in {Elapsed} ms. {Request} {Response} {Details} CorrelationId: {CorrelationId}", request.Method, request.Path, elapsed, requestJson, responseJson, details, correlationId);
         }
         else
         {
-            _logger.LogError("Http {Method} to {Path} in {Elapsed} ms, failed {ErrorMessage} @{StackTrace}. {Request} {Details}", request.Method, request.Path, elapsed, e.Message, e.StackTrace, requestJson, details);
+            _logger.LogError("Http {Method} to {Path} in {Elapsed} ms, failed {ErrorMessage} @{StackTrace}. {Request} {Details} CorrelationId: {CorrelationId}", request.Method, request.Path, elapsed, e.Message, e.StackTrace, requestJson, details, correlationId);
         }
     }
 

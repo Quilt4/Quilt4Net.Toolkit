@@ -60,14 +60,4 @@ public static class HealthRegistration
     {
         var x = serviceProvider.GetServices<Quilt4NetHealthOptions>();
     }
-
-    //public static void UseQuilt4NetHealthClient(this IApplicationBuilder app)
-    //{
-    //    throw new NotImplementedException();
-    //}
-
-    //public static void UseQuilt4NetHealthClient(this IHost app)
-    //{
-    //    throw new NotImplementedException();
-    //}
 }
