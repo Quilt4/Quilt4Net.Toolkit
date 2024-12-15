@@ -7,9 +7,9 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
     [Route("[controller]")]
     public class ApplicationInsightsController : ControllerBase
     {
-        private readonly IApplicationInsightsClient _applicationInsightsClient;
+        private readonly IApplicationInsightsService _applicationInsightsClient;
 
-        public ApplicationInsightsController(IApplicationInsightsClient applicationInsightsClient)
+        public ApplicationInsightsController(IApplicationInsightsService applicationInsightsClient)
         {
             _applicationInsightsClient = applicationInsightsClient;
         }

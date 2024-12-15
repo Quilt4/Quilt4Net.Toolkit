@@ -15,7 +15,7 @@ public static class ApplicationInsightsRegistration
             var o = BuildOptions(configuration, options);
             return o;
         });
-        serviceCollection.AddTransient<IApplicationInsightsClient, ApplicationInsightsClient>();
+        serviceCollection.AddTransient<IApplicationInsightsService, ApplicationInsightsService>();
         serviceCollection.AddTransient<IHealthClient, HealthClient>();
     }
 

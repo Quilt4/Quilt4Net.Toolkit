@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.Http;
@@ -40,7 +41,14 @@ public class RequestResponseLoggingMiddleware
             {
                 telemetry.Properties["UserId"] = context.User.Identity?.Name ?? "Anonymous";
                 telemetry.Properties["Request"] = System.Text.Json.JsonSerializer.Serialize(requestDetails);
-                if (string.IsNullOrEmpty(correlationId)) telemetry.Properties["CorrelationId"] = correlationId;
+                if (!string.IsNullOrEmpty(correlationId)) telemetry.Properties["CorrelationId"] = correlationId;
+                var asm = Assembly.GetEntryAssembly();
+                var nm = asm?.GetName();
+                if (nm != null)
+                {
+                    telemetry.Properties["ApplicationName"] = nm.Name;
+                    telemetry.Properties["Version"] = $"{nm.Version}";
+                }
             }
 
             sw.Start();

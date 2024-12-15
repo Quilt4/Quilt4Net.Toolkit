@@ -30,4 +30,16 @@ public static class ExceptionExtension
             }
         }
     }
+
+    public static IDictionary<string, object> ToDictionary(this Exception e)
+    {
+        var dictionary = new Dictionary<string, object>();
+
+        foreach (System.Collections.DictionaryEntry entry in e.Data)
+        {
+            dictionary.TryAdd($"{entry.Key}", entry.Value);
+        }
+
+        return dictionary;
+    }
 }
