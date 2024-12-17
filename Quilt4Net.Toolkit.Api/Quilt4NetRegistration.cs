@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
@@ -12,6 +11,7 @@ using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -125,19 +125,19 @@ public static class Quilt4NetRegistration
         var nm = asm?.GetName();
         if (nm != null)
         {
-            //app.Use(async (context, next) =>
-            //{
-            //    using (context.RequestServices.GetRequiredService<ILoggerFactory>()
-            //               .CreateLogger("Scope")
-            //               .BeginScope(new Dictionary<string, object>
-            //               {
-            //                   ["ApplicationName"] = nm.Name,
-            //                   ["Version"] = nm.Version
-            //               }))
-            //    {
-            //        await next(context);
-            //    }
-            //});
+            app.Use(async (context, next) =>
+            {
+                using (context.RequestServices.GetRequiredService<ILoggerFactory>()
+                           .CreateLogger("Scope")
+                           .BeginScope(new Dictionary<string, object>
+                           {
+                               ["ApplicationName"] = nm.Name,
+                               ["Version"] = nm.Version
+                           }))
+                {
+                    await next(context);
+                }
+            });
         }
 
         app.UseEndpoints(endpoints =>
