@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
@@ -9,7 +8,6 @@ using Microsoft.AspNetCore.Http;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Features.Health;
 using Microsoft.Extensions.Hosting;
-using System.Linq;
 
 namespace Quilt4Net.Toolkit.Api;
 
