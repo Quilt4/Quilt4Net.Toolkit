@@ -1,6 +1,4 @@
-﻿using Quilt4Net.Toolkit.Framework;
-
-namespace Quilt4Net.Toolkit;
+﻿namespace Quilt4Net.Toolkit;
 
 public record Quilt4NetHealthOptions
 {
