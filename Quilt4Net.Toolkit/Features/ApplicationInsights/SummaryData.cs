@@ -14,7 +14,6 @@ public record SummaryData
     public required string Message { get; init; }
 }
 
-//TODO: Add item Id ResourceGUID, IKey
 public record LogItem
 {
     //public required string Id { get; init; }
