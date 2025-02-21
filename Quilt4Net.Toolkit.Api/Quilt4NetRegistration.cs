@@ -104,6 +104,8 @@ public static class Quilt4NetRegistration
     /// <param name="app"></param>
     public static void UseQuilt4NetApi(this WebApplication app)
     {
+        if (_options == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetApi)} before {nameof(UseQuilt4NetApi)}.");
+
         if (_options.UseCorrelationId)
         {
             app.UseMiddleware<CorrelationIdMiddleware>();

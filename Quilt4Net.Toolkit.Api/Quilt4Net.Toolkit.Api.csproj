@@ -35,9 +35,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Microsoft.ApplicationInsights" Version="2.22.0" />
-	  <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="7.2.0" />
-	  <PackageReference Include="System.Management" Version="9.0.0" />
+	  <PackageReference Include="Microsoft.ApplicationInsights" Version="2.23.0" />
+	  <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+	  <PackageReference Include="System.Management" Version="9.0.2" />
 	</ItemGroup>
 
 	<ItemGroup>
