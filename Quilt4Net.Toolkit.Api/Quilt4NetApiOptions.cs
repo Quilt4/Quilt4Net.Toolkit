@@ -12,11 +12,12 @@ public record Quilt4NetApiOptions
     private readonly ConcurrentDictionary<Type, Type> _componentServices = new ();
     private readonly ConcurrentDictionary<string, Dependency> _dependencies = new ();
 
-    ///// <summary>
-    ///// If this is set to true the documentation is added to swagger.
-    ///// Default is true.
-    ///// </summary>
-    //public bool ShowInSwagger { get; set; } = true;
+    /// <summary>
+    /// Visible in OpenApi definition.
+    /// Default for Production environment is false.
+    /// For all other environments default is true.
+    /// </summary>
+    public bool? ShowInOpenApi { get; set; }
 
     /// <summary>
     /// Pattern to between the base address and the controller name. This value can be empty.
@@ -34,7 +35,7 @@ public record Quilt4NetApiOptions
 
     /// <summary>
     /// Assign a default action if no action is provided.
-    /// Possible values are Live, Ready, Health, Metrics or Version.
+    /// Possible values are Live, Ready, Health, Dependencies, Metrics or Version.
     /// If set to empty string no default is routed.
     /// Default is Health.
     /// </summary>
@@ -129,6 +130,12 @@ public record Quilt4NetApiOptions
     ///// Default is Quilt4Net.
     ///// </summary>
     //public string MonitorName { get; set; } = Constants.Monitor;
+
+    ///// <summary>
+    ///// The mode of registration to use.
+    ///// Classic will register the endpoints, but it will not show in the OpenApi description.
+    ///// </summary>
+    //public Mode Mode { get; set; } = Mode.Classic;
 
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;

@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-
-namespace Quilt4Net.Toolkit.Api;
+﻿namespace Quilt4Net.Toolkit.Api;
 
 public class CorrelationIdMiddleware
 {
