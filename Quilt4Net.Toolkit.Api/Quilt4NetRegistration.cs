@@ -1,7 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.AspNetCore.Mvc.Abstractions;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
@@ -11,7 +8,6 @@ using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -53,10 +49,12 @@ public static class Quilt4NetRegistration
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
 
-        if (_options.ShowInSwagger)
-        {
-            services.AddSwaggerGen(c => { c.DocumentFilter<Quilt4NetControllerFilter>(); });
-        }
+        //services.AddOpenApi();
+
+        //if (_options.ShowInSwagger)
+        //{
+        //    services.AddSwaggerGen(c => { c.DocumentFilter<Quilt4NetControllerFilter>(); });
+        //}
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -142,6 +140,14 @@ public static class Quilt4NetRegistration
             });
         }
 
+        //app.MapGet("/hello", () => "Hello, world!");
+        //app.MapGet("/hello", () => "Hello, world!")
+        //    .WithOpenApi(operation => new(operation)
+        //    {
+        //        Summary = "Returns a simple hello message",
+        //        Description = "This is a test endpoint to demonstrate OpenAPI configuration via code.",
+        //    });
+
         app.UseEndpoints(endpoints =>
         {
             var methods = typeof(HealthController).GetMethods()
@@ -150,6 +156,7 @@ public static class Quilt4NetRegistration
             foreach (var method in methods)
             {
                 var routeName = method.Name.ToLower();
+                //app.MapGet($"/{routeName}", () => "Hello, world!");
                 endpoints.MapControllerRoute(
                     name: $"Quilt4Net{routeName}Route",
                     pattern: $"{_options.Pattern}{_options.ControllerName}/{routeName}",

@@ -12,11 +12,11 @@ public record Quilt4NetApiOptions
     private readonly ConcurrentDictionary<Type, Type> _componentServices = new ();
     private readonly ConcurrentDictionary<string, Dependency> _dependencies = new ();
 
-    /// <summary>
-    /// If this is set to true the documentation is added to swagger.
-    /// Default is true.
-    /// </summary>
-    public bool ShowInSwagger { get; set; } = true;
+    ///// <summary>
+    ///// If this is set to true the documentation is added to swagger.
+    ///// Default is true.
+    ///// </summary>
+    //public bool ShowInSwagger { get; set; } = true;
 
     /// <summary>
     /// Pattern to between the base address and the controller name. This value can be empty.
