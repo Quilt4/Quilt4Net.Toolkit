@@ -218,7 +218,6 @@ public class HealthController : ControllerBase
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     [HttpGet]
-    [HttpHead]
     [Route("Metrics")]
     public async Task<IActionResult> Metrics(CancellationToken cancellationToken)
     {
@@ -232,7 +231,6 @@ public class HealthController : ControllerBase
     /// </summary>
     /// <returns></returns>
     [HttpGet]
-    [HttpHead]
     [Route("Version")]
     public async Task<IActionResult> Version(CancellationToken cancellationToken)
     {
