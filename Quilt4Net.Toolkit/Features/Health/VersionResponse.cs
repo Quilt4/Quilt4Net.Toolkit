@@ -24,4 +24,9 @@ public record VersionResponse
     /// Public IP-address for the application.
     /// </summary>
     public required string IpAddress { get; init; }
+
+    /// <summary>
+    /// The process runs with 64 bit.
+    /// </summary>
+    public required bool Is64BitProcess { get; init; }
 }
