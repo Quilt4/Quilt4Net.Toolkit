@@ -2,7 +2,10 @@
 
 namespace Quilt4Net.Toolkit.Api.Features.Probe;
 
-public interface IHostedServiceProbe<TCategory> : IHostedServiceProbe;
+public interface IHostedServiceProbe<TCategory> : IHostedServiceProbe
+{
+    IHostedServiceProbe Register(TimeSpan? plannedInterval = default);
+}
 
 public interface IHostedServiceProbe
 {
