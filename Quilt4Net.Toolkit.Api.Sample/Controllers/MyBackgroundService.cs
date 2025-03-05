@@ -7,9 +7,9 @@ internal class MyBackgroundService : BackgroundService
     private readonly IHostedServiceProbe _hostedServiceProbe;
     private readonly Random _rng;
 
-    public MyBackgroundService(IHostedServiceProbe hostedServiceProbe)
+    public MyBackgroundService(IHostedServiceProbe<MyBackgroundService> hostedServiceProbe)
     {
-        _hostedServiceProbe = hostedServiceProbe.Register(nameof(MyBackgroundService), TimeSpan.FromSeconds(20));
+        _hostedServiceProbe = hostedServiceProbe.Register();
         _rng = new Random();
     }
 
