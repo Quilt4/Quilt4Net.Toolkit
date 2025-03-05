@@ -10,9 +10,9 @@ internal class HostedServiceProbe<TComponent> : HostedServiceProbe, IHostedServi
     {
     }
 
-    public IHostedServiceProbe Register(TimeSpan? plannedInterval = default)
+    public IHostedServiceProbe Register(TimeSpan? plannedInterval = default, bool autoMaxInterval = true)
     {
-        return Register(Name, plannedInterval);
+        return Register(Name, plannedInterval, autoMaxInterval);
     }
 
     public override string Name => typeof(TComponent).Name;
@@ -27,6 +27,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
     private Exception _exception;
     private bool _ended;
     private TimeSpan? _plannedInterval;
+    private bool _autoMaxInterval;
 
     public HostedServiceProbe(IHostedServiceProbeRegistry hostedServiceProbeRegistry)
     {
@@ -54,10 +55,11 @@ internal class HostedServiceProbe : IHostedServiceProbe
         _exception = null;
     }
 
-    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = default)
+    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = default, bool autoMaxInterval = true)
     {
         _name = name;
         _plannedInterval = plannedInterval;
+        _autoMaxInterval = autoMaxInterval;
         return this;
     }
 
@@ -189,7 +191,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
             state = HealthStatus.Healthy;
             reason = "Pulse have not reached planned interval.";
         }
-        else if (elapsedSinceLastPulse < maxPulseInterval.TotalMilliseconds)
+        else if (_autoMaxInterval && elapsedSinceLastPulse < maxPulseInterval.TotalMilliseconds)
         {
             //Never report issue if the maximum interval has not been reached.
             state = HealthStatus.Healthy;
@@ -240,7 +242,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
         {
             return new HealthComponent
             {
-                Status = HealthStatus.Degraded,
+                Status = HealthStatus.Healthy,
                 Details = new Dictionary<string, string>
                 {
                     { "message", $"Not enough data to determine pulse status, assuming that the service is {HealthStatus.Degraded}." }
