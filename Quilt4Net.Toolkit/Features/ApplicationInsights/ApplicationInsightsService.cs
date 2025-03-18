@@ -321,10 +321,6 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         return (null, null);
     }
 
-    //TODO: Create special http-request feature....
-    //"Request": "{\"Method\":\"GET\",\"Path\":\"/ApplicationInsights/measurements\",\"Headers\":{\"Accept\":\"*/*\",\"Host\":\"localhost:7119\",\"User-Agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\",\"Accept-Encoding\":\"gzip, deflate, br, zstd\",\"Accept-Language\":\"sv-SE,sv;q=0.9,en-SE;q=0.8,en-US;q=0.7,en;q=0.6\",\"Referer\":\"https://localhost:7119/swagger/index.html\",\"sec-ch-ua-platform\":\"\\u0022Windows\\u0022\",\"sec-ch-ua\":\"\\u0022Google Chrome\\u0022;v=\\u0022131\\u0022, \\u0022Chromium\\u0022;v=\\u0022131\\u0022, \\u0022Not_A Brand\\u0022;v=\\u002224\\u0022\",\"sec-ch-ua-mobile\":\"?0\",\"sec-fetch-site\":\"same-origin\",\"sec-fetch-mode\":\"cors\",\"sec-fetch-dest\":\"empty\",\"DNT\":\"1\",\"sec-gpc\":\"1\",\"priority\":\"u=1, i\"},\"Query\":{\"environment\":\"Development\"},\"Body\":\"\",\"ClientIp\":\"::1\"}",
-    //"Response": "{\"StatusCode\":200,\"Headers\":{\"Content-Type\":\"application/json; charset=utf-8\",\"Request-Context\":\"appId=cid-v1:7c2b7502-9c27-4c02-8bde-28b3eaec2a65\"},\"Body\":\"[{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022},{\\u0022application\\u0022:\\u0022\\u0022}]\"}",
-
     private static string ConvertRowToJson(LogsTableRow row, IReadOnlyList<LogsTableColumn> columns)
     {
         // Create a dictionary to hold the column names and values
