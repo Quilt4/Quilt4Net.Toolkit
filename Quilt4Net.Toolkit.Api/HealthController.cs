@@ -4,16 +4,17 @@ using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Version;
-using Microsoft.AspNetCore.Http;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Features.Health;
-using Microsoft.Extensions.Hosting;
 
 namespace Quilt4Net.Toolkit.Api;
 
 /// <summary>
 /// Health Controller
 /// </summary>
+[ApiController]
+[Route("Api/[controller]")]
+[ApiExplorerSettings(IgnoreApi = true)]
 public class HealthController : ControllerBase
 {
     private readonly IHostEnvironment _hostEnvironment;
@@ -30,6 +31,7 @@ public class HealthController : ControllerBase
     /// <summary>
     /// Health Controller constructor.
     /// </summary>
+    /// <param name="hostEnvironment"></param>
     /// <param name="liveService"></param>
     /// <param name="readyService"></param>
     /// <param name="healthService"></param>
@@ -55,12 +57,38 @@ public class HealthController : ControllerBase
         set => _httpContext = value;
     }
 
+    [HttpGet]
+    [HttpHead]
+    public async Task<IActionResult> Default(CancellationToken cancellationToken)
+    {
+        switch (_options.DefaultAction.ToLower())
+        {
+            case "live":
+                return await Live(cancellationToken);
+            case "ready":
+                return await Ready(cancellationToken);
+            case "health":
+                return await Health(false, cancellationToken);
+            case "dependencies":
+                return await Dependencies(cancellationToken);
+            case "metrics":
+                return await Metrics(cancellationToken);
+            case "version":
+                return await Version(cancellationToken);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(_options.DefaultAction), $"Unknown configuration {nameof(_options.DefaultAction)} {_options.DefaultAction}.");
+        }
+    }
+
     /// <summary>
     /// Purpose: Checks if the application is running (basic process check). It should return 200 OK if the service is up, regardless of its ability to handle requests.
     /// Use Case: Typically used by Kubernetes liveness probes to restart the container if it becomes unresponsive.
     /// </summary>
     /// <returns></returns>
-    public async Task<IActionResult> Live()
+    [HttpGet]
+    [HttpHead]
+    [Route("Live")]
+    public async Task<IActionResult> Live(CancellationToken cancellationToken)
     {
         var response = await _liveService.GetStatusAsync();
         HttpContext.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
@@ -73,6 +101,9 @@ public class HealthController : ControllerBase
     /// Use Case: Used by Kubernetes readiness probes to determine if the service should be added to the load balancer.
     /// </summary>
     /// <returns></returns>
+    [HttpGet]
+    [HttpHead]
+    [Route("Ready")]
     public async Task<IActionResult> Ready(CancellationToken cancellationToken)
     {
         var responses = await _readyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
@@ -95,6 +126,9 @@ public class HealthController : ControllerBase
     /// <param name="noDependencies"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
+    [HttpGet]
+    [HttpHead]
+    [Route("Health")]
     public async Task<IActionResult> Health([FromQuery] bool noDependencies, CancellationToken cancellationToken)
     {
         var responses = await _healthService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
@@ -159,6 +193,9 @@ public class HealthController : ControllerBase
     /// Use Case: Provides a higher-level overview of the service’s environment and dependency health.
     /// </summary>
     /// <returns></returns>
+    [HttpGet]
+    [HttpHead]
+    [Route("Dependencies")]
     public async Task<IActionResult> Dependencies(CancellationToken cancellationToken)
     {
         var responses = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
@@ -180,6 +217,8 @@ public class HealthController : ControllerBase
     /// </summary>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
+    [HttpGet]
+    [Route("Metrics")]
     public async Task<IActionResult> Metrics(CancellationToken cancellationToken)
     {
         var metrics = await _metricsService.GetMetricsAsync(cancellationToken);
@@ -191,6 +230,8 @@ public class HealthController : ControllerBase
     /// Use Case: Enables operators to quickly verify the deployed version.
     /// </summary>
     /// <returns></returns>
+    [HttpGet]
+    [Route("Version")]
     public async Task<IActionResult> Version(CancellationToken cancellationToken)
     {
         var result = await _versionService.GetVersionAsync(cancellationToken);

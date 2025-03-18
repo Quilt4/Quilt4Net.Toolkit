@@ -26,7 +26,8 @@ internal class VersionService : IVersionService
             Version = $"{asm?.GetName().Version}",
             Machine = Environment.MachineName,
             Environment = name,
-            IpAddress = ipAddress
+            IpAddress = ipAddress,
+            Is64BitProcess = Environment.Is64BitProcess
         };
 
         return result;

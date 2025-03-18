@@ -10,6 +10,11 @@ internal class HostedServiceProbe<TComponent> : HostedServiceProbe, IHostedServi
     {
     }
 
+    public IHostedServiceProbe Register(TimeSpan? plannedInterval = default, bool autoMaxInterval = true)
+    {
+        return Register(Name, plannedInterval, autoMaxInterval);
+    }
+
     public override string Name => typeof(TComponent).Name;
 }
 
@@ -22,6 +27,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
     private Exception _exception;
     private bool _ended;
     private TimeSpan? _plannedInterval;
+    private bool _autoMaxInterval;
 
     public HostedServiceProbe(IHostedServiceProbeRegistry hostedServiceProbeRegistry)
     {
@@ -49,10 +55,11 @@ internal class HostedServiceProbe : IHostedServiceProbe
         _exception = null;
     }
 
-    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = default)
+    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = default, bool autoMaxInterval = true)
     {
         _name = name;
         _plannedInterval = plannedInterval;
+        _autoMaxInterval = autoMaxInterval;
         return this;
     }
 
@@ -168,6 +175,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
         //Extra
         var averageFrequency = 1000 / averageInterval;
         var averagePulseInterval = TimeSpan.FromMilliseconds(averageInterval);
+        var maxPulseInterval = TimeSpan.FromMilliseconds(intervals.Any() ? intervals.Max() : 0);
         var lastPulse = TimeSpan.FromMilliseconds(elapsedSinceLastPulse);
         var nextExpectedPuse = TimeSpan.FromMilliseconds(averageInterval - elapsedSinceLastPulse);
 
@@ -177,7 +185,19 @@ internal class HostedServiceProbe : IHostedServiceProbe
         DateTime nextExpectedPulse = DateTime.UtcNow.AddMilliseconds(averageInterval);
 
         // Logic for determining status
-        if (elapsedSinceLastPulse <= averageInterval + 2 * standardDeviation)
+        if (_plannedInterval.HasValue && elapsedSinceLastPulse < _plannedInterval.Value.TotalMilliseconds)
+        {
+            //Never report issue if the planned interval has not been reached.
+            state = HealthStatus.Healthy;
+            reason = "Pulse have not reached planned interval.";
+        }
+        else if (_autoMaxInterval && elapsedSinceLastPulse < maxPulseInterval.TotalMilliseconds)
+        {
+            //Never report issue if the maximum interval has not been reached.
+            state = HealthStatus.Healthy;
+            reason = "Pulse have not reached maximum interval.";
+        }
+        else if (elapsedSinceLastPulse <= averageInterval + 2 * standardDeviation)
         {
             // Always Healthy if the last pulse is within the average interval
             state = HealthStatus.Healthy;
@@ -205,6 +225,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
                 { "message", reason },
                 { "averageFrequency", $"{averageFrequency}" },
                 { "averageInterval", $"{averagePulseInterval}" },
+                { "maxInterval", $"{maxPulseInterval}" },
                 { "standardDeviation", $"{standardDeviation}" },
                 { "lastPulse", $"{lastPulse}" },
                 { "nextExpectedPuse", $"{nextExpectedPuse}" },
@@ -221,7 +242,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
         {
             return new HealthComponent
             {
-                Status = HealthStatus.Degraded,
+                Status = HealthStatus.Healthy,
                 Details = new Dictionary<string, string>
                 {
                     { "message", $"Not enough data to determine pulse status, assuming that the service is {HealthStatus.Degraded}." }

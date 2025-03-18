@@ -40,7 +40,7 @@ public class HealthControllerTests
         };
 
         //Act
-        var response = await sut.Live();
+        var response = await sut.Live(CancellationToken.None);
 
         //Assert
         response.Should().NotBeNull();

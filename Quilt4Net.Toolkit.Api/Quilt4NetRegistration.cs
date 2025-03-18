@@ -1,7 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.AspNetCore.Mvc.Abstractions;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
@@ -11,7 +8,6 @@ using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -53,10 +49,7 @@ public static class Quilt4NetRegistration
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
 
-        if (_options.ShowInSwagger)
-        {
-            services.AddSwaggerGen(c => { c.DocumentFilter<Quilt4NetControllerFilter>(); });
-        }
+        services.AddControllers(o => { o.Conventions.Add(new CustomRouteConvention(_options)); });
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -104,10 +97,14 @@ public static class Quilt4NetRegistration
     /// <param name="app"></param>
     public static void UseQuilt4NetApi(this WebApplication app)
     {
+        if (_options == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetApi)} before {nameof(UseQuilt4NetApi)}.");
+
         if (_options.UseCorrelationId)
         {
             app.UseMiddleware<CorrelationIdMiddleware>();
         }
+
+        _options.ShowInOpenApi ??= !app.Services.GetService<IHostEnvironment>().IsProduction();
 
         if (_options.LogHttpRequest > 0)
         {
@@ -118,7 +115,6 @@ public static class Quilt4NetRegistration
                     branch.UseMiddleware<RequestResponseLoggingMiddleware>();
                 }
             );
-            //app.UseMiddleware<RequestResponseLoggingMiddleware>();
         }
 
         var asm = Assembly.GetEntryAssembly();
@@ -140,30 +136,85 @@ public static class Quilt4NetRegistration
             });
         }
 
-        app.UseEndpoints(endpoints =>
-        {
-            var methods = typeof(HealthController).GetMethods()
-                .Where(m => m.DeclaringType == typeof(HealthController) && !m.IsSpecialName);
+        //switch (_options.Mode)
+        //{
+        //    case Mode.None:
+        //        break;
+        //    case Mode.Classic:
+        //        app.UseEndpoints(endpoints =>
+        //        {
+        //            var methods = typeof(HealthController).GetMethods()
+        //                .Where(m => m.DeclaringType == typeof(HealthController) && !m.IsSpecialName);
 
-            foreach (var method in methods)
-            {
-                var routeName = method.Name.ToLower();
-                endpoints.MapControllerRoute(
-                    name: $"Quilt4Net{routeName}Route",
-                    pattern: $"{_options.Pattern}{_options.ControllerName}/{routeName}",
-                    defaults: new { controller = _options.ControllerName, action = method.Name }
-                );
+        //            foreach (var method in methods)
+        //            {
+        //                var routeName = method.Name.ToLower();
+        //                endpoints.MapControllerRoute(
+        //                    name: $"Quilt4Net{routeName}Route",
+        //                    pattern: $"{_options.Pattern}{_options.ControllerName}/{routeName}",
+        //                    defaults: new { controller = _options.ControllerName, action = method.Name }
+        //                );
 
-                //NOTE: Also add the default endpoint
-                if (method.Name.Equals(_options.DefaultAction, StringComparison.InvariantCultureIgnoreCase))
-                {
-                    endpoints.MapControllerRoute(
-                        name: $"Quilt4Net{routeName}Route_default",
-                        pattern: $"{_options.Pattern}{_options.ControllerName}",
-                        defaults: new { controller = _options.ControllerName, action = method.Name }
-                    );
-                }
-            }
-        });
+        //                //NOTE: Also add the default endpoint
+        //                if (method.Name.Equals(_options.DefaultAction, StringComparison.InvariantCultureIgnoreCase))
+        //                {
+        //                    endpoints.MapControllerRoute(
+        //                        name: $"Quilt4Net{routeName}Route_default",
+        //                        pattern: $"{_options.Pattern}{_options.ControllerName}",
+        //                        defaults: new { controller = _options.ControllerName, action = method.Name }
+        //                    );
+        //                }
+        //            }
+        //        });
+        //        break;
+        //    case Mode.OpenApi:
+        //        //var methods = typeof(HealthController).GetMethods()
+        //        //    .Where(m => m.DeclaringType == typeof(HealthController) && !m.IsSpecialName);
+
+        //        //foreach (var method in methods)
+        //        //{
+        //        //    var routeName = method.Name.ToLower();
+        //        //    //app.MapGet($"/{routeName}", () => "Hello, world!");
+        //        //    //app.MapMethods($"/Api/{routeName}", ["GET", "HEAD"], () => "Hello, world!").WithOpenApi(op => { return op; });
+        //        //    //app.MapMethods($"/Api/{routeName}", ["GET"], () => "Hello, world!").WithOpenApi(op => { return op; });
+        //        //    app.MapMethods($"/Api/{routeName}", ["GET"], httpContext =>
+        //        //        {
+        //        //            var controller = app.Services.GetService<HealthController>();
+        //        //            //method.Invoke(controller, );
+        //        //            Debugger.Break();
+        //        //            throw new NotImplementedException();
+        //        //        })
+        //        //        .WithOpenApi(op =>
+        //        //        {
+        //        //            //op.Summary = "Gets a greeting message";
+        //        //            //op.Description = "Returns a simple 'Hello, world!' response.";
+        //        //            return op;
+        //        //        });
+        //        //    //    .WithOpenApi(operation => new(operation)
+        //        //    //    {
+        //        //    //        Tags = new List<OpenApiTag> { new OpenApiTag { Name = "AAA" } },
+        //        //    //        Summary = "Returns a simple hello message",
+        //        //    //        Description = "This is a test endpoint to demonstrate OpenAPI configuration via code.",
+        //        //    //        Parameters = new List<OpenApiParameter> { new OpenApiParameter { Name = "BBB" } },
+        //        //    //        //Responses = new OpenApiResponses().Add("A")
+        //        //    //    });
+
+        //        //    app.MapMethods($"/Api/{routeName}", ["HEAD"], () => Results.NoContent())
+        //        //        .WithOpenApi(op => { return op; });
+
+        //        //    app.Use(async (context, next) =>
+        //        //    {
+        //        //        await next();
+
+        //        //        if (context.Request.Method == HttpMethods.Head)
+        //        //        {
+        //        //            context.Response.Body = Stream.Null; // Ensure no body is sent
+        //        //        }
+        //        //    });
+        //        //}
+        //        break;
+        //    default:
+        //        throw new ArgumentOutOfRangeException(nameof(_options.Mode), $"Unknown {nameof(_options.Mode)}  {_options.Mode}.");
+        //}
     }
 }
