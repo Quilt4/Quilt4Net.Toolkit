@@ -14,13 +14,19 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         _options = options;
     }
 
-    public async IAsyncEnumerable<SummaryData> GetSummaryAsync(string environment)
+    public async IAsyncEnumerable<SummaryData> GetSummaryAsync(string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel)
     {
         var client = GetClient();
 
         //NOTE: Pull data from exceptions
-        var query = $"AppExceptions | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend ProblemIdentifier = ProblemId | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | summarize IssueCount=count(), Message = take_any(OuterMessage) by AppName, SeverityLevel, ProblemIdentifier";
-        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        var query = @$"AppExceptions | where SeverityLevel >= {(int)minSeverityLevel}
+| where Properties['AspNetCoreEnvironment'] == '{environment}' or isempty(Properties['AspNetCoreEnvironment'])
+| extend ProblemIdentifier = ProblemId
+| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
+| extend Environment = tostring(Properties['AspNetCoreEnvironment'])
+| project AppName, SeverityLevel, TimeGenerated, ProblemIdentifier, OuterMessage, Environment
+| summarize IssueCount=count(), Message=take_any(OuterMessage), LastSeen=max(TimeGenerated), Environment=take_any(Environment) by AppName, SeverityLevel, ProblemIdentifier";
+        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
             foreach (var logErrorData in table.Rows.Select(x => new SummaryData
@@ -30,18 +36,29 @@ internal class ApplicationInsightsService : IApplicationInsightsService
                          Application = x["AppName"].ToString(),
                          SeverityLevel = (SeverityLevel)Convert.ToInt32(x["SeverityLevel"]),
                          IssueCount = Convert.ToInt32(x["IssueCount"]),
-                         Message = x["Message"].ToString()
-                     }))
+                         Message = x["Message"].ToString(),
+                         LastSeen = DateTime.TryParse(x["LastSeen"].ToString(), out var lastEntry) ? lastEntry : null,
+                         Environment = x["Environment"]?.ToString()
+            }))
             {
                 yield return logErrorData;
             }
         }
 
         //NOTE: Pull data from traces
-        query = $"AppTraces | where SeverityLevel >= 0 | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend OriginalMessage = tostring(Properties['OriginalFormat']) | extend MessageId = tostring(hash(Message)) | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | summarize IssueCount=count(), MessageId=take_any(MessageId) by AppName, SeverityLevel, OriginalMessage";
-        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        query = @$"AppTraces | where SeverityLevel >= {(int)minSeverityLevel}
+| where Properties['AspNetCoreEnvironment'] == '{environment}' or isempty(Properties['AspNetCoreEnvironment'])
+| extend OriginalMessage = tostring(Properties['OriginalFormat'])
+| extend MessageId = tostring(hash(Message))
+| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
+| extend Environment = tostring(Properties['AspNetCoreEnvironment'])
+| project AppName, SeverityLevel, OriginalMessage, MessageId, TimeGenerated, Environment
+| summarize IssueCount=count(), MessageId=take_any(MessageId), LastSeen=max(TimeGenerated), Environment=take_any(Environment) by AppName, SeverityLevel, OriginalMessage";
+        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
+            var p = table.Rows.FirstOrDefault()?["LastSeen"];
+
             foreach (var logErrorData in table.Rows.Select(x => new SummaryData
             {
                 SummaryIdentifier = BuildSummaryIdentifier(x, LogType.Trace),
@@ -50,6 +67,8 @@ internal class ApplicationInsightsService : IApplicationInsightsService
                 SeverityLevel = (SeverityLevel)Convert.ToInt32(x["SeverityLevel"]),
                 IssueCount = Convert.ToInt32(x["IssueCount"]),
                 Message = Convert.ToString(x["OriginalMessage"]),
+                LastSeen = DateTime.TryParse(x["LastSeen"].ToString(), out var lastEntry) ? lastEntry : null,
+                Environment = x["Environment"]?.ToString()
             }))
             {
                 yield return logErrorData;
@@ -57,8 +76,14 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         }
 
         //NOTE: Pull data from requests
-        query = $"AppRequests | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend NameKey = tostring(hash(Url)) | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | summarize IssueCount=count(), NameKey=take_any(NameKey) by AppName, Name";
-        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        query = @$"AppRequests
+| where Properties['AspNetCoreEnvironment'] == '{environment}' or isempty(Properties['AspNetCoreEnvironment'])
+| extend NameKey = tostring(hash(Url))
+| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
+| extend Environment = tostring(Properties['AspNetCoreEnvironment'])
+| project AppName, Name, NameKey, TimeGenerated, Environment
+| summarize IssueCount=count(), NameKey=take_any(NameKey), LastSeen=max(TimeGenerated), Environment=take_any(Environment) by AppName, Name";
+        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
             foreach (var logErrorData in table.Rows.Select(x => new SummaryData
@@ -69,7 +94,9 @@ internal class ApplicationInsightsService : IApplicationInsightsService
                          SeverityLevel = SeverityLevel.Information,
                          IssueCount = Convert.ToInt32(x["IssueCount"]),
                          Message = Convert.ToString(x["Name"]),
-                     }))
+                         LastSeen = DateTime.TryParse(x["LastSeen"].ToString(), out var lastEntry) ? lastEntry : null,
+                         Environment = x["Environment"]?.ToString()
+            }))
             {
                 yield return logErrorData;
             }
@@ -84,7 +111,6 @@ internal class ApplicationInsightsService : IApplicationInsightsService
                 return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new SummaryDataIdentifier
                 {
                     Type = type,
-                    //Id = x["ResourceGUID"].ToString(),
                     Identifier = x["ProblemIdentifier"]?.ToString(),
                     Application = x["AppName"]?.ToString()
                 }));
@@ -102,7 +128,6 @@ internal class ApplicationInsightsService : IApplicationInsightsService
                     Identifier = x["Name"].ToString(),
                     Application = x["AppName"].ToString()
                 }));
-                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(type), type, null);
         }
@@ -110,7 +135,9 @@ internal class ApplicationInsightsService : IApplicationInsightsService
 
     private LogsQueryClient GetClient()
     {
-        var clientSecretCredential = new ClientSecretCredential(_options.TenantId, _options.ClientId, _options.ClientSecret);
+        var optionsClientSecret = _options.ClientSecret;
+        if (string.IsNullOrEmpty(optionsClientSecret)) throw new InvalidOperationException($"No {nameof(Quilt4NetApplicationInsightsOptions.ClientSecret)} has been configured.");
+        var clientSecretCredential = new ClientSecretCredential(_options.TenantId, _options.ClientId, optionsClientSecret);
         var client = new LogsQueryClient(clientSecretCredential);
         return client;
     }
@@ -125,69 +152,34 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         switch (summaryDataIdentifier.Type)
         {
             case LogType.Exception:
-                detailQuery = $"AppExceptions | where ProblemId == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where coalesce(Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
+                detailQuery = @$"AppExceptions
+| where ProblemId == '{summaryDataIdentifier.Identifier}'
+| where Properties['AspNetCoreEnvironment'] == '{environment}'
+| where coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}'
+| order by TimeGenerated desc | take 1";
                 break;
             case LogType.Trace:
-                detailQuery = $"AppTraces | where tostring(hash(Message)) == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where coalesce(Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
+                detailQuery = @$"AppTraces
+| where tostring(hash(Message)) == '{summaryDataIdentifier.Identifier}'
+| where Properties['AspNetCoreEnvironment'] == '{environment}'
+| where coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}'
+| order by TimeGenerated desc | take 1";
                 break;
             case LogType.Request:
-                //detailQuery = $"AppRequests | where tostring(hash(Name)) == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where coalesce(Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
-                //detailQuery = $"AppRequests | where tostring(hash(Name)) == '{summaryDataIdentifier.Identifier}' | order by TimeGenerated desc | take 1";
-                detailQuery = $"AppRequests | where Name == '{summaryDataIdentifier.Identifier}' | order by TimeGenerated desc | take 1";
+                detailQuery = @$"AppRequests
+| where Name == '{summaryDataIdentifier.Identifier}'
+| order by TimeGenerated desc | take 1";
                 break;
             default:
                 throw new ArgumentOutOfRangeException();
         }
 
-        return await BuildItem(client, detailQuery);
-        //var detailedResponse = await client.QueryWorkspaceAsync(_options.WorkspaceId, detailQuery, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
-
-        //var l = detailedResponse.Value.Table.Rows.Count;
-        //var rows = detailedResponse.Value.Table.Rows;
-        //var row = rows.FirstOrDefault();
-        //if (row == null) return default;
-
-        //var js = ConvertRowToJson(row, detailedResponse.Value.Table.Columns);
-        //var result = JsonSerializer.Deserialize<LogDetails>(js, new JsonSerializerOptions
-        //{
-        //    PropertyNameCaseInsensitive = true
-        //});
-
-        //result.Raw = js;
-
-        //return result;
+        return await BuildItem(client, detailQuery, TimeSpan.FromDays(7));
     }
 
-    //public async Task<LogDetails> GetItem(string environment, string id)
-    //{
-    //    //var summaryDataIdentifier = JsonSerializer.Deserialize<SummaryDataIdentifier>(Base64UrlHelper.DecodeFromBase64Url(summaryIdentifier));
-
-    //    var client = GetClient();
-
-    //    string detailQuery;
-    //    switch (summaryDataIdentifier.Type)
-    //    {
-    //        case LogType.Exception:
-    //            detailQuery = $"AppExceptions | where ProblemId == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where coalesce(Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
-    //            break;
-    //        case LogType.Trace:
-    //            detailQuery = $"AppTraces | where tostring(hash(Message)) == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where coalesce(Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
-    //            break;
-    //        case LogType.Request:
-    //            //detailQuery = $"AppRequests | where tostring(hash(Name)) == '{summaryDataIdentifier.Identifier}' | where Properties['AspNetCoreEnvironment'] == '{environment}' | where coalesce(Properties['ApplicationName'], AppRoleName) == '{summaryDataIdentifier.Application}' | order by TimeGenerated desc | take 1";
-    //            //detailQuery = $"AppRequests | where tostring(hash(Name)) == '{summaryDataIdentifier.Identifier}' | order by TimeGenerated desc | take 1";
-    //            detailQuery = $"AppRequests | where Name == '{summaryDataIdentifier.Identifier}' | order by TimeGenerated desc | take 1";
-    //            break;
-    //        default:
-    //            throw new ArgumentOutOfRangeException();
-    //    }
-
-    //    return await BuildItem(client, detailQuery);
-    //}
-
-    private async Task<LogDetails> BuildItem(LogsQueryClient client, string detailQuery)
+    private async Task<LogDetails> BuildItem(LogsQueryClient client, string detailQuery, TimeSpan timeSpan)
     {
-        var detailedResponse = await client.QueryWorkspaceAsync(_options.WorkspaceId, detailQuery, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        var detailedResponse = await client.QueryWorkspaceAsync(_options.WorkspaceId, detailQuery, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
 
         var l = detailedResponse.Value.Table.Rows.Count;
         var rows = detailedResponse.Value.Table.Rows;
@@ -205,18 +197,23 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         return result;
     }
 
-    public async IAsyncEnumerable<LogMeasurement> GetMeasurements(string environment)
+    public async IAsyncEnumerable<LogMeasurement> GetMeasurements(string environment, TimeSpan timeSpan)
     {
         var client = GetClient();
 
-        //var query = $"AppTraces | where isnotempty(Properties['Elapsed']) | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend Elapsed = Properties['Elapsed'] | | order by TimeGenerated desc";
-        var query = $"AppTraces | where isnotempty(Properties['Elapsed']) | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | extend Elapsed = Properties['Elapsed'] | extend Action = Properties['Action'] | extend Method = Properties['Method'] | extend Path = Properties['Path'] | extend DetailsMethod = Properties['Details'] | extend CategoryName = Properties['CategoryName'] | order by TimeGenerated desc";
-        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        var query = @$"AppTraces | where isnotempty(Properties['Elapsed'])
+| where Properties['AspNetCoreEnvironment'] == '{environment}'
+| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
+| extend Elapsed = Properties['Elapsed']
+| extend Action = Properties['Action']
+| extend Method = Properties['Method']
+| extend Path = Properties['Path']
+| extend DetailsMethod = Properties['Details']
+| extend CategoryName = Properties['CategoryName']
+| order by TimeGenerated desc";
+        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
-            //var cols = string.Join("###", table.Columns.Select(x => x.Name).ToArray());
-            //var row1 = string.Join("###", table.Rows.First().ToArray());
-            ////var aa = table.Rows.ToArray();
             foreach (var logMeasurement in table.Rows.Select(x =>
                      {
                          var details = GetDetails(x);
@@ -240,13 +237,20 @@ internal class ApplicationInsightsService : IApplicationInsightsService
             }
         }
 
-        query = $"AppRequests | where isnotempty(Properties['Elapsed']) | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | extend Elapsed = Properties['Elapsed'] | extend Action = Properties['Action'] | extend Method = Properties['Method'] | extend Path = Properties['Path'] | extend DetailsMethod = Properties['Details'] | extend CategoryName = Properties['CategoryName'] | order by TimeGenerated desc";
-        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        query = @$"AppRequests
+| where isnotempty(Properties['Elapsed'])
+| where Properties['AspNetCoreEnvironment'] == '{environment}'
+| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
+| extend Elapsed = Properties['Elapsed']
+| extend Action = Properties['Action']
+| extend Method = Properties['Method']
+| extend Path = Properties['Path']
+| extend DetailsMethod = Properties['Details']
+| extend CategoryName = Properties['CategoryName']
+| order by TimeGenerated desc";
+        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
-            //var cols = string.Join("###", table.Columns.Select(x => x.Name).ToArray());
-            //var row1 = string.Join("###", table.Rows.First().ToArray());
-            ////var aa = table.Rows.ToArray();
             foreach (var logMeasurement in table.Rows.Select(x =>
                      {
                          var details = GetDetails(x);
@@ -276,26 +280,23 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         }
     }
 
-    public async IAsyncEnumerable<LogItem> SearchAsync(string environment, string correlationId)
+    public async IAsyncEnumerable<LogItem> SearchAsync(string environment, string correlationId, TimeSpan timeSpan)
     {
         var client = GetClient();
 
-        //var query = $"AppExceptions | where Properties['AspNetCoreEnvironment'] == '{environment}' | extend Message = coalesce(Message,OuterMessage) | extend CrlId = coalesce(CorrelationId, Properties['CorrelationId']) | order by TimeGenerated desc";
-        var query = $"AppExceptions | where Properties['AspNetCoreEnvironment'] == '{environment}' | where Properties['CorrelationId'] == '{correlationId}' | extend ProblemIdentifier = ProblemId | extend Message = coalesce(Message,OuterMessage) | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | order by TimeGenerated desc";
-        //var query = $"AppExceptions | where Properties['AspNetCoreEnvironment'] == '{environment}' | where take_any(CorrelationId) == '{correlationId}' | extend Message = coalesce(Message,OuterMessage) | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | order by TimeGenerated desc";
-        //var query = $"AppExceptions | where Properties['AspNetCoreEnvironment'] == '{environment}' | where coalesce(CorrelationId,Properties['CorrelationId']) == '{correlationId}' | extend Message = coalesce(Message,OuterMessage) | extend AppName = coalesce(Properties['ApplicationName'], AppRoleName) | order by TimeGenerated desc";
-        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(TimeSpan.FromDays(7), DateTimeOffset.Now));
+        var query = @$"AppExceptions
+| where Properties['AspNetCoreEnvironment'] == '{environment}'
+| where Properties['CorrelationId'] == '{correlationId}'
+| extend ProblemIdentifier = ProblemId
+| extend Message = coalesce(Message,OuterMessage)
+| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
+| order by TimeGenerated desc";
+        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
-            //var cols = string.Join("###", table.Columns.Select(x => x.Name).ToArray());
-            //var row1 = string.Join("###", table.Rows.First().ToArray());
-
             foreach (var logErrorData in table.Rows.Select(x => new LogItem
                      {
-                         //Id = Guid.NewGuid().ToString(),
-                         //Id = x["ResourceGUID"]?.ToString(), //_ResourceId
                          SummaryIdentifier = BuildSummaryIdentifier(x, LogType.Exception),
-                         //CorrelationId = correlationId,
                          Type = LogType.Exception,
                          Application = x["AppName"]?.ToString(),
                          SeverityLevel = (SeverityLevel)Convert.ToInt32(x["SeverityLevel"]),

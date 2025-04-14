@@ -12,4 +12,6 @@ public record SummaryData
     public required SeverityLevel SeverityLevel { get; init; }
     public required int IssueCount { get; init; }
     public required string Message { get; init; }
+    public required DateTime? LastSeen { get; init; }
+    public required string Environment { get; init; }
 }
