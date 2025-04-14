@@ -20,7 +20,7 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
         {
             if (string.IsNullOrEmpty(environment)) environment = "Production";
 
-            var result = await _applicationInsightsClient.GetSummaryAsync(environment).ToArrayAsync();
+            var result = await _applicationInsightsClient.GetSummaryAsync(environment, TimeSpan.FromMinutes(15)).ToArrayAsync();
             return Ok(result);
         }
 
@@ -40,7 +40,7 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
         {
             if (string.IsNullOrEmpty(environment)) environment = "Production";
 
-            var result = await _applicationInsightsClient.GetMeasurements(environment).ToArrayAsync();
+            var result = await _applicationInsightsClient.GetMeasurements(environment, TimeSpan.FromMinutes(15)).ToArrayAsync();
             return Ok(result);
         }
     }
