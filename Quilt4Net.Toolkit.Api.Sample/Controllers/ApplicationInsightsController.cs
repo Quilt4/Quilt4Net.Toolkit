@@ -30,7 +30,7 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
         {
             if (string.IsNullOrEmpty(environment)) environment = "Production";
 
-            var result = await _applicationInsightsClient.GetDetails(environment, summaryIdentifier);
+            var result = await _applicationInsightsClient.GetDetails(environment, summaryIdentifier, TimeSpan.FromDays(7)).ToArrayAsync();
             return Ok(result);
         }
 
