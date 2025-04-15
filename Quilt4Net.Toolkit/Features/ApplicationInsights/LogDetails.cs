@@ -4,11 +4,19 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 public record LogDetails
 {
-    public string TenantId { get; init; }
-    public DateTime TimeGenerated { get; init; }
-    //public string Message { get; init; }
+    public required string Id { get; init; }
+    public required string TenantId { get; init; }
+    public required DateTime TimeGenerated { get; init; }
+    public required string Message { get; init; }
+    public required string ProblemId { get; init; }
+    public string AppName { get; init; }
+    public string Environment { get; init; }
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public SeverityLevel SeverityLevel { get; init; }
+    public required SeverityLevel SeverityLevel { get; init; }
+
+    public required string Raw { get; init; }
+
     //public Dictionary<string, string> Properties { get; init; }
     //public object Measurements { get; init; }
     //public string OperationName { get; init; }
@@ -53,5 +61,4 @@ public record LogDetails
     //public string InnermostAssembly { get; init; }
     //public string InnermostMethod { get; init; }
     //public Detail[] Details { get; init; }
-    public string Raw { get; set; }
 }

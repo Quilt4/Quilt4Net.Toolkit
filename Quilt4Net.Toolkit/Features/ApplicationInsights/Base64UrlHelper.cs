@@ -2,7 +2,7 @@
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
-internal class Base64UrlHelper
+public class Base64UrlHelper
 {
     public static string EncodeToBase64Url(string input)
     {
