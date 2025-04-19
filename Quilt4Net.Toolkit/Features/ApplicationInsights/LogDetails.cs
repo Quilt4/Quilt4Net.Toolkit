@@ -7,7 +7,7 @@ public record LogDetails
     public required string Id { get; init; }
     public required string TenantId { get; init; }
     public required DateTime TimeGenerated { get; init; }
-    public required string Message { get; init; }
+    public string Message { get; init; }
     public required string ProblemId { get; init; }
     public string AppName { get; init; }
     public string Environment { get; init; }
