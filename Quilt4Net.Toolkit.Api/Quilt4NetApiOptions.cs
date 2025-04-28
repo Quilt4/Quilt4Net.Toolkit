@@ -106,8 +106,9 @@ public record Quilt4NetApiOptions
 
     /// <summary>
     /// Address of check for ip address, like http://ipv4.icanhazip.com/.
+    /// Set this value to null, if you do not want to perform ip address check.
     /// </summary>
-    public Uri IpAddressCheckUri { get; set; }
+    public Uri IpAddressCheckUri { get; set; } = new("http://ipv4.icanhazip.com/");
 
     /// <summary>
     /// Add logger for Http request and response with body, headers, query and results.
