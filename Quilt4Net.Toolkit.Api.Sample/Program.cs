@@ -20,7 +20,6 @@ builder.AddQuilt4NetApi(o =>
 {
     //o.FailReadyWhenDegraded = true;
     //o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights;
-
     o.AddComponent(new Component
     {
         Name = "some-service",

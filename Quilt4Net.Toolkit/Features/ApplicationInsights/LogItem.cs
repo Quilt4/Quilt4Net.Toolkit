@@ -6,6 +6,7 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 public record LogItem
 {
     public required string Id { get; init; }
+    public required DateTime TimeGenerated { get; init; }
     public required string SummaryId { get; init; }
     public required string Message { get; init; }
     public required string CorrelationId { get; init; }

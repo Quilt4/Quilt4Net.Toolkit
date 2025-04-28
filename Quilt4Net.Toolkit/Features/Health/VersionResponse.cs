@@ -1,4 +1,6 @@
-﻿namespace Quilt4Net.Toolkit.Features.Health;
+﻿using System.Text.Json.Serialization;
+
+namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Response for Version.
@@ -23,6 +25,7 @@ public record VersionResponse
     /// <summary>
     /// Public IP-address for the application.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public required string IpAddress { get; init; }
 
     /// <summary>
