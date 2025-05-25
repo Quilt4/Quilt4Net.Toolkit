@@ -1,6 +1,6 @@
 ﻿namespace Quilt4Net.Toolkit.Framework;
 
-internal static class UniqueDictionaryBuilder
+public static class UniqueDictionaryBuilder
 {
     public static Dictionary<string, T> ToUniqueDictionary<T>(this IEnumerable<KeyValuePair<string, T>> components)
     {

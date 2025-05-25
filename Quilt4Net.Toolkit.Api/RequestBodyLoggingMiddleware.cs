@@ -2,8 +2,6 @@
 using System.Reflection;
 using System.Text;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Features.Measure;
 using Quilt4Net.Toolkit.Framework;
 
