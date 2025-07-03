@@ -11,19 +11,21 @@ namespace Quilt4Net.Toolkit.Api;
 public class RequestResponseLoggingMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly CompiledLoggingOptions _compiledLoggingOptions;
     private readonly Quilt4NetApiOptions _options;
     private readonly ILogger<RequestResponseLoggingMiddleware> _logger;
 
-    public RequestResponseLoggingMiddleware(RequestDelegate next, Quilt4NetApiOptions options, ILogger<RequestResponseLoggingMiddleware> logger)
+    public RequestResponseLoggingMiddleware(RequestDelegate next, CompiledLoggingOptions compiledLoggingOptions, Quilt4NetApiOptions options, ILogger<RequestResponseLoggingMiddleware> logger)
     {
         _next = next;
+        _compiledLoggingOptions = compiledLoggingOptions;
         _options = options;
         _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var endpoint = context.GetEndpoint(); ;
+        var endpoint = context.GetEndpoint();
         var loggingAttr = endpoint?.Metadata.GetMetadata<LoggingAttribute>();
         loggingAttr ??= endpoint?.Metadata.GetMetadata<LoggingStreamAttribute>() == null ? null : new LoggingAttribute { ResponseBody = false };
 
@@ -31,8 +33,8 @@ public class RequestResponseLoggingMiddleware
         var logResponseBody = true;
         if (loggingAttr == null)
         {
-            //TODO: Make it possible to configure a pattern, perhaps with regex in Quilt4NetApiOptions.
-            if (!context.Request.Path.StartsWithSegments("/Api"))
+            var logThisPath = _compiledLoggingOptions.IncludePathRegex.Any(regex => regex.IsMatch(context.Request.Path));
+            if (!logThisPath)
             {
                 await _next(context);
                 return;

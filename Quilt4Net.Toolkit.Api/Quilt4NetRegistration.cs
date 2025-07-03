@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
@@ -64,6 +65,7 @@ public static class Quilt4NetRegistration
         services.AddTransient<IProcessorMetricsService, ProcessorMetricsService>();
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
+        services.AddSingleton(_ => new CompiledLoggingOptions(_options));
 
         foreach (var componentServices in _options.ComponentServices)
         {

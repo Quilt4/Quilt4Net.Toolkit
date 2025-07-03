@@ -35,4 +35,12 @@ public record Logging
     /// If set to 0, the body is not logged.
     /// </summary>
     public long MaxBodySize { get; set; } = Constants.MaxBodySize;
+
+    /// <summary>
+    /// List of paths to include for logging.
+    /// Default is to include all paths that starts with "/Api".
+    /// All values are case-insensitive.
+    /// To include all paths provide the value ".*".
+    /// </summary>
+    public string[] IncludePaths { get; set; } = ["^/Api"];
 }
