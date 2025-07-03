@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Hosting;
-using System.Reflection;
+﻿using System.Reflection;
 using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api.Features.Version;

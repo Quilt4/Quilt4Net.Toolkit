@@ -99,17 +99,18 @@ public static class Quilt4NetRegistration
     {
         if (_options == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetApi)} before {nameof(UseQuilt4NetApi)}.");
 
-        if (_options.UseCorrelationId)
+        if (_options.Logging?.UseCorrelationId ?? false)
         {
             app.UseMiddleware<CorrelationIdMiddleware>();
         }
 
         _options.ShowInOpenApi ??= !app.Services.GetService<IHostEnvironment>().IsProduction();
 
-        if (_options.LogHttpRequest > 0)
+        if ((_options.Logging?.LogHttpRequest ?? HttpRequestLogMode.None) > HttpRequestLogMode.None)
         {
             app.UseWhen(
-                context => context.Request.Path.StartsWithSegments("/Api"),
+                //context => context.Request.Path.StartsWithSegments("/Api"),
+                _ => true,
                 branch =>
                 {
                     branch.UseMiddleware<RequestResponseLoggingMiddleware>();
