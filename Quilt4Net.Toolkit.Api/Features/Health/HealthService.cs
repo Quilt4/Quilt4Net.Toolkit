@@ -1,7 +1,5 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Api.Features.Probe;
 using Quilt4Net.Toolkit.Features.Health;
 

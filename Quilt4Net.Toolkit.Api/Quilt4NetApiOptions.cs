@@ -116,6 +116,11 @@ public record Quilt4NetApiOptions
     /// </summary>
     public Logging Logging { get; set; } = new() { LogHttpRequest = HttpRequestLogMode.ApplicationInsights, UseCorrelationId = true };
 
+    /// <summary>
+    /// Configure certificate check.
+    /// </summary>
+    public CertificateCheckOptions Certificate { get; set; } = new();
+
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
     internal IEnumerable<Dependency> Dependencies => _dependencies.Values;

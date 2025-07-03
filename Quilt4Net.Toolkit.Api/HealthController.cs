@@ -6,6 +6,7 @@ using Quilt4Net.Toolkit.Api.Features.Metrics;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Features.Health;
+using Microsoft.AspNetCore.Connections.Features;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -137,7 +138,13 @@ public class HealthController : ControllerBase
         {
             var deps = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
             var dependencies = deps.SelectMany(d => d.Value.DependencyComponents.ToDictionary(x => $"{d.Key}.{x.Key}", x => x.Value)).ToArray();
-            responses = responses.Union(dependencies).ToArray();
+            responses = responses.Concat(dependencies).ToArray();
+        }
+
+        var certificateHealth = await GetCertificatehealth();
+        if (certificateHealth != null)
+        {
+            responses = responses.Concat([new KeyValuePair<string, HealthComponent>("CertificateSelf", certificateHealth)]).ToArray();
         }
 
         var response = responses.ToHealthResponse();
@@ -168,6 +175,26 @@ public class HealthController : ControllerBase
         }
 
         return HttpContext.Request.Method == HttpMethods.Head ? Ok() : Ok(response);
+    }
+
+    private async Task<HealthComponent> GetCertificatehealth()
+    {
+        if (!(_options.Certificate?.SelfCheckEnabled ?? false)) return null;
+
+        //var tlsFeature = HttpContext.Features.Get<ITlsHandshakeFeature>();
+        //if (tlsFeature != null)
+        //{
+        //    var protocol = tlsFeature.Protocol; // Tls12, Tls13, etc.
+        //}
+
+        //var connection = HttpContext.Connection;
+        //var localAddress = connection.LocalIpAddress?.ToString();
+        //var localPort = connection.LocalPort;
+        var scheme = HttpContext.Request.Scheme; // "https" or "http"
+        if (!Uri.TryCreate($"{scheme}://{HttpContext.Request.Host}", UriKind.Absolute, out var uri)) return null;
+
+        var result = await Certificatehelper.GetCertificateHealthAsync(uri, _options?.Certificate);
+        return result;
     }
 
     private static HealthResponse ClearDetails(HealthResponse response)
