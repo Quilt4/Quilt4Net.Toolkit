@@ -14,6 +14,15 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
 		<IsPackable>true</IsPackable>
+		<DebugType>portable</DebugType>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSource>true</IncludeSource>
+		<IncludeSymbols>true</IncludeSymbols>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -39,6 +48,10 @@
 	  <PackageReference Include="Microsoft.ApplicationInsights" Version="2.23.0" />
 	  <PackageReference Include="Microsoft.OpenApi" Version="1.6.23" />
 	  <PackageReference Include="System.Management" Version="9.0.4" />
+	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	  </PackageReference>
 	</ItemGroup>
 
 	<ItemGroup>
