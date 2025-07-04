@@ -8,7 +8,7 @@ using Quilt4Net.Toolkit.Features.Health;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-//builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddHostedService<MyBackgroundService>();
@@ -21,10 +21,10 @@ builder.AddQuilt4NetApi(o =>
 {
     var config = new Dictionary<HealthEndpoint, AccessFlags>
     {
-        [HealthEndpoint.Default] = new(true, false, true),
+        [HealthEndpoint.Default] = new(true, true, true),
         [HealthEndpoint.Live] = new(true, false, true),
         [HealthEndpoint.Ready] = new(true, false, true),
-        [HealthEndpoint.Health] = new(true, true, true),
+        [HealthEndpoint.Health] = new(true, false, true),
         [HealthEndpoint.Dependencies] = new(true, false, true),
         [HealthEndpoint.Metrics] = new(true, false, true),
         [HealthEndpoint.Version] = new(true, false, true)
@@ -49,6 +49,7 @@ builder.AddQuilt4NetApi(o =>
 
     o.AddComponentService<MyComponentService>();
 
+    //TODO: if there are no dependencies, do not show in API
     o.AddDependency(new Dependency
     {
         Name = "Self",

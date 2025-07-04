@@ -62,7 +62,9 @@ public static class AccessHelper
 
         for (var i = 0; i < endpoints.Length; i++)
         {
-            var access = accessMap[endpoints[i]];
+            var access = accessMap.ContainsKey(endpoints[i])
+                ? accessMap[endpoints[i]]
+                : new AccessFlags(false, false, false);
 
             var index = Array.FindIndex(_indexToAccess, a =>
                 a.Get == access.Get &&

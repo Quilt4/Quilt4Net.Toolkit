@@ -10,7 +10,9 @@ public interface IHealthService
     /// <summary>
     /// Performs Health checks.
     /// </summary>
+    /// <param name="filter"></param>
+    /// <param name="includeProbes"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync(CancellationToken cancellationToken);
+    IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync(Func<Component, bool> filter, bool includeProbes, CancellationToken cancellationToken);
 }

@@ -33,7 +33,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, _option.Object, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -60,7 +60,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -89,7 +89,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -118,7 +118,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -166,7 +166,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -210,7 +210,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -243,7 +243,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -276,7 +276,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -311,7 +311,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -336,7 +336,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Should().NotBeNull();
@@ -357,7 +357,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, true, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
 
         //Assert
         result.Components.Count.Should().Be(10);
@@ -398,7 +398,7 @@ public class HealthServiceTests
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None).FirstAsync();
+        var result = await sut.GetStatusAsync(null, true, CancellationToken.None).FirstAsync();
 
         //Assert
         result.Key.Should().Be("Fast");

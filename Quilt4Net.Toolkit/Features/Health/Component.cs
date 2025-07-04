@@ -17,6 +17,13 @@ public record Component
     /// </summary>
     public bool Essential { get; init; } = true;
 
+    ///// <summary>
+    ///// Used by Readyness to check if a component is needed for the system to be considered to be ready.
+    ///// By default, the parameter Essential is used do determine if the component is needed to be considered to be ready.
+    ///// This value can be set to true or false to override the Essential parameter.
+    ///// </summary>
+    //public bool? NeededToBeReady { get; init; }
+
     /// <summary>
     /// Method that performs the check for the component.
     /// </summary>

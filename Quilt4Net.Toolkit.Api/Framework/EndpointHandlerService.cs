@@ -33,12 +33,8 @@ internal class EndpointHandlerService : IEndpointHandlerService
         _options = options.Value;
     }
 
-    public async Task<IResult> HandleCall(string path, string basePath, HttpContext ctx, CancellationToken cancellationToken)
+    public async Task<IResult> HandleCall(HealthEndpoint healthEndpoint, HttpContext ctx, CancellationToken cancellationToken)
     {
-        var action = path.Replace(basePath, string.Empty).TrimStart('/');
-        if (action == "") action = _options.DefaultAction;
-        if (!Enum.TryParse<HealthEndpoint>(action, true, out var healthEndpoint)) throw new InvalidOperationException($"Cannot parse {action} to {nameof(HealthEndpoint)}.");
-
         switch (healthEndpoint)
         {
             case HealthEndpoint.Default:
@@ -83,7 +79,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
 
     private async Task<IResult> HealthAsync(HttpContext ctx, CancellationToken cancellationToken)
     {
-        var responses = await _healthService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
+        var responses = await _healthService.GetStatusAsync(null, true, cancellationToken).ToArrayAsync(cancellationToken);
 
         var noDependencies = ctx.Request.Query.TryGetValue("noDependencies", out var value) && bool.TryParse(value, out var parsed) && parsed;
         if (!noDependencies)
