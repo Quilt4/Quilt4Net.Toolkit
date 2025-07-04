@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
@@ -8,6 +7,7 @@ using Quilt4Net.Toolkit.Api.Features.Probe;
 using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
+using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using System.Reflection;
 
 namespace Quilt4Net.Toolkit.Api;
@@ -50,8 +50,6 @@ public static class Quilt4NetRegistration
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
 
-        services.AddControllers(o => { o.Conventions.Add(new CustomRouteConvention(_options)); });
-
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
 
@@ -64,6 +62,7 @@ public static class Quilt4NetRegistration
         services.AddTransient<IMemoryMetricsService, MemoryMetricsService>();
         services.AddTransient<IProcessorMetricsService, ProcessorMetricsService>();
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
+        services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
 
@@ -108,10 +107,16 @@ public static class Quilt4NetRegistration
 
         _options.ShowInOpenApi ??= !app.Services.GetService<IHostEnvironment>().IsProduction();
 
+        RegisterLoggingMiddleware(app);
+        CreaetLogScope(app);
+        RegisterEndpoints(app);
+    }
+
+    private static void RegisterLoggingMiddleware(WebApplication app)
+    {
         if ((_options.Logging?.LogHttpRequest ?? HttpRequestLogMode.None) > HttpRequestLogMode.None)
         {
             app.UseWhen(
-                //context => context.Request.Path.StartsWithSegments("/Api"),
                 _ => true,
                 branch =>
                 {
@@ -119,10 +124,13 @@ public static class Quilt4NetRegistration
                 }
             );
         }
+    }
 
-        var asm = Assembly.GetEntryAssembly();
-        var nm = asm?.GetName();
-        if (nm != null)
+    private static void CreaetLogScope(WebApplication app)
+    {
+        var assembly = Assembly.GetEntryAssembly();
+        var assemblyName = assembly?.GetName();
+        if (assemblyName != null)
         {
             app.Use(async (context, next) =>
             {
@@ -130,13 +138,45 @@ public static class Quilt4NetRegistration
                            .CreateLogger("Scope")
                            .BeginScope(new Dictionary<string, object>
                            {
-                               ["ApplicationName"] = nm.Name,
-                               ["Version"] = nm.Version
+                               ["ApplicationName"] = assemblyName.Name,
+                               ["Version"] = assemblyName.Version
                            }))
                 {
                     await next(context);
                 }
             });
+        }
+    }
+
+    private static void RegisterEndpoints(WebApplication app)
+    {
+        var basePath = $"{_options.Pattern}{_options.ControllerName}";
+        var accessMap = AccessHelper.Decode(_options.Endpoints ?? "");
+        foreach (var (endpoint, flags) in accessMap)
+        {
+            var path = endpoint == HealthEndpoint.Default
+                ? basePath
+                : $"{basePath}/{endpoint}";
+
+            if (!flags.Get && !flags.Head) continue;
+
+            if (flags.Get)
+            {
+                var getRoute = app.MapMethods(path, ["GET"], async (HttpContext ctx, CancellationToken cancellationToken) => await HandleCall(path, ctx, cancellationToken));
+                if (!flags.Visible) getRoute.ExcludeFromDescription();
+            }
+
+            if (flags.Head)
+            {
+                var headRoute = app.MapMethods(path, ["HEAD"], async (HttpContext ctx, CancellationToken cancellationToken) => await HandleCall(path, ctx, cancellationToken));
+                if (!flags.Visible) headRoute.ExcludeFromDescription();
+            }
+        }
+
+        async Task<IResult> HandleCall(string path, HttpContext ctx, CancellationToken cancellationToken)
+        {
+            var service = app.Services.GetService<IEndpointHandlerService>();
+            return await service.HandleCall(path, basePath, ctx, cancellationToken);
         }
     }
 }

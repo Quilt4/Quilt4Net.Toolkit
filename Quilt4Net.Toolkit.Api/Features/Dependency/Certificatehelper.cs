@@ -13,14 +13,15 @@ internal static class Certificatehelper
         var certInfo = await GetCertificateInfoAsync(uri);
 
         var exp = HealthStatus.Unhealthy;
+        int? daysLeft = null;
         if (certInfo.CertExpiry.HasValue)
         {
-            var ds  = (int)(certInfo.CertExpiry.Value - DateTime.UtcNow).TotalDays;
-            if (ds <= (optionsCertificate?.CertExpiryUnhealthyLimitDays ?? 3))
+            daysLeft = (int)(certInfo.CertExpiry.Value - DateTime.UtcNow).TotalDays;
+            if (daysLeft <= (optionsCertificate?.CertExpiryUnhealthyLimitDays ?? 3))
             {
                 exp = HealthStatus.Unhealthy;
             }
-            else if (ds <= (optionsCertificate?.CertExpiryDegradedLimitDays ?? 3))
+            else if (daysLeft <= (optionsCertificate?.CertExpiryDegradedLimitDays ?? 3))
             {
                 exp = HealthStatus.Degraded;
             }
@@ -39,7 +40,8 @@ internal static class Certificatehelper
             {
                 { "host", $"{certInfo.Host}" },
                 { "tlsVersion", $"{certInfo.TlsVersion}" },
-                { "certificateExpiry", $"{certInfo.CertExpiry}" },
+                { "certificateExpiryDate", $"{certInfo.CertExpiry}" },
+                { "certificateExpiryDays", $"{daysLeft}" },
             }
         };
     }

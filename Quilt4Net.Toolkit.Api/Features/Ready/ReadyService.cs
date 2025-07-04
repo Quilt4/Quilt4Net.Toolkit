@@ -1,4 +1,5 @@
-﻿using Quilt4Net.Toolkit.Api.Features.Health;
+﻿using System.Runtime.CompilerServices;
+using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Framework;
 using Quilt4Net.Toolkit.Features.Health;
 
@@ -13,7 +14,7 @@ internal class ReadyService : IReadyService
         _healthService = healthService;
     }
 
-    public async IAsyncEnumerable<KeyValuePair<string, ReadyComponent>> GetStatusAsync(CancellationToken cancellationToken)
+    public async IAsyncEnumerable<KeyValuePair<string, ReadyComponent>> GetStatusAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await foreach (var variable in _healthService.GetStatusAsync(cancellationToken))
         {

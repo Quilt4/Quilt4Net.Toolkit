@@ -20,6 +20,24 @@ public record Quilt4NetApiOptions
     public bool? ShowInOpenApi { get; set; }
 
     /// <summary>
+    /// This string value can be used to turn the GET, HEAD and visibility on or off for different endpoints.
+    /// The values are by position Default, Live, Ready, Health, Dependencies, Metrics and Version.
+    ///
+    /// | Value | GET  | HEAD | Visible |
+    /// | ----- | ---- | ---- | ------- |
+    /// | 0     | No   | No   | No      |
+    /// | 1     | Yes  | No   | No      |
+    /// | 2     | No   | Yes  | No      |
+    /// | 3     | Yes  | Yes  | No      |
+    /// | 4     | Yes  | No   | Yes     |
+    /// | 5     | No   | Yes  | Yes     |
+    /// | 6     | Yes  | Yes  | Yes     |
+    ///
+    /// Default is 6666644
+    /// </summary>
+    public string Endpoints { get; set; } = "6666644";
+
+    /// <summary>
     /// Pattern to between the base address and the controller name. This value can be empty.
     /// Ex. https://localhost:7119/[Pattern]/health/live
     /// Default is api, IE. https://localhost:7119/api/health/live

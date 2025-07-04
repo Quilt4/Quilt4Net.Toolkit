@@ -1,6 +1,7 @@
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
+using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
 
@@ -18,8 +19,19 @@ builder.Logging.AddApplicationInsights();
 
 builder.AddQuilt4NetApi(o =>
 {
-    //o.FailReadyWhenDegraded = true;
-    //o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights;
+    var config = new Dictionary<HealthEndpoint, AccessFlags>
+    {
+        [HealthEndpoint.Default] = new(true, false, true),
+        [HealthEndpoint.Live] = new(true, false, true),
+        [HealthEndpoint.Ready] = new(true, false, true),
+        [HealthEndpoint.Health] = new(true, true, true),
+        [HealthEndpoint.Dependencies] = new(true, false, true),
+        [HealthEndpoint.Metrics] = new(true, false, true),
+        [HealthEndpoint.Version] = new(true, false, true)
+    };
+
+    o.Endpoints = config.Encode();
+
     o.AddComponent(new Component
     {
         Name = "some-service",
