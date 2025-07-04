@@ -2,8 +2,7 @@
 using System.Reflection;
 using System.Text;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Quilt4Net.Toolkit.Features.Measure;
 using Quilt4Net.Toolkit.Framework;
 
@@ -12,20 +11,54 @@ namespace Quilt4Net.Toolkit.Api;
 public class RequestResponseLoggingMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly CompiledLoggingOptions _compiledLoggingOptions;
     private readonly Quilt4NetApiOptions _options;
     private readonly ILogger<RequestResponseLoggingMiddleware> _logger;
 
-    public RequestResponseLoggingMiddleware(RequestDelegate next, Quilt4NetApiOptions options, ILogger<RequestResponseLoggingMiddleware> logger)
+    public RequestResponseLoggingMiddleware(RequestDelegate next, CompiledLoggingOptions compiledLoggingOptions, Quilt4NetApiOptions options, ILogger<RequestResponseLoggingMiddleware> logger)
     {
         _next = next;
+        _compiledLoggingOptions = compiledLoggingOptions;
         _options = options;
         _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
+        var endpoint = context.GetEndpoint();
+        var loggingAttr = endpoint?.Metadata.GetMetadata<LoggingAttribute>();
+        loggingAttr ??= endpoint?.Metadata.GetMetadata<LoggingStreamAttribute>() == null ? null : new LoggingAttribute { ResponseBody = false };
+
+        //NOTE: Behaviour when logging attribute has not been set.
+        var logResponseBody = true;
+        if (loggingAttr == null)
+        {
+            var logThisPath = _compiledLoggingOptions.IncludePathRegex.Any(regex => regex.IsMatch(context.Request.Path));
+            if (!logThisPath)
+            {
+                await _next(context);
+                return;
+            }
+
+            //var methodInfo = endpoint?.Metadata.GetMetadata<MethodInfo>();
+            var methodInfo = (endpoint as RouteEndpoint)?.Metadata.OfType<ControllerActionDescriptor>().FirstOrDefault()?.MethodInfo;
+            logResponseBody = methodInfo?.ReturnType != typeof(Task);
+        }
+
+        //NOTE: Do not log when logging has been manually disabled:
+        var enableLogging = loggingAttr?.Enabled ?? true;
+        if (!enableLogging)
+        {
+            await _next(context);
+            return;
+        }
+
+        // Use flags to control what is logged
+        var logRequestBody = loggingAttr?.RequestBody ?? true;
+        logResponseBody = loggingAttr?.ResponseBody ?? logResponseBody;
+
         context.Request.EnableBuffering();
-        var requestDetails = await CaptureRequestDetailsAsync(context);
+        var requestDetails = await CaptureRequestDetailsAsync(context, logRequestBody, _options.Logging?.MaxBodySize ?? Constants.MaxBodySize);
         var originalResponseBodyStream = context.Response.Body;
         var correlationId = context.Items.TryGetValue("CorrelationId", out var c) ? c?.ToString() : null;
 
@@ -35,7 +68,10 @@ public class RequestResponseLoggingMiddleware
         try
         {
             using var responseBodyStream = new MemoryStream();
-            context.Response.Body = responseBodyStream;
+            if (logResponseBody)
+            {
+                context.Response.Body = responseBodyStream;
+            }
 
             if (telemetry != null)
             {
@@ -55,7 +91,7 @@ public class RequestResponseLoggingMiddleware
             await _next(context);
             sw.Stop();
 
-            var responseDetails = await CaptureResponseDetailsAsync(context);
+            var responseDetails = await CaptureResponseDetailsAsync(context, logResponseBody, _options.Logging?.MaxBodySize ?? Constants.MaxBodySize);
             if (telemetry != null)
             {
                 telemetry.Properties["Response"] = System.Text.Json.JsonSerializer.Serialize(responseDetails);
@@ -65,7 +101,10 @@ public class RequestResponseLoggingMiddleware
 
             LogRequestAndResponse(requestDetails, responseDetails, sw.Elapsed, correlationId);
 
-            await responseBodyStream.CopyToAsync(originalResponseBodyStream);
+            if (logResponseBody)
+            {
+                await responseBodyStream.CopyToAsync(originalResponseBodyStream);
+            }
         }
         catch (Exception e)
         {
@@ -88,7 +127,7 @@ public class RequestResponseLoggingMiddleware
     private RequestTelemetry GetRequestTelemetry(HttpContext context)
     {
         RequestTelemetry telemetry = null;
-        if (_options.LogHttpRequest.HasFlag(HttpRequestLogMode.ApplicationInsights))
+        if (_options.Logging?.LogHttpRequest.HasFlag(HttpRequestLogMode.ApplicationInsights) ?? false)
         {
             telemetry = context.Features.Get<RequestTelemetry>();
         }
@@ -96,20 +135,42 @@ public class RequestResponseLoggingMiddleware
         return telemetry;
     }
 
-    private async Task<Request> CaptureRequestDetailsAsync(HttpContext context)
+    private async Task<Request> CaptureRequestDetailsAsync(HttpContext context, bool logBody, long maxBodySize)
     {
+        if (maxBodySize == 0) logBody = false;
+
         var headers = BuildHeaders(context.Request.Headers);
         var query = BuildQueries(context.Request.Query);
 
-        string body;
-        using (var reader = new StreamReader(
-            context.Request.Body,
-            encoding: Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: false,
-            bufferSize: 1024,
-            leaveOpen: true))
+        var body = "[Not logged]";
+        if (logBody)
         {
-            body = await reader.ReadToEndAsync();
+            context.Request.EnableBuffering();
+
+            if (context.Request.ContentLength.HasValue && context.Request.ContentLength <= maxBodySize)
+            {
+                body = await ReadRequestBodyAsync(context.Request);
+            }
+            else if (!context.Request.ContentLength.HasValue)
+            {
+                // Read into buffer and cut off if too big
+                using var memStream = new MemoryStream();
+                await context.Request.Body.CopyToAsync(memStream);
+                if (memStream.Length <= maxBodySize)
+                {
+                    context.Request.Body.Position = 0;
+                    body = await new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true).ReadToEndAsync();
+                }
+                else
+                {
+                    body = $"[Skipped: Request body exceeds {maxBodySize} bytes]";
+                }
+            }
+            else
+            {
+                body = $"[Skipped: Request body exceeds {maxBodySize} bytes]";
+            }
+
             context.Request.Body.Position = 0;
         }
 
@@ -122,6 +183,15 @@ public class RequestResponseLoggingMiddleware
             Body = body,
             ClientIp = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown"
         };
+    }
+
+    private async Task<string> ReadRequestBodyAsync(HttpRequest request)
+    {
+        request.EnableBuffering();
+        using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+        var body = await reader.ReadToEndAsync();
+        request.Body.Position = 0;
+        return body;
     }
 
     private static IEnumerable<KeyValuePair<string, string>> BuildHeaders(IHeaderDictionary headers)
@@ -140,12 +210,32 @@ public class RequestResponseLoggingMiddleware
         }
     }
 
-    private async Task<Response> CaptureResponseDetailsAsync(HttpContext context)
+    private async Task<Response> CaptureResponseDetailsAsync(HttpContext context, bool logBody, long maxBodySize)
     {
+        if (maxBodySize == 0) logBody = false;
+
         var headers = BuildHeaders(context.Response.Headers);
-        context.Response.Body.Seek(0, SeekOrigin.Begin);
-        var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
-        context.Response.Body.Seek(0, SeekOrigin.Begin); // Reset stream position
+        var body = "[Not logged]";
+
+        if (logBody)
+        {
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+
+            using var reader = new StreamReader(context.Response.Body, Encoding.UTF8, leaveOpen: true);
+            var buffer = new char[maxBodySize + 1];
+            var read = await reader.ReadBlockAsync(buffer, 0, buffer.Length);
+
+            if (read > maxBodySize)
+            {
+                body = $"[Skipped: Response body exceeds {maxBodySize} bytes]";
+            }
+            else
+            {
+                body = new string(buffer, 0, read);
+            }
+
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+        }
 
         return new Response
         {
@@ -157,7 +247,7 @@ public class RequestResponseLoggingMiddleware
 
     private void LogRequestAndResponse(Request request, Response response, TimeSpan elapsed, string correlationId, Exception e = default)
     {
-        if (!_options.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger)) return;
+        if (!(_options.Logging?.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger) ?? false)) return;
 
         var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
         var responseJson = response != null ? System.Text.Json.JsonSerializer.Serialize(response) : null;
@@ -177,9 +267,10 @@ public class RequestResponseLoggingMiddleware
     {
         var dictionary = new Dictionary<string, string>
         {
-            { "Monitor", Constants.Monitor },
+            { "Monitor", _options.Logging?.MonitorName ?? Constants.Monitor },
             { "Method", "Http" }
         };
+
         if (e != null)
         {
             foreach (var data in e.GetData())

@@ -20,6 +20,24 @@ public record Quilt4NetApiOptions
     public bool? ShowInOpenApi { get; set; }
 
     /// <summary>
+    /// This string value can be used to turn the GET, HEAD and visibility on or off for different endpoints.
+    /// The values are by position Default, Live, Ready, Health, Dependencies, Metrics and Version.
+    ///
+    /// | Value | GET  | HEAD | Visible |
+    /// | ----- | ---- | ---- | ------- |
+    /// | 0     | No   | No   | No      |
+    /// | 1     | Yes  | No   | No      |
+    /// | 2     | No   | Yes  | No      |
+    /// | 3     | Yes  | Yes  | No      |
+    /// | 4     | Yes  | No   | Yes     |
+    /// | 5     | No   | Yes  | Yes     |
+    /// | 6     | Yes  | Yes  | Yes     |
+    ///
+    /// Default is 6666644
+    /// </summary>
+    public string Endpoints { get; set; } = "6666644";
+
+    /// <summary>
     /// Pattern to between the base address and the controller name. This value can be empty.
     /// Ex. https://localhost:7119/[Pattern]/health/live
     /// Default is api, IE. https://localhost:7119/api/health/live
@@ -111,32 +129,15 @@ public record Quilt4NetApiOptions
     public Uri IpAddressCheckUri { get; set; } = new("http://ipv4.icanhazip.com/");
 
     /// <summary>
-    /// Add logger for Http request and response with body, headers, query and results.
-    /// Default is append to Application Insights requests.
-    /// Remember to also add 'builder.Logging.AddApplicationInsights();' at startup and add connection string, if you are using ApplicationInsights.
+    /// Configure logging for all requests.
+    /// To make specific configuration on controller or method level use the LoggingAttribute.
     /// </summary>
-    public HttpRequestLogMode LogHttpRequest { get; set; } = HttpRequestLogMode.ApplicationInsights;
+    public Logging Logging { get; set; } = new() { LogHttpRequest = HttpRequestLogMode.ApplicationInsights, UseCorrelationId = true };
 
     /// <summary>
-    /// If this is added calls to the API picks up 'X-Correlation-ID' from the header and append that to logging on the server.
-    /// If there is no CorrelationId provided, one is added and returned with the response to the client.
-    /// If scoped, the CorrelationId can be added by...
-    /// On the client side use ...
+    /// Configure certificate check.
     /// </summary>
-    public bool UseCorrelationId { get; set; } = true;
-
-    ///// <summary>
-    ///// Monitor name used to track log-items to selected monitor.
-    ///// If set to empty string the value will be omitted.
-    ///// Default is Quilt4Net.
-    ///// </summary>
-    //public string MonitorName { get; set; } = Constants.Monitor;
-
-    ///// <summary>
-    ///// The mode of registration to use.
-    ///// Classic will register the endpoints, but it will not show in the OpenApi description.
-    ///// </summary>
-    //public Mode Mode { get; set; } = Mode.Classic;
+    public CertificateCheckOptions Certificate { get; set; } = new();
 
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;

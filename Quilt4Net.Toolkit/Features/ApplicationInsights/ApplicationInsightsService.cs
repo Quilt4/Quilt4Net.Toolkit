@@ -4,6 +4,7 @@ using Azure;
 using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
@@ -530,14 +531,5 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         var result = json.TryGetProperty(key, out var val) ? val.GetString() : null;
         if (string.IsNullOrEmpty(result)) return null;
         return result;
-    }
-}
-
-internal static class StringExtensions
-{
-    public static string NullIfEmpty(this string item)
-    {
-        if (string.IsNullOrEmpty(item)) return null;
-        return item;
     }
 }
