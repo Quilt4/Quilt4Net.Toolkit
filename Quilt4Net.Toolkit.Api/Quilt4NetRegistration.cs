@@ -183,7 +183,7 @@ public static class Quilt4NetRegistration
             RouteHandlerBuilder route;
             if (healthEndpoint == HealthEndpoint.Health)
             {
-                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
             }
             else
             {
@@ -226,7 +226,7 @@ public static class Quilt4NetRegistration
                 //return ($"{healthEndpoint} checks components that are *{nameof(Component.Essential)}* (or *{nameof(Component.NeededToBeReady)}*) to figure out if the service is ready or not.\n\nThe response will be ...\n\n- **200** when *{nameof(ReadyStatus.Ready)}*\n\n- **503** when *{nameof(ReadyStatus.Unready)}*\n\n- **200** when {nameof(ReadyStatus.Degraded)} and option *{nameof(Quilt4NetApiOptions.FailReadyWhenDegraded)}* is false (Default)\n\n- **503** when {nameof(ReadyStatus.Degraded)} and option *{nameof(Quilt4NetApiOptions.FailReadyWhenDegraded)}* is true", "Readyness", [(200, typeof(ReadyResponse)), (503, null)]);
                 return ($"{healthEndpoint} checks components that are *{nameof(Component.Essential)}* to figure out if the service is ready or not.\n\nThe response will be ...\n\n- **200** when *{nameof(ReadyStatus.Ready)}*\n\n- **503** when *{nameof(ReadyStatus.Unready)}*\n\n- **200** when {nameof(ReadyStatus.Degraded)} and option *{nameof(Quilt4NetApiOptions.FailReadyWhenDegraded)}* is false (Default)\n\n- **503** when {nameof(ReadyStatus.Degraded)} and option *{nameof(Quilt4NetApiOptions.FailReadyWhenDegraded)}* is true", "Readyness", [(200, typeof(ReadyResponse)), (503, null)]);
             case HealthEndpoint.Health:
-                //TODO: needs to add parameters so that the query-parameter noDependencies will also be documented.
+                //TODO: needs to add parameters so that the query-parameter noDependencies and noCertSelfCheck will also be documented.
                 return ($"{healthEndpoint} checks the status of the components. By default dependencies are also checked.\n\nDepending on the parameter *{nameof(Component.Essential)}* the response will be...\n\n- **{nameof(HealthStatus.Unhealthy)}** on failure when *{nameof(Component.Essential)}* is true.\n\n- **{nameof(HealthStatus.Degraded)}** on failure when *{nameof(Component.Essential)}* is false\n\n- **{nameof(HealthStatus.Healthy)}** on success", "Health", [(200, typeof(ReadyResponse)), (503, null)]);
             case HealthEndpoint.Dependencies:
                 return ($"{healthEndpoint} checks the health dependent components. It does not check the dependencies of the dependent services to protect from circular dependencies.", null, [(200, typeof(ReadyResponse)), (503, null)]);

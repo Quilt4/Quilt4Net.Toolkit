@@ -9,11 +9,12 @@ namespace Quilt4Net.Toolkit.Api.Features.Dependency;
 
 internal static class Certificatehelper
 {
-    public static async Task<HealthComponent> GetCertificateHealthAsync(Uri uri, CertificateCheckOptions optionsCertificate, HealthStatus? certificateStatus = default)
+    public static async Task<HealthComponent> GetCertificateHealthAsync(Uri uri, CertificateCheckOptions optionsCertificate, HealthStatus? certificateStatus = default, string message = null)
     {
         var certInfo = await GetCertificateInfoAsync(uri);
         var sb = new StringBuilder();
         sb.Append($"Certificate for '{certInfo.Host}' with {certInfo.TlsVersion}");
+        if (!string.IsNullOrEmpty(message)) sb.Append($"has issue '{message}', ");
 
         var exp = HealthStatus.Unhealthy;
         int? daysLeft = null;

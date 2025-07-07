@@ -21,22 +21,24 @@ internal class DependencyService : IDependencyService
             var handler = new HttpClientHandler();
 
             var certificateStatus = HealthStatus.Healthy;
+            string message = null;
             handler.ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
             {
                 if (errors != SslPolicyErrors.None)
                 {
-                    certificateStatus = HealthStatus.Unhealthy;
+                    certificateStatus = HealthStatus.Degraded;
+                    message = $"{errors}";
                 }
 
                 return true;
             };
 
             using var httpClient = new HttpClient(handler);
-            if (!Uri.TryCreate(x.Uri, "Health?noDependencies=true", out var uri)) throw new InvalidOperationException($"Cannot build uri from '{x.Uri}' and 'Health'.");
+            if (!Uri.TryCreate(x.Uri, "Health?noDependencies=true&noCertSelfCheck=true", out var uri)) throw new InvalidOperationException($"Cannot build uri from '{x.Uri}' and 'Health'.");
             using var response = await httpClient.GetAsync(uri, cancellationToken);
             var content = await response.Content.ReadFromJsonAsync<HealthResponse>(cancellationToken);
 
-            content = await CheckCertificateAsync(x, certificateStatus, content);
+            content = await CheckCertificateAsync(x, certificateStatus, message, content);
 
             return (x.Name, x.Essential, content.Components);
         }, cancellationToken)).ToList();
@@ -55,11 +57,11 @@ internal class DependencyService : IDependencyService
         }
     }
 
-    private async Task<HealthResponse> CheckCertificateAsync(Toolkit.Features.Health.Dependency x, HealthStatus certificateStatus, HealthResponse content)
+    private async Task<HealthResponse> CheckCertificateAsync(Toolkit.Features.Health.Dependency x, HealthStatus certificateStatus, string message, HealthResponse content)
     {
         if (!(_options.Certificate?.DependencyCheckEnabled ?? false)) return content;
 
-        var certificateHealth = await Certificatehelper.GetCertificateHealthAsync(x.Uri, _options.Certificate, certificateStatus);
+        var certificateHealth = await Certificatehelper.GetCertificateHealthAsync(x.Uri, _options.Certificate, certificateStatus, message);
 
         content = content with
         {
