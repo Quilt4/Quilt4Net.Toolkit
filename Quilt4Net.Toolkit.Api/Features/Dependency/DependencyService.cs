@@ -69,6 +69,8 @@ internal class DependencyService : IDependencyService
                 .ToUniqueDictionary()
         };
 
+        content.Components.Remove("CertificateSelf");
+
         return content;
     }
 

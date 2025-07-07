@@ -7,6 +7,7 @@ using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api.Framework;
 
@@ -164,8 +165,18 @@ internal class EndpointHandlerService : IEndpointHandlerService
     {
         if (!(_options.Certificate?.SelfCheckEnabled ?? false)) return null;
 
-        var scheme = ctx.Request.Scheme;
-        if (!Uri.TryCreate($"{scheme}://{ctx.Request.Host}", UriKind.Absolute, out var uri)) return null;
+        var address = _options.Certificate.SelfCheckUri.NullIfEmpty() ?? $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
+        {
+            return new HealthComponent
+            {
+                Status = HealthStatus.Degraded,
+                Details = new Dictionary<string, string>
+                {
+                    { "message", $"Cannot build absolute uri with '{address}'." }
+                }
+            };
+        }
 
         var result = await Certificatehelper.GetCertificateHealthAsync(uri, _options?.Certificate);
         return result;
