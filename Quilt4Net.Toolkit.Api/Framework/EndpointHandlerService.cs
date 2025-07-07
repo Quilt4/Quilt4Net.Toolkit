@@ -82,7 +82,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
     {
         var responses = await _healthService.GetStatusAsync(null, true, cancellationToken).ToArrayAsync(cancellationToken);
 
-        var noDependencies = ctx.Request.Query.TryGetValue("noDependencies", out var value) && bool.TryParse(value, out var parsed) && parsed;
+        var noDependencies = ctx.Request.Query.TryGetValue("noDependencies", out var noDependenciesString) && bool.TryParse(noDependenciesString, out var noDependenciesValue) && noDependenciesValue;
         if (!noDependencies)
         {
             var deps = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
@@ -90,7 +90,9 @@ internal class EndpointHandlerService : IEndpointHandlerService
             responses = responses.Concat(dependencies).ToArray();
         }
 
-        var certificateHealth = await GetCertificatehealth(ctx);
+        var noCertSelfCheck = ctx.Request.Query.TryGetValue("noCertSelfCheck", out var noCertSelfCheckString) && bool.TryParse(noCertSelfCheckString, out var noCertSelfCheckValue) && noCertSelfCheckValue;
+
+        var certificateHealth = noCertSelfCheck ? null : await GetCertificatehealth(ctx);
         if (certificateHealth != null)
         {
             responses = responses.Concat([new KeyValuePair<string, HealthComponent>("CertificateSelf", certificateHealth)]).ToArray();
