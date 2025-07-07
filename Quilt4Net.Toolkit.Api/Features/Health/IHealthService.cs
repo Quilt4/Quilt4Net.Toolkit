@@ -14,5 +14,5 @@ public interface IHealthService
     /// <param name="includeProbes"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync(Func<Component, bool> filter, bool includeProbes, CancellationToken cancellationToken);
+    IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync(Func<Component, bool> filter = null, bool includeProbes = true, CancellationToken cancellationToken = default);
 }
