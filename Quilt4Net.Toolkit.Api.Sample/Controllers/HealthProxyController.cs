@@ -3,6 +3,9 @@ using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 
+/// <summary>
+/// Proxy controller for health checks.
+/// </summary>
 [ApiController]
 [Route("[controller]")]
 public class HealthProxyController : ControllerBase
@@ -14,6 +17,11 @@ public class HealthProxyController : ControllerBase
         _healthClient = healthClient;
     }
 
+    /// <summary>
+    /// Live proxy.
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     [HttpGet]
     [Route("live-proxy")]
     public async Task<IActionResult> GetLive(CancellationToken cancellationToken)
