@@ -1,15 +1,47 @@
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.OpenApi.Models;
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
+using Quilt4Net.Toolkit.Api.Sample;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddAuthentication("Dummy")
+    .AddScheme<AuthenticationSchemeOptions, DummyAuthHandler>("Dummy", _ => { });
+builder.Services.AddAuthorization();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Quilt4Net Sample API V1", Version = "v1" });
+    c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Name = DummyAuthHandler.ApiKeyHeaderName,
+        Type = SecuritySchemeType.ApiKey,
+        Description = "API Key needed to access the endpoints"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "ApiKey"
+                }
+            },
+            new List<string>()
+        }
+    });
+    c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "Quilt4Net.Toolkit.Api.Sample.xml"));
+});
 
 builder.Services.AddHostedService<MyBackgroundService>();
 builder.Services.AddHostedService<MyHostedService>();
@@ -63,14 +95,7 @@ builder.Services.AddQuilt4NetHealthClient(o =>
 });
 builder.Services.AddQuilt4NetApplicationInsights();
 
-builder.Services.AddOpenApi();
-
 var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -79,6 +104,7 @@ app.UseHttpsRedirection();
 
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
