@@ -16,7 +16,7 @@ internal static class Certificatehelper
         sb.Append($"Certificate for '{certInfo.Host}' with {certInfo.TlsVersion}");
         if (!string.IsNullOrEmpty(message)) sb.Append($"has issue '{message}', ");
 
-        var exp = HealthStatus.Unhealthy;
+        var exp = HealthStatus.Degraded;
         int? daysLeft = null;
         if (certInfo.CertExpiry.HasValue)
         {
@@ -57,6 +57,8 @@ internal static class Certificatehelper
     {
         var host = uri.Host;
         var port = uri.Port == -1 ? 443 : uri.Port;
+
+        if (port == 80) return (SslProtocols.None, null, host);
 
         using var client = new TcpClient();
         await client.ConnectAsync(host, port);
