@@ -46,7 +46,7 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Microsoft.ApplicationInsights" Version="2.23.0" />
-	  <PackageReference Include="System.Management" Version="9.0.7" />
+	  <PackageReference Include="System.Management" Version="9.0.8" />
 	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
