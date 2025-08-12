@@ -34,13 +34,14 @@ internal class DependencyService : IDependencyService
             };
 
             using var httpClient = new HttpClient(handler);
-            if (!Uri.TryCreate(x.Uri, "Health?noDependencies=true&noCertSelfCheck=true", out var uri)) throw new InvalidOperationException($"Cannot build uri from '{x.Uri}' and 'Health'.");
+            var parameters = "Health?noDependencies=true&noCertSelfCheck=true";
+            if (!Uri.TryCreate(x.Uri, parameters, out var uri)) throw new InvalidOperationException($"Cannot build uri from '{x.Uri}' and '{parameters}'.");
             using var response = await httpClient.GetAsync(uri, cancellationToken);
             var content = await response.Content.ReadFromJsonAsync<HealthResponse>(cancellationToken);
 
             content = await CheckCertificateAsync(x, certificateStatus, message, content);
 
-            return (x.Name, x.Essential, content.Components);
+            return (x.Name, x.Essential, content.Components, x.Uri);
         }, cancellationToken)).ToList();
 
         while (tasks.Any())
@@ -50,6 +51,7 @@ internal class DependencyService : IDependencyService
             var dependencyComponent = new DependencyComponent
             {
                 Status = BuildStatus(task),
+                Uri = task.Result.Uri,
                 DependencyComponents = task.Result.Components
             };
             yield return new KeyValuePair<string, DependencyComponent>(task.Result.Name, dependencyComponent);
@@ -76,7 +78,7 @@ internal class DependencyService : IDependencyService
         return content;
     }
 
-    private static HealthStatus BuildStatus(Task<(string Name, bool Essential, Dictionary<string, HealthComponent> Components)> task)
+    private static HealthStatus BuildStatus(Task<(string Name, bool Essential, Dictionary<string, HealthComponent> Components, Uri _)> task)
     {
         var status = task.Result.Components.Max(x => x.Value.Status);
         if (!task.Result.Essential && status == HealthStatus.Unhealthy)

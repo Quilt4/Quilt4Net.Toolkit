@@ -81,7 +81,6 @@ builder.AddQuilt4NetApi(o =>
 
     o.AddComponentService<MyComponentService>();
 
-    //TODO: if there are no dependencies, do not show in API
     o.AddDependency(new Dependency
     {
         Name = "Self",
