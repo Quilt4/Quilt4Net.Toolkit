@@ -1,15 +1,9 @@
-﻿using Microsoft.Extensions.Options;
-using System.Net;
+﻿using System.Net;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.Options;
 
 namespace Quilt4Net.Toolkit.Api.Features.FeatureToggle;
-
-public interface IFeatureToggleService
-{
-    ValueTask<bool> GetToggleAsync(string key, bool fallback = false);
-    ValueTask<T> GetValueAsync<T>(string key, T fallback = default);
-}
 
 internal class FeatureToggleService : IFeatureToggleService
 {
@@ -24,28 +18,28 @@ internal class FeatureToggleService : IFeatureToggleService
 
     public async ValueTask<bool> GetToggleAsync(string key, bool fallback = false)
     {
-        return await MakeCallAsync<bool>(key);
+        return await MakeCallAsync(key, fallback);
     }
 
     public async ValueTask<T> GetValueAsync<T>(string key, T fallback = default)
     {
-        return await MakeCallAsync<T>(key);
+        return await MakeCallAsync(key, fallback);
     }
 
-    private async Task<T> MakeCallAsync<T>(string key)
+    private async Task<T> MakeCallAsync<T>(string key, T fallback)
     {
         var assemblyName = Assembly.GetEntryAssembly()?.GetName();
         var request = new FeatureToggleRequest
         {
             Key = key,
             Environment = _hostEnvironment.EnvironmentName,
-            ApplicationName = assemblyName?.Name,
-            ApplicationVersion = $"{assemblyName?.Version}"
+            Application = assemblyName?.Name,
+            Version = $"{assemblyName?.Version}",
+            Instance = null, //TODO: Make this configurable
+            FallbackValue = $"{fallback}",
+            ValueType = typeof(T).Name
         };
-        var json = System.Text.Json.JsonSerializer.Serialize(request);
-        var bytes = Encoding.UTF8.GetBytes(json);
-        var base64 = Convert.ToBase64String(bytes);
-        var payload = WebUtility.UrlEncode(base64);
+        var payload = BuildKey<T>(request);
 
         //TODO: Handle cache
 
@@ -60,17 +54,13 @@ internal class FeatureToggleService : IFeatureToggleService
         var value = (T)Convert.ChangeType(result.Value, typeof(T));
         return value;
     }
-}
 
-public record FeatureToggleRequest
-{
-    public required string Key { get; init; }
-    public required string Environment { get; init; }
-    public required string ApplicationName { get; init; }
-    public required string ApplicationVersion { get; init; }
-}
-
-public record FeatureToggleResponse
-{
-    public required string Value { get; init; }
+    private static string BuildKey<T>(FeatureToggleRequest request)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(request);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var base64 = Convert.ToBase64String(bytes);
+        var payload = WebUtility.UrlEncode(base64);
+        return payload;
+    }
 }
