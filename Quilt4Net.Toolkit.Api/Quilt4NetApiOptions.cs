@@ -139,6 +139,11 @@ public record Quilt4NetApiOptions
     /// </summary>
     public CertificateCheckOptions Certificate { get; set; } = new();
 
+    /// <summary>
+    /// Configure the feature toggle.
+    /// </summary>
+    public FeatureToggle FeatureToggle { get; set; } = new();
+
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
     internal IEnumerable<Dependency> Dependencies => _dependencies.Values;

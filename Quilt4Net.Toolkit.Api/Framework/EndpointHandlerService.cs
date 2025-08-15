@@ -159,7 +159,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
     {
         return response with
         {
-            Components = response.Components.ToDictionary(x => x.Key, x => x.Value with { Details = default })
+            Components = response.Components.ToDictionary(x => x.Key, x => x.Value with { Details = null })
         };
     }
 

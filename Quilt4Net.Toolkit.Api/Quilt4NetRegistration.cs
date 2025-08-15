@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
+using Quilt4Net.Toolkit.Api.Features.FeatureToggle;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
@@ -8,8 +10,8 @@ using Quilt4Net.Toolkit.Api.Features.Ready;
 using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
-using System.Reflection;
 using Quilt4Net.Toolkit.Features.Health;
+using System.Reflection;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -25,7 +27,7 @@ public static class Quilt4NetRegistration
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4NetApi(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = default)
+    public static void AddQuilt4NetApi(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = null)
     {
         AddQuilt4NetApi(builder.Services, builder.Configuration, options);
     }
@@ -35,9 +37,9 @@ public static class Quilt4NetRegistration
     /// </summary>
     /// <param name="services"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4NetApi(this IServiceCollection services, Action<Quilt4NetApiOptions> options = default)
+    public static void AddQuilt4NetApi(this IServiceCollection services, Action<Quilt4NetApiOptions> options = null)
     {
-        AddQuilt4NetApi(services, default, options);
+        AddQuilt4NetApi(services, null, options);
     }
 
     /// <summary>
@@ -46,10 +48,11 @@ public static class Quilt4NetRegistration
     /// <param name="services"></param>
     /// <param name="configuration"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4NetApi(this IServiceCollection services, IConfiguration configuration, Action<Quilt4NetApiOptions> options = default)
+    public static void AddQuilt4NetApi(this IServiceCollection services, IConfiguration configuration, Action<Quilt4NetApiOptions> options = null)
     {
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
+        services.AddSingleton(Options.Create(_options));
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -66,6 +69,7 @@ public static class Quilt4NetRegistration
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
+        services.AddTransient<IFeatureToggleService, FeatureToggleService>();
 
         foreach (var componentServices in _options.ComponentServices)
         {

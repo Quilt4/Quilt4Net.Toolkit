@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Quilt4Net.Toolkit.Features.Measure;
 using System.Text;
+using Quilt4Net.Toolkit.Api.Features.FeatureToggle;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 
@@ -8,10 +9,12 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 [Route("Api/[controller]")]
 public class DataSampleController : ControllerBase
 {
+    private readonly IFeatureToggleService _featureToggleService;
     private readonly ILogger<DataSampleController> _logger;
 
-    public DataSampleController(ILogger<DataSampleController> logger)
+    public DataSampleController(IFeatureToggleService featureToggleService, ILogger<DataSampleController> logger)
     {
+        _featureToggleService = featureToggleService;
         _logger = logger;
     }
 
@@ -28,12 +31,14 @@ public class DataSampleController : ControllerBase
     }
 
     [HttpGet]
-    public Task<IActionResult> GetPayload([FromHeader] string header, [FromQuery] string query)
+    public async Task<IActionResult> GetPayload([FromHeader] string header, [FromQuery] string query)
     {
+        var value = await _featureToggleService.GetValueAsync("Value", 42);
+
         _logger.LogInformation("{Method} {Function} called with header {Header} and query {Query}.", "HttpGet", nameof(GetPayload), header, query);
-        var data = new SampleData { SomeInt = 42, SomeDate = DateTime.UtcNow };
+        var data = new SampleData { SomeInt = value, SomeDate = DateTime.UtcNow };
         HttpContext.Response.Headers.Add("Method", nameof(GetPayload));
-        return Task.FromResult<IActionResult>(Ok(new { header, query, data }));
+        return Ok(new { header, query, data });
     }
 
     [HttpGet("stream")]

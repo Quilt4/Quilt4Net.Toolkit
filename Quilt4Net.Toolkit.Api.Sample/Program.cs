@@ -51,6 +51,12 @@ builder.Logging.AddApplicationInsights();
 
 builder.AddQuilt4NetApi(o =>
 {
+    o.FeatureToggle.ApiKey = "SOME_KEY_HERE";
+    o.FeatureToggle.Address = "https://localhost:7129/";
+
+    o.Certificate.SelfCheckEnabled = false;
+    o.Certificate.CertExpiryUnhealthyLimitDays = 33;
+
     var config = new Dictionary<HealthEndpoint, AccessFlags>
     {
         [HealthEndpoint.Default] = new(true, true, true),
