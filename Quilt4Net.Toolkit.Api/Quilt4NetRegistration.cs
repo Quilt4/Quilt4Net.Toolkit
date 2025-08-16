@@ -69,7 +69,7 @@ public static class Quilt4NetRegistration
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
-        services.AddTransient<IFeatureToggleService, FeatureToggleService>();
+        services.AddSingleton<IFeatureToggleService, FeatureToggleService>(); //NOTE: Holds cached toggles
 
         foreach (var componentServices in _options.ComponentServices)
         {

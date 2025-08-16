@@ -33,10 +33,21 @@ public class DataSampleController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetPayload([FromHeader] string header, [FromQuery] string query)
     {
-        var value = await _featureToggleService.GetValueAsync("Value", 42);
+        var toggle = await _featureToggleService.GetToggleAsync("MyBool", ttl: TimeSpan.FromSeconds(10));
+
+        if (toggle) return Unauthorized();
+
+        var intValue = await _featureToggleService.GetValueAsync("MyInt", 42);
+        var stringValue = await _featureToggleService.GetValueAsync("MyString", "yeee");
+        var myDateValue = await _featureToggleService.GetValueAsync("MyDate", DateTime.UtcNow);
+        var myTimeSpanValue = await _featureToggleService.GetValueAsync("MyTimeSpan", TimeSpan.FromSeconds(10));
+        var myDecimalValue = await _featureToggleService.GetValueAsync("MyDecimal", 1.2M);
+        var mySingleValue = await _featureToggleService.GetValueAsync("MySingle", 1.2F);
+        var myNBool = await _featureToggleService.GetValueAsync<bool?>("MySingle", false);
+        var mySampleData = await _featureToggleService.GetValueAsync("MySampleData", new SampleData { SomeDate = myDateValue, SomeInt = 123 });
 
         _logger.LogInformation("{Method} {Function} called with header {Header} and query {Query}.", "HttpGet", nameof(GetPayload), header, query);
-        var data = new SampleData { SomeInt = value, SomeDate = DateTime.UtcNow };
+        var data = new SampleData { SomeInt = intValue, SomeDate = myDateValue };
         HttpContext.Response.Headers.Add("Method", nameof(GetPayload));
         return Ok(new { header, query, data });
     }

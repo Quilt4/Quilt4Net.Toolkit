@@ -3,4 +3,5 @@
 public record FeatureToggleResponse
 {
     public required string Value { get; init; }
+    public required DateTime ValidTo { get; init; }
 }

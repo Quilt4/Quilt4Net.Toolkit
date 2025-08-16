@@ -53,6 +53,8 @@ builder.AddQuilt4NetApi(o =>
 {
     o.FeatureToggle.ApiKey = "ABC123";
     o.FeatureToggle.Address = "https://localhost:7129/";
+    //o.FeatureToggle.Ttl = null;
+    //o.FeatureToggle.InstanceLoader = _ => { return "XXX"; };
 
     o.Certificate.SelfCheckEnabled = false;
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
