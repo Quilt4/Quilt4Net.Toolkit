@@ -51,6 +51,14 @@ builder.Logging.AddApplicationInsights();
 
 builder.AddQuilt4NetApi(o =>
 {
+    o.FeatureToggle.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
+    o.FeatureToggle.Address = "https://localhost:7129/";
+    //o.FeatureToggle.Ttl = null;
+    //o.FeatureToggle.InstanceLoader = _ => { return "XXX"; };
+
+    o.Certificate.SelfCheckEnabled = false;
+    o.Certificate.CertExpiryUnhealthyLimitDays = 33;
+
     var config = new Dictionary<HealthEndpoint, AccessFlags>
     {
         [HealthEndpoint.Default] = new(true, true, true),
@@ -81,7 +89,6 @@ builder.AddQuilt4NetApi(o =>
 
     o.AddComponentService<MyComponentService>();
 
-    //TODO: if there are no dependencies, do not show in API
     o.AddDependency(new Dependency
     {
         Name = "Self",

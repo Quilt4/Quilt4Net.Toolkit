@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Quilt4Net.Toolkit.Features.Measure;
 using System.Text;
+using Quilt4Net.Toolkit.Api.Features.FeatureToggle;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 
@@ -8,10 +9,14 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 [Route("Api/[controller]")]
 public class DataSampleController : ControllerBase
 {
+    private readonly IFeatureToggleService _featureToggleService;
+    private readonly IRemoteConfigurationService _remoteConfigurationService;
     private readonly ILogger<DataSampleController> _logger;
 
-    public DataSampleController(ILogger<DataSampleController> logger)
+    public DataSampleController(IFeatureToggleService featureToggleService, IRemoteConfigurationService remoteConfigurationService, ILogger<DataSampleController> logger)
     {
+        _featureToggleService = featureToggleService;
+        _remoteConfigurationService = remoteConfigurationService;
         _logger = logger;
     }
 
@@ -28,12 +33,25 @@ public class DataSampleController : ControllerBase
     }
 
     [HttpGet]
-    public Task<IActionResult> GetPayload([FromHeader] string header, [FromQuery] string query)
+    public async Task<IActionResult> GetPayload([FromHeader] string header, [FromQuery] string query)
     {
+        var toggle = await _featureToggleService.GetToggleAsync("MyBool", ttl: TimeSpan.FromSeconds(10));
+
+        if (toggle) return Unauthorized();
+
+        var intValue = await _remoteConfigurationService.GetValueAsync("MyInt", 42);
+        var stringValue = await _remoteConfigurationService.GetValueAsync("MyString", "yeee");
+        var myDateValue = await _remoteConfigurationService.GetValueAsync("MyDate", DateTime.UtcNow);
+        //var myTimeSpanValue = await _featureToggleService.GetValueAsync("MyTimeSpanX", TimeSpan.FromSeconds(10));
+        var myDecimalValue = await _remoteConfigurationService.GetValueAsync("MyDecimal", 1.2M);
+        var mySingleValue = await _remoteConfigurationService.GetValueAsync("MySingle", 1.2F);
+        //var myNBool = await _featureToggleService.GetValueAsync<bool?>("MyNBool", false);
+        //var mySampleData = await _remoteConfigurationService.GetValueAsync("MySampleData", new SampleData { SomeDate = myDateValue, SomeInt = 123 });
+
         _logger.LogInformation("{Method} {Function} called with header {Header} and query {Query}.", "HttpGet", nameof(GetPayload), header, query);
-        var data = new SampleData { SomeInt = 42, SomeDate = DateTime.UtcNow };
+        var data = new SampleData { SomeInt = intValue, SomeDate = myDateValue };
         HttpContext.Response.Headers.Add("Method", nameof(GetPayload));
-        return Task.FromResult<IActionResult>(Ok(new { header, query, data }));
+        return Ok(new { header, query, data });
     }
 
     [HttpGet("stream")]

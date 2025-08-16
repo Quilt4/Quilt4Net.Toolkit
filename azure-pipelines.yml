@@ -39,7 +39,7 @@ stages:
       inputs:
         command: 'build'
         projects: '**/*.csproj'
-        arguments: '-c Release /p:NoWarn=0618'
+        arguments: '-c Release'
         versioningScheme: 'byBuildNumber'
 
     - task: DotNetCoreCLI@2
