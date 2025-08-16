@@ -10,11 +10,13 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 public class DataSampleController : ControllerBase
 {
     private readonly IFeatureToggleService _featureToggleService;
+    private readonly IRemoteConfigurationService _remoteConfigurationService;
     private readonly ILogger<DataSampleController> _logger;
 
-    public DataSampleController(IFeatureToggleService featureToggleService, ILogger<DataSampleController> logger)
+    public DataSampleController(IFeatureToggleService featureToggleService, IRemoteConfigurationService remoteConfigurationService, ILogger<DataSampleController> logger)
     {
         _featureToggleService = featureToggleService;
+        _remoteConfigurationService = remoteConfigurationService;
         _logger = logger;
     }
 
@@ -37,14 +39,14 @@ public class DataSampleController : ControllerBase
 
         if (toggle) return Unauthorized();
 
-        var intValue = await _featureToggleService.GetValueAsync("MyInt", 42);
-        var stringValue = await _featureToggleService.GetValueAsync("MyString", "yeee");
-        var myDateValue = await _featureToggleService.GetValueAsync("MyDate", DateTime.UtcNow);
-        var myTimeSpanValue = await _featureToggleService.GetValueAsync("MyTimeSpan", TimeSpan.FromSeconds(10));
-        var myDecimalValue = await _featureToggleService.GetValueAsync("MyDecimal", 1.2M);
-        var mySingleValue = await _featureToggleService.GetValueAsync("MySingle", 1.2F);
-        var myNBool = await _featureToggleService.GetValueAsync<bool?>("MySingle", false);
-        var mySampleData = await _featureToggleService.GetValueAsync("MySampleData", new SampleData { SomeDate = myDateValue, SomeInt = 123 });
+        var intValue = await _remoteConfigurationService.GetValueAsync("MyInt", 42);
+        var stringValue = await _remoteConfigurationService.GetValueAsync("MyString", "yeee");
+        var myDateValue = await _remoteConfigurationService.GetValueAsync("MyDate", DateTime.UtcNow);
+        //var myTimeSpanValue = await _featureToggleService.GetValueAsync("MyTimeSpanX", TimeSpan.FromSeconds(10));
+        var myDecimalValue = await _remoteConfigurationService.GetValueAsync("MyDecimal", 1.2M);
+        var mySingleValue = await _remoteConfigurationService.GetValueAsync("MySingle", 1.2F);
+        //var myNBool = await _featureToggleService.GetValueAsync<bool?>("MyNBool", false);
+        //var mySampleData = await _remoteConfigurationService.GetValueAsync("MySampleData", new SampleData { SomeDate = myDateValue, SomeInt = 123 });
 
         _logger.LogInformation("{Method} {Function} called with header {Header} and query {Query}.", "HttpGet", nameof(GetPayload), header, query);
         var data = new SampleData { SomeInt = intValue, SomeDate = myDateValue };

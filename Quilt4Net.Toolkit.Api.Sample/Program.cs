@@ -51,7 +51,7 @@ builder.Logging.AddApplicationInsights();
 
 builder.AddQuilt4NetApi(o =>
 {
-    o.FeatureToggle.ApiKey = "ABC123";
+    o.FeatureToggle.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
     o.FeatureToggle.Address = "https://localhost:7129/";
     //o.FeatureToggle.Ttl = null;
     //o.FeatureToggle.InstanceLoader = _ => { return "XXX"; };

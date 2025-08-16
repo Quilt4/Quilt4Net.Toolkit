@@ -1,6 +1,6 @@
 ﻿namespace Quilt4Net.Toolkit.Api.Features.FeatureToggle;
 
-public record FeatureToggleRequest
+public record FeatureToggleRequest : IKeyContext
 {
     public required string Key { get; init; }
     public required string Application { get; init; }

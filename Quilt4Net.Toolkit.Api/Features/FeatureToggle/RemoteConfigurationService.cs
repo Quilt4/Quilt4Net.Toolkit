@@ -1,15 +1,15 @@
 ﻿namespace Quilt4Net.Toolkit.Api.Features.FeatureToggle;
 
-internal class FeatureToggleService : IFeatureToggleService
+internal class RemoteConfigurationService : IRemoteConfigurationService
 {
     private readonly IRemoteConfigCallService _remoteConfigCallService;
 
-    public FeatureToggleService(IRemoteConfigCallService remoteConfigCallService)
+    public RemoteConfigurationService(IRemoteConfigCallService remoteConfigCallService)
     {
         _remoteConfigCallService = remoteConfigCallService;
     }
 
-    public async ValueTask<bool> GetToggleAsync(string key, bool fallback = false, TimeSpan? ttl = null)
+    public async ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null)
     {
         return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl);
     }
