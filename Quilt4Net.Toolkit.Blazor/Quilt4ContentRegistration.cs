@@ -6,30 +6,30 @@ namespace Quilt4Net.Toolkit.Blazor;
 
 public static class Quilt4ContentRegistration
 {
-    private static Quilt4NetContentOptions _options;
+    private static Quilt4NetServerOptions _options;
 
-    public static IServiceCollection AddQuilt4NetContent(this IServiceCollection services, Action<Quilt4NetContentOptions> options = null)
+    public static IServiceCollection AddQuilt4Net(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
     {
-        return AddQuilt4NetContent(services, null, options);
+        return AddQuilt4Net(services, null, environmentNameLoader, options);
     }
 
-    public static IServiceCollection AddQuilt4NetContent(this IServiceCollection services, IConfiguration configuration, Action<Quilt4NetContentOptions> options = null)
+    public static IServiceCollection AddQuilt4Net(this IServiceCollection services, IConfiguration configuration, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
     {
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
         services.AddSingleton(Options.Create(_options));
 
-        services.AddTransient<ILanguageService, LanguageService>();
+        services.AddRemoteConfiguration(environmentNameLoader);
+        services.AddContent(environmentNameLoader);
 
         return services;
     }
 
-    private static Quilt4NetContentOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetContentOptions> options)
+    private static Quilt4NetServerOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetServerOptions> options)
     {
-        var o = configuration?.GetSection("Quilt4Net:Content").Get<Quilt4NetContentOptions>() ?? new Quilt4NetContentOptions();
+        var o = configuration?.GetSection("Quilt4Net:Service").Get<Quilt4NetServerOptions>() ?? new Quilt4NetServerOptions();
         options?.Invoke(o);
 
         return o;
     }
-
 }

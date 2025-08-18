@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
-using Quilt4Net.Toolkit.Api.Features.FeatureToggle;
 using Quilt4Net.Toolkit.Api.Features.Health;
 using Quilt4Net.Toolkit.Api.Features.Live;
 using Quilt4Net.Toolkit.Api.Features.Metrics;
@@ -53,6 +52,8 @@ public static class Quilt4NetRegistration
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
         services.AddSingleton(Options.Create(_options));
+        services.AddSingleton<Quilt4NetServerOptions>(_ => _options);
+        services.AddSingleton<IOptions<Quilt4NetServerOptions>>(Options.Create(_options));
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -70,9 +71,8 @@ public static class Quilt4NetRegistration
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
 
-        services.AddSingleton<IRemoteConfigCallService, RemoteConfigCallService>(); //NOTE: Holds cached toggles
-        services.AddTransient<IFeatureToggleService, FeatureToggleService>();
-        services.AddTransient<IRemoteConfigurationService, RemoteConfigurationService>();
+        services.AddRemoteConfiguration(s => s.GetService<IHostEnvironment>().EnvironmentName);
+        services.AddContent(s => s.GetService<IHostEnvironment>().EnvironmentName);
 
         foreach (var componentServices in _options.ComponentServices)
         {

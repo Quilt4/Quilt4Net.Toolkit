@@ -1,6 +1,5 @@
 ﻿@using Microsoft.JSInterop
-@* Renders API HTML if available (simulated: none), otherwise renders ChildContent.
-   We also capture ChildContent as HTML via JS and (placeholder) could send it to a server. *@
+@inject IContentService ContentService
 
 @if (!string.IsNullOrWhiteSpace(_content))
 {
@@ -8,7 +7,6 @@
 }
 else
 {
-    <!-- Render the user's default markup once so we can capture its HTML -->
     <div style="display:none" @ref="_holder">
         @ChildContent
     </div>
@@ -29,8 +27,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        // POC: simulate "no server content" so we fall back to ChildContent
-        _content = null;
+        _content = await ContentService.GetContentAsync(Key, null);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -47,6 +44,7 @@ else
             var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
 
             // Use the captured HTML as the content to render
+            await ContentService.SetContentAsync(Key, defaultHtml);
             _content = defaultHtml;
 
             // 🔜 Placeholder: here’s where you would send it to your server

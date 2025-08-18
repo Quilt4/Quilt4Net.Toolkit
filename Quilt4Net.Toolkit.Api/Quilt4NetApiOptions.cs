@@ -6,7 +6,7 @@ namespace Quilt4Net.Toolkit.Api;
 /// <summary>
 /// Configuration options for Quilt4NetApi.
 /// </summary>
-public record Quilt4NetApiOptions
+public record Quilt4NetApiOptions : Quilt4NetServerOptions
 {
     private readonly ConcurrentDictionary<string, Component> _components = new ();
     private readonly ConcurrentDictionary<Type, Type> _componentServices = new ();
@@ -139,10 +139,10 @@ public record Quilt4NetApiOptions
     /// </summary>
     public CertificateCheckOptions Certificate { get; set; } = new();
 
-    /// <summary>
-    /// Configure the feature toggle.
-    /// </summary>
-    public FeatureToggle FeatureToggle { get; set; } = new();
+    ///// <summary>
+    ///// Configure the feature toggle.
+    ///// </summary>
+    //public FeatureToggle FeatureToggle { get; set; } = new();
 
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;

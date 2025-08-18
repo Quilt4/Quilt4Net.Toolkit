@@ -1,15 +1,15 @@
-﻿namespace Quilt4Net.Toolkit.Blazor;
+﻿//namespace Quilt4Net.Toolkit.Blazor;
 
-public interface ILanguageService
-{
-    IAsyncEnumerable<Language> GetLanguagesAsync();
-}
+//public interface ILanguageService
+//{
+//    IAsyncEnumerable<Language> GetLanguagesAsync();
+//}
 
-public interface IContentService
-{
-}
+//public interface IContentService
+//{
+//}
 
-internal class ContentService : IContentService
-{
-    //ContentRequest
-}
+//internal class ContentService : IContentService
+//{
+//    //GetContentRequest
+//}

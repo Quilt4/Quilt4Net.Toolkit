@@ -1,14 +1,52 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Quilt4Net.Toolkit.Api.Features.FeatureToggle;
+using Quilt4Net.Toolkit.Blazor;
 using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit;
+
+public static class ContentRegistration
+{
+    public static void AddContent(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader)
+    {
+        services.AddTransient<ILanguageService, LanguageService>();
+        services.AddTransient<IContentService, ContentService>();
+        services.AddTransient<IRemoteContentCallService>(s =>
+        {
+            var o = s.GetService<IOptions<Quilt4NetServerOptions>>();
+            var name = environmentNameLoader?.Invoke(s) ?? throw new InvalidOperationException("Cannot find environment name.");
+            var environmentName = new EnvironmentName { Name = name };
+            var logger = s.GetService<ILogger<RemoteContentCallService>>();
+            return new RemoteContentCallService(s, environmentName, o, logger);
+        });
+    }
+}
+
+public static class RemoteConfigurationRegistration
+{
+    public static void AddRemoteConfiguration(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader)
+    {
+        services.AddSingleton<IRemoteConfigCallService>(s =>
+        {
+            var o = s.GetService<IOptions<Quilt4NetServerOptions>>();
+            var name = environmentNameLoader?.Invoke(s) ?? throw new InvalidOperationException("Cannot find environment name.");
+            var environmentName = new EnvironmentName { Name = name };
+            var logger = s.GetService<ILogger<RemoteConfigCallService>>();
+            return new RemoteConfigCallService(s, environmentName, o, logger);
+        });  //NOTE: Static because it holds cached toggles
+        services.AddTransient<IFeatureToggleService, FeatureToggleService>();
+        services.AddTransient<IRemoteConfigurationService, RemoteConfigurationService>();
+    }
+}
 
 public static class HealthRegistration
 {
     private static Quilt4NetHealthOptions _options;
 
-    public static void AddQuilt4NetHealthClient(this IServiceCollection serviceCollection, Action<Quilt4NetHealthOptions> options = default)
+    public static void AddQuilt4NetHealthClient(this IServiceCollection serviceCollection, Action<Quilt4NetHealthOptions> options = null)
     {
         serviceCollection.AddSingleton(s =>
         {
