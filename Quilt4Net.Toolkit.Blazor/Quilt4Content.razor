@@ -1,0 +1,55 @@
+﻿@using Microsoft.JSInterop
+@* Renders API HTML if available (simulated: none), otherwise renders ChildContent.
+   We also capture ChildContent as HTML via JS and (placeholder) could send it to a server. *@
+
+@if (!string.IsNullOrWhiteSpace(_content))
+{
+    @((MarkupString)_content)
+}
+else
+{
+    <!-- Render the user's default markup once so we can capture its HTML -->
+    <div style="display:none" @ref="_holder">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter] public string Key { get; set; }
+    [Parameter] public RenderFragment ChildContent { get; set; }
+
+    [Inject] IJSRuntime JS { get; set; }
+
+    private ElementReference _holder;
+    private IJSObjectReference _mod;
+    private string _content;     // what we actually render
+
+    protected override async Task OnInitializedAsync()
+    {
+        // POC: simulate "no server content" so we fall back to ChildContent
+        _content = null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Load the JS module (client-side only)
+            _mod = await JS.InvokeAsync<IJSObjectReference>("import", "./interop.js");
+        }
+
+        // If we still don't have content, capture the ChildContent HTML and use it
+        if (_content is null && ChildContent is not null && _mod is not null)
+        {
+            var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
+
+            // Use the captured HTML as the content to render
+            _content = defaultHtml;
+
+            // 🔜 Placeholder: here’s where you would send it to your server
+            // await Http.PostAsJsonAsync($"{Options.Address}Api/Content", new { key = Key, defaultHtml });
+
+            StateHasChanged();
+        }
+    }
+}
