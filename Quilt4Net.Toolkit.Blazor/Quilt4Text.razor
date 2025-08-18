@@ -1,0 +1,12 @@
+﻿<Radzen.Blazor.RadzenText Text="@Default" TextStyle="@TextStyle" />
+
+@code {
+    [Parameter]
+    public string Key { get; set; }
+
+    [Parameter]
+    public string Default { get; set; }
+
+    [Parameter]
+    public TextStyle TextStyle { get; set; } = TextStyle.Body1;
+}

@@ -11,3 +11,7 @@ public record FeatureToggleRequest : IKeyContext
     public required string ValueType { get; init; }
     public TimeSpan? Ttl { get; init; }
 }
+
+public record ContentRequest
+{
+}

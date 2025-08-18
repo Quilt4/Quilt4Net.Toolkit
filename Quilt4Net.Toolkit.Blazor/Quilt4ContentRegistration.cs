@@ -19,6 +19,8 @@ public static class Quilt4ContentRegistration
         services.AddSingleton(_ => _options);
         services.AddSingleton(Options.Create(_options));
 
+        services.AddTransient<ILanguageService, LanguageService>();
+
         return services;
     }
 
