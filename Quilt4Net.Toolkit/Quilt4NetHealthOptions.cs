@@ -5,7 +5,7 @@ public record Quilt4NetServerOptions
     public string ApiKey { get; set; }
     public string Address { get; set; }
     public TimeSpan? Ttl { get; set; }
-    public Func<IServiceProvider, string> InstanceLoader { get; set; } = _ => null;
+    //public Func<IServiceProvider, string> InstanceLoader { get; set; } = _ => null;
 }
 
 //public record RemoteConfigurationOptions

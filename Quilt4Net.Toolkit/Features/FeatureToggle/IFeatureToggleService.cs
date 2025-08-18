@@ -59,7 +59,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 Key = key,
                 Application = assemblyName?.Name,
                 Environment = _environmentName.Name,
-                Instance = _options.InstanceLoader?.Invoke(_serviceProvider),
+                Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
                 Version = $"{assemblyName?.Version}",
                 DefaultValue = $"{defaultValue}",
                 ValueType = typeof(T).Name,

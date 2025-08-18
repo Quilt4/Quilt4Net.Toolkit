@@ -77,7 +77,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 Language = null, //TODO: null is default, use "selected" language here.
                 Application = assemblyName?.Name,
                 Environment = _environmentName.Name,
-                Instance = _options.InstanceLoader?.Invoke(_serviceProvider),
+                Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
                 //Version = $"{assemblyName?.Version}",
                 DefaultValue = $"{defaultValue}",
                 //ValueType = typeof(T).Name,
@@ -145,7 +145,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 Language = null, //TODO: null is default, use "selected" language here.
                 Application = assemblyName?.Name,
                 Environment = _environmentName.Name,
-                Instance = _options.InstanceLoader?.Invoke(_serviceProvider),
+                Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
                 //Version = $"{assemblyName?.Version}",
                 Value = $"{value}",
                 //ValueType = typeof(T).Name,
