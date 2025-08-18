@@ -8,7 +8,7 @@ public static class HealthRegistration
 {
     private static Quilt4NetHealthOptions _options;
 
-    public static void AddQuilt4NetHealthClient(this IServiceCollection serviceCollection, Action<Quilt4NetHealthOptions> options = default)
+    public static void AddQuilt4NetHealthClient(this IServiceCollection serviceCollection, Action<Quilt4NetHealthOptions> options = null)
     {
         serviceCollection.AddSingleton(s =>
         {

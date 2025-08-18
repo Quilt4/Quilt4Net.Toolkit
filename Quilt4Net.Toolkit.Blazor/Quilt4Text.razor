@@ -1,0 +1,23 @@
+﻿@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+
+<Radzen.Blazor.RadzenText Text="@_content" TextStyle="@TextStyle" />
+
+@code {
+    private string _content;
+
+    [Parameter]
+    public string Key { get; set; }
+
+    [Parameter]
+    public string Default { get; set; }
+
+    [Parameter]
+    public TextStyle TextStyle { get; set; } = TextStyle.Body1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _content = await ContentService.GetContentAsync(Key, Default, ContentFormat.String);
+    }
+}

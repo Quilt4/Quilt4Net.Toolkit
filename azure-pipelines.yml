@@ -76,6 +76,13 @@ stages:
         packagesToPack: '**/Quilt4Net.Toolkit.Api.csproj'
         versioningScheme: 'byBuildNumber'
 
+    - task: DotNetCoreCLI@2
+      displayName: 'Pack Quilt4Net.Toolkit.Blazor'
+      inputs:
+        command: 'pack'
+        packagesToPack: '**/Quilt4Net.Toolkit.Blazor.csproj'
+        versioningScheme: 'byBuildNumber'
+
     - task: PublishBuildArtifacts@1
       displayName: 'Publish artifacts'
       inputs:

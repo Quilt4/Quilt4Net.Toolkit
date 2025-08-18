@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Quilt4Net.Toolkit.Features.Measure;
 using System.Text;
-using Quilt4Net.Toolkit.Api.Features.FeatureToggle;
+using Quilt4Net.Toolkit.Features.FeatureToggle;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 

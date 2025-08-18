@@ -1,0 +1,58 @@
+﻿@using Microsoft.JSInterop
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+
+@if (!string.IsNullOrWhiteSpace(_content))
+{
+    @((MarkupString)_content)
+}
+else
+{
+    <div style="display:none" @ref="_holder">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string Key { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    [Inject] IJSRuntime JS { get; set; }
+
+    private ElementReference _holder;
+    private IJSObjectReference _mod;
+    private string _content;     // what we actually render
+
+    protected override async Task OnInitializedAsync()
+    {
+        _content = await ContentService.GetContentAsync(Key, null, ContentFormat.Html);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Load the JS module (client-side only)
+            _mod = await JS.InvokeAsync<IJSObjectReference>("import", "./interop.js");
+        }
+
+        // If we still don't have content, capture the ChildContent HTML and use it
+        if (_content is null && ChildContent is not null && _mod is not null)
+        {
+            var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
+
+            // Use the captured HTML as the content to render
+            await ContentService.SetContentAsync(Key, defaultHtml, ContentFormat.Html);
+            _content = defaultHtml;
+
+            // 🔜 Placeholder: here’s where you would send it to your server
+            // await Http.PostAsJsonAsync($"{Options.Address}Api/Content", new { key = Key, defaultHtml });
+
+            StateHasChanged();
+        }
+    }
+}
