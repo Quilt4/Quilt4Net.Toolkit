@@ -111,6 +111,14 @@ stages:
         nuGetFeedType: 'external'
         publishFeedCredentials: 'Nuget.org'
 
+    - task: NuGetCommand@2
+      displayName: 'Push nuget packages to nuget.org'
+      inputs:
+        command: 'push'
+        packagesToPush: '$(Pipeline.Workspace)/**/Quilt4Net.Toolkit.Blazor.*.nupkg'
+        nuGetFeedType: 'external'
+        publishFeedCredentials: 'Nuget.org'
+
     - script: |
          git tag $(Build.BuildNumber)
          git push origin $(Build.BuildNumber)
