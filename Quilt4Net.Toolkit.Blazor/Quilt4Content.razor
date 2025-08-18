@@ -1,4 +1,6 @@
 ﻿@using Microsoft.JSInterop
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
 @inject IContentService ContentService
 
 @if (!string.IsNullOrWhiteSpace(_content))
@@ -27,7 +29,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _content = await ContentService.GetContentAsync(Key, null);
+        _content = await ContentService.GetContentAsync(Key, null, ContentFormat.Html);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -44,7 +46,7 @@ else
             var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
 
             // Use the captured HTML as the content to render
-            await ContentService.SetContentAsync(Key, defaultHtml);
+            await ContentService.SetContentAsync(Key, defaultHtml, ContentFormat.Html);
             _content = defaultHtml;
 
             // 🔜 Placeholder: here’s where you would send it to your server

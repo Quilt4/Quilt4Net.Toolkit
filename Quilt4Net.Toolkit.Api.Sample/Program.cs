@@ -51,8 +51,8 @@ builder.Logging.AddApplicationInsights();
 
 builder.AddQuilt4NetApi(o =>
 {
-    o.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM="; //TODO: Handle if nothing is provided here.
-    o.Address = "https://localhost:7129/"; //TODO: Use default address if nothig is provided
+    o.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
+    o.Address = "https://localhost:7129/";
     //o.FeatureToggle.Ttl = null;
     //o.FeatureToggle.InstanceLoader = _ => { return "XXX"; };
 
