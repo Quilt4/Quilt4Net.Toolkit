@@ -5,7 +5,7 @@
 @inject IEditContentService EditContentService
 @inject Radzen.DialogService DialogService
 
-<RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@_edit" />
+<RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@_edit" Visible="@Visible" />
 
 @code {
     private string _content;
@@ -20,12 +20,15 @@
     [Parameter]
     public TextStyle TextStyle { get; set; } = TextStyle.Body1;
 
+    [Parameter]
+    public bool Visible { get; set; } = true;
+
     protected override async Task OnInitializedAsync()
     {
         EditContentService.EditModeEvent += (s, e) =>
         {
             _edit = e.Enabled
-                ? "outline: 2px dotted red; outline-offset: -4px; cursor: pointer;"
+                ? "outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;"
                 : "";
             StateHasChanged();
         };
@@ -35,6 +38,8 @@
 
     private async Task OpenDialog()
     {
+        if (!EditContentService.Enabled) return;
+
         var response = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
             new Dictionary<string, object>
             {
@@ -44,7 +49,7 @@
             });
         if (response != true) return;
 
-        _content = await ContentService.GetContentAsync(Key, null, ContentFormat.String);
+        _content = await ContentService.GetContentAsync(Key, null, null);
         StateHasChanged();
     }
 }

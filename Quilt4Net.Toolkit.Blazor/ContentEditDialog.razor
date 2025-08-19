@@ -8,10 +8,13 @@
 <RadzenTemplateForm TItem="ContentEditModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
     <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
         <RadzenStack>
-            <RadzenColumn>
+            <RadzenColumn Visible="@(Format == ContentFormat.String)">
                 <RadzenText TextStyle="TextStyle.Caption">Content</RadzenText>
                 <div><RadzenTextBox Name="Content" @bind-Value="@Model.Content" Style="width: 100%; min-width: 174px;" /></div>
                 <RadzenRequiredValidator Component="Content" Text="Content is required." />
+            </RadzenColumn>
+            <RadzenColumn Visible="@(Format == ContentFormat.Html)">
+                <RadzenHtmlEditor @bind-Value="Model.Content" />
             </RadzenColumn>
             <RadzenRow>
                 <RadzenColumn>

@@ -1,11 +1,18 @@
-﻿@using Microsoft.JSInterop
+﻿@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
 @using Quilt4Net.Toolkit.Features.Content
 @using Quilt4Net.Toolkit.Features.FeatureToggle
+@using Radzen
+@inject IJSRuntime JS
 @inject IContentService ContentService
+@inject IEditContentService EditContentService
+@inject DialogService DialogService
 
 @if (!string.IsNullOrWhiteSpace(_content))
 {
-    @((MarkupString)_content)
+    <span style="@_edit" @onclick="OpenDialog">
+        @((MarkupString)_content)
+    </span>
 }
 else
 {
@@ -15,21 +22,32 @@ else
 }
 
 @code {
+    private ElementReference _holder;
+    private IJSObjectReference _mod;
+    private string _content;
+    private string _edit = "";
+
     [Parameter]
     public string Key { get; set; }
 
     [Parameter]
     public RenderFragment ChildContent { get; set; }
 
-    [Inject] IJSRuntime JS { get; set; }
-
-    private ElementReference _holder;
-    private IJSObjectReference _mod;
-    private string _content;     // what we actually render
-
     protected override async Task OnInitializedAsync()
     {
-        _content = await ContentService.GetContentAsync(Key, null, ContentFormat.Html);
+        EditContentService.EditModeEvent += (s, e) =>
+        {
+            _edit = e.Enabled
+                //? "outline: 2px dotted red; outline-offset: -4px; cursor: pointer;"
+                //? "background-image: repeating-linear-gradient(45deg, #ffc0cb, #ffc0cb 2px, transparent 2px, transparent 6px); cursor: pointer;"
+                //? "display: inline-block; padding: 0px; background-image: repeating-linear-gradient(45deg, #ffc0cb, #ffc0cb 1px, transparent 2px, transparent 12px); outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;"
+                ? "display: inline-block; padding: 0px; outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;"
+                : "";
+            StateHasChanged();
+        };
+        //TODO: Block edit if the server does not respond.
+        //TODO: Wnen we provide null, the value should not be saved
+        _content = await ContentService.GetContentAsync(Key, null, null);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -54,5 +72,22 @@ else
 
             StateHasChanged();
         }
+    }
+
+    private async Task OpenDialog()
+    {
+        if (!EditContentService.Enabled) return;
+
+        var response = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
+            new Dictionary<string, object>
+            {
+                { "Key", Key },
+                { "Content", _content },
+                { "Format", ContentFormat.Html },
+            });
+        if (response != true) return;
+
+        _content = await ContentService.GetContentAsync(Key, null, null);
+        StateHasChanged();
     }
 }

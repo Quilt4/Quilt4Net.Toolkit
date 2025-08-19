@@ -24,7 +24,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _logger = logger;
     }
 
-    public async Task<string> GetContentAsync(string key, string defaultValue, ContentFormat contentType)
+    public async Task<string> GetContentAsync(string key, string defaultValue, ContentFormat? contentType)
     {
         if (string.IsNullOrEmpty(_options.ApiKey)) return "No ApiKey provided.";
 
