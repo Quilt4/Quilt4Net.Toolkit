@@ -1,11 +1,15 @@
-﻿@using Quilt4Net.Toolkit.Features.Content
+﻿@using Microsoft.AspNetCore.Components.Web
+@using Quilt4Net.Toolkit.Features.Content
 @using Quilt4Net.Toolkit.Features.FeatureToggle
 @inject IContentService ContentService
+@inject IEditContentService EditContentService
+@inject Radzen.DialogService DialogService
 
-<Radzen.Blazor.RadzenText Text="@_content" TextStyle="@TextStyle" />
+<RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@_edit" />
 
 @code {
     private string _content;
+    private string _edit = "";
 
     [Parameter]
     public string Key { get; set; }
@@ -18,6 +22,29 @@
 
     protected override async Task OnInitializedAsync()
     {
+        EditContentService.EditModeEvent += (s, e) =>
+        {
+            _edit = e.Enabled
+                ? "outline: 2px dotted red; outline-offset: -4px; cursor: pointer;"
+                : "";
+            StateHasChanged();
+        };
+        //TODO: Block edit if the server does not respond.
         _content = await ContentService.GetContentAsync(Key, Default, ContentFormat.String);
+    }
+
+    private async Task OpenDialog()
+    {
+        var response = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
+            new Dictionary<string, object>
+            {
+                { "Key", Key },
+                { "Content", _content },
+                { "Format", ContentFormat.String },
+            });
+        if (response != true) return;
+
+        _content = await ContentService.GetContentAsync(Key, null, ContentFormat.String);
+        StateHasChanged();
     }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -21,6 +22,7 @@ public static class Quilt4ContentRegistration
 
         services.AddRemoteConfiguration(environmentNameLoader);
         services.AddContent(environmentNameLoader);
+        services.AddScoped<IEditContentService, EditContentService>();
 
         return services;
     }
@@ -32,4 +34,38 @@ public static class Quilt4ContentRegistration
 
         return o;
     }
+}
+
+public interface IEditContentService
+{
+    event EventHandler<EditModeEventArgs> EditModeEvent;
+    bool Enabled { get; set; }
+}
+
+public class EditContentService : IEditContentService
+{
+    private bool _enabled;
+
+    public event EventHandler<EditModeEventArgs> EditModeEvent;
+
+    public bool Enabled
+    {
+        get => _enabled;
+        set
+        {
+            if (_enabled == value) return;
+            _enabled = value;
+            EditModeEvent?.Invoke(this, new EditModeEventArgs(value));
+        }
+    }
+}
+
+public class EditModeEventArgs : EventArgs
+{
+    public EditModeEventArgs(bool enabled)
+    {
+        Enabled = enabled;
+    }
+
+    public bool Enabled { get; }
 }
