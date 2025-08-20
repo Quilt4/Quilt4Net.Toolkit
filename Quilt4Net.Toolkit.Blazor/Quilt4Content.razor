@@ -1,11 +1,19 @@
-﻿@using Microsoft.JSInterop
+﻿@using System.Text.RegularExpressions
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
 @using Quilt4Net.Toolkit.Features.Content
 @using Quilt4Net.Toolkit.Features.FeatureToggle
+@using Radzen
+@inject IJSRuntime JS
 @inject IContentService ContentService
+@inject IEditContentService EditContentService
+@inject DialogService DialogService
 
-@if (!string.IsNullOrWhiteSpace(_content))
+@if (!string.IsNullOrEmpty(_content))
 {
-    @((MarkupString)_content)
+    <span style="@_edit" @onclick="OpenDialog" role="button" tabindex="0" @onkeydown="OnKeyDown">
+        @((MarkupString)_content)
+    </span>
 }
 else
 {
@@ -15,44 +23,82 @@ else
 }
 
 @code {
+    private const string _editStyle = "display: inline-block; padding: 0px; outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
+    private ElementReference _holder;
+    private IJSObjectReference _mod;
+    private string _content;
+    private string _edit = "";
+    private (string Value, bool Success) _response;
+
     [Parameter]
     public string Key { get; set; }
 
     [Parameter]
     public RenderFragment ChildContent { get; set; }
 
-    [Inject] IJSRuntime JS { get; set; }
-
-    private ElementReference _holder;
-    private IJSObjectReference _mod;
-    private string _content;     // what we actually render
-
     protected override async Task OnInitializedAsync()
     {
-        _content = await ContentService.GetContentAsync(Key, null, ContentFormat.Html);
+        EditContentService.EditModeEvent += (s, e) =>
+        {
+            _edit = e.Enabled ? _editStyle : "";
+            StateHasChanged();
+        };
+        _edit = EditContentService.Enabled ? _editStyle : "";
+
+        _response = await ContentService.GetContentAsync(Key, "", null);
+        if (_response.Success) _content = _response.Value;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Load the JS module (client-side only)
-            _mod = await JS.InvokeAsync<IJSObjectReference>("import", "./interop.js");
+            const string js = "export function getInnerHtml(el) { return el?.innerHTML ?? ''; }";
+            var dataUrl = $"data:text/javascript;charset=utf-8,{Uri.EscapeDataString(js)}";
+            _mod = await JS.InvokeAsync<IJSObjectReference>("import", dataUrl);
         }
 
-        // If we still don't have content, capture the ChildContent HTML and use it
-        if (_content is null && ChildContent is not null && _mod is not null)
+        if (string.IsNullOrEmpty(_content) && ChildContent is not null && _mod is not null)
         {
             var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
-
-            // Use the captured HTML as the content to render
-            await ContentService.SetContentAsync(Key, defaultHtml, ContentFormat.Html);
+            if (_response.Success)
+            {
+                await ContentService.SetContentAsync(Key, defaultHtml, ContentFormat.Html);
+            }
             _content = defaultHtml;
-
-            // 🔜 Placeholder: here’s where you would send it to your server
-            // await Http.PostAsJsonAsync($"{Options.Address}Api/Content", new { key = Key, defaultHtml });
-
             StateHasChanged();
         }
+    }
+
+    private static readonly Regex BlazorAttrs = new(
+        @"\s@(?:onclick|on\w+|bind(?:-\w+)?|ref|attributes)\s*=\s*""[^""]*""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static string Sanitize(string html) =>
+        string.IsNullOrEmpty(html) ? string.Empty : BlazorAttrs.Replace(html, "");
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " " or "Spacebar")
+            await OpenDialog();
+    }
+
+    private async Task OpenDialog()
+    {
+        if (!EditContentService.Enabled) return;
+        if (!_response.Success) return;
+
+        var response = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
+            new Dictionary<string, object>
+            {
+                { "Key", Key },
+                { "Content", _content },
+                { "Format", ContentFormat.Html },
+            });
+        if (response != true) return;
+
+        _response = await ContentService.GetContentAsync(Key, null, null);
+        _content = _response.Value;
+        StateHasChanged();
     }
 }

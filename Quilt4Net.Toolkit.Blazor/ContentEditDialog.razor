@@ -1,0 +1,79 @@
+﻿@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@using Radzen
+@using Tharga.Blazor.Framework.Buttons
+@inject DialogService DialogService
+@inject IContentService ContentService
+
+<RadzenTemplateForm TItem="ContentEditModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
+    <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
+        <RadzenStack>
+            <RadzenColumn Visible="@(Format == ContentFormat.String)">
+                <RadzenText TextStyle="TextStyle.Caption">Content</RadzenText>
+                <div><RadzenTextBox Name="Content" @bind-Value="@Model.Content" Style="width: 100%; min-width: 174px;" /></div>
+                <RadzenRequiredValidator Component="Content" Text="Content is required." />
+            </RadzenColumn>
+            <RadzenColumn Visible="@(Format == ContentFormat.Html)">
+                <RadzenHtmlEditor @bind-Value="Model.Content" />
+            </RadzenColumn>
+            <RadzenRow>
+                <RadzenColumn>
+                    <span class="validation-message">@_errorMessage</span>
+                </RadzenColumn>
+            </RadzenRow>
+        </RadzenStack>
+        <RadzenStack></RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right">
+            <RadzenButton ButtonType="ButtonType.Submit" Text="OK" Icon="check_circle"/>
+            <RadzenButton Text="Cancel" Icon="cancel" Type="@StandardButton.EButtonType.Normal" Variant="Variant.Outlined" Click="CloseDialog" />
+        </RadzenStack>
+
+    </RadzenStack>
+</RadzenTemplateForm>
+
+@code {
+    private string _errorMessage;
+
+    [Parameter]
+    public string Key { get; set; }
+
+    [Parameter]
+    public string Content { get; set; }
+
+    [Parameter]
+    public ContentFormat Format { get; set; }
+
+    private ContentEditModel Model { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Model = new ContentEditModel
+        {
+            Content = Content
+        };
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task OnSubmit(ContentEditModel model)
+    {
+        try
+        {
+            await ContentService.SetContentAsync(Key, model.Content, ContentFormat.String);
+
+            DialogService.Close(true);
+        }
+        catch(Exception e)
+        {
+            // Logger.LogError(e, e.Message);
+            _errorMessage = e.Message;
+        }
+    }
+
+    private Task CloseDialog()
+    {
+        DialogService.Close();
+        return Task.CompletedTask;
+    }
+
+}
