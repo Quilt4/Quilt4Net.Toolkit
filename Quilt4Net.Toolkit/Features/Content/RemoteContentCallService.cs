@@ -24,9 +24,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _logger = logger;
     }
 
-    public async Task<string> GetContentAsync(string key, string defaultValue, ContentFormat? contentType)
+    public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, ContentFormat? contentType)
     {
-        if (string.IsNullOrEmpty(_options.ApiKey)) return "No ApiKey provided.";
+        if (string.IsNullOrEmpty(_options.ApiKey)) return ("No ApiKey provided.", false);
 
         defaultValue ??= $"No content for '{key}'.";
 
@@ -67,9 +67,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 {
                     if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException($"Unable to get feature toggle for key '{key}' from address '{address}'. Response was '{response.StatusCode} {response.ReasonPhrase}'.");
 
-                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{Address}' Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
+                    _logger.LogError("Unable to get content for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{Address}' Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
                         key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase, defaultValue);
-                    return defaultValue;
+                    return (defaultValue, false);
                 }
 
                 result = await response.Content.ReadFromJsonAsync<GetContentResponse>();
@@ -77,7 +77,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 _localCache.AddOrUpdate($"{key}_{selectedLanguage}", result, (_, _) => result);
             }
 
-            return result.Value ?? defaultValue;
+            return (result.Value ?? defaultValue, true);
         }
         catch (UnauthorizedAccessException e)
         {
@@ -87,12 +87,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
         catch (HttpRequestException e)
         {
             _logger.LogError(e, "{Message} Status code {StatusCode}. Using fallback value '{Fallback}' for key {Key}.", e.Message, e.StatusCode, defaultValue, key);
-            return defaultValue;
+            return (defaultValue, false);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using fallback value '{Fallback}' for key {Key}.", e.Message, defaultValue, key);
-            return defaultValue;
+            return (defaultValue, false);
         }
     }
 

@@ -8,8 +8,10 @@
 <RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@_edit" Visible="@Visible" />
 
 @code {
+    private const string _editStyle = "outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
     private string _content;
     private string _edit = "";
+    private (string Value, bool Success) _response;
 
     [Parameter]
     public string Key { get; set; }
@@ -27,29 +29,31 @@
     {
         EditContentService.EditModeEvent += (s, e) =>
         {
-            _edit = e.Enabled
-                ? "outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;"
-                : "";
+            _edit = e.Enabled ? _editStyle : "";
             StateHasChanged();
         };
-        //TODO: Block edit if the server does not respond.
-        _content = await ContentService.GetContentAsync(Key, Default, ContentFormat.String);
+        _edit = EditContentService.Enabled ? _editStyle : "";
+
+        _response = await ContentService.GetContentAsync(Key, Default, ContentFormat.String);
+        _content = _response.Value;
     }
 
     private async Task OpenDialog()
     {
         if (!EditContentService.Enabled) return;
+        if (!_response.Success) return;
 
-        var response = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
+        var result = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
             new Dictionary<string, object>
             {
                 { "Key", Key },
                 { "Content", _content },
                 { "Format", ContentFormat.String },
             });
-        if (response != true) return;
+        if (result != true) return;
 
-        _content = await ContentService.GetContentAsync(Key, null, null);
+        _response = await ContentService.GetContentAsync(Key, null, null);
+        _content = _response.Value;
         StateHasChanged();
     }
 }

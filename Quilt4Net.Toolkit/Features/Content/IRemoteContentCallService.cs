@@ -4,6 +4,6 @@ namespace Quilt4Net.Toolkit.Features.Content;
 
 public interface IRemoteContentCallService
 {
-    Task<string> GetContentAsync(string key, string defaultValue, ContentFormat? contentType);
+    Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, ContentFormat? contentType);
     Task SetContentAsync(string key, string defaultValue, ContentFormat contentType);
 }
