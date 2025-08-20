@@ -42,7 +42,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 Application = assemblyName?.Name,
                 Environment = _environmentName.Name,
                 Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
-                DefaultValue = $"{defaultValue}",
+                DefaultValue = contentType == null ? null : $"{defaultValue}",
                 ContentFormat = contentType
             };
             var complexKey = BuildKey(request);

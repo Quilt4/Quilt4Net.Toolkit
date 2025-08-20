@@ -1,4 +1,5 @@
-﻿@using Microsoft.AspNetCore.Components.Web
+﻿@using System.Text.RegularExpressions
+@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.JSInterop
 @using Quilt4Net.Toolkit.Features.Content
 @using Quilt4Net.Toolkit.Features.FeatureToggle
@@ -8,9 +9,9 @@
 @inject IEditContentService EditContentService
 @inject DialogService DialogService
 
-@if (!string.IsNullOrWhiteSpace(_content))
+@if (!string.IsNullOrEmpty(_content))
 {
-    <span style="@_edit" @onclick="OpenDialog">
+    <span style="@_edit" @onclick="OpenDialog" role="button" tabindex="0" @onkeydown="OnKeyDown">
         @((MarkupString)_content)
     </span>
 }
@@ -22,10 +23,12 @@ else
 }
 
 @code {
+    private const string _editStyle = "display: inline-block; padding: 0px; outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
     private ElementReference _holder;
     private IJSObjectReference _mod;
     private string _content;
     private string _edit = "";
+    private (string Value, bool Success) _response;
 
     [Parameter]
     public string Key { get; set; }
@@ -37,46 +40,53 @@ else
     {
         EditContentService.EditModeEvent += (s, e) =>
         {
-            _edit = e.Enabled
-                //? "outline: 2px dotted red; outline-offset: -4px; cursor: pointer;"
-                //? "background-image: repeating-linear-gradient(45deg, #ffc0cb, #ffc0cb 2px, transparent 2px, transparent 6px); cursor: pointer;"
-                //? "display: inline-block; padding: 0px; background-image: repeating-linear-gradient(45deg, #ffc0cb, #ffc0cb 1px, transparent 2px, transparent 12px); outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;"
-                ? "display: inline-block; padding: 0px; outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;"
-                : "";
+            _edit = e.Enabled ? _editStyle : "";
             StateHasChanged();
         };
-        //TODO: Block edit if the server does not respond.
-        //TODO: Wnen we provide null, the value should not be saved
-        _content = await ContentService.GetContentAsync(Key, null, null);
+        _edit = EditContentService.Enabled ? _editStyle : "";
+
+        _response = await ContentService.GetContentAsync(Key, "", null);
+        if (_response.Success) _content = _response.Value;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Load the JS module (client-side only)
-            _mod = await JS.InvokeAsync<IJSObjectReference>("import", "./interop.js");
+            const string js = "export function getInnerHtml(el) { return el?.innerHTML ?? ''; }";
+            var dataUrl = $"data:text/javascript;charset=utf-8,{Uri.EscapeDataString(js)}";
+            _mod = await JS.InvokeAsync<IJSObjectReference>("import", dataUrl);
         }
 
-        // If we still don't have content, capture the ChildContent HTML and use it
-        if (_content is null && ChildContent is not null && _mod is not null)
+        if (string.IsNullOrEmpty(_content) && ChildContent is not null && _mod is not null)
         {
             var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
-
-            // Use the captured HTML as the content to render
-            await ContentService.SetContentAsync(Key, defaultHtml, ContentFormat.Html);
+            if (_response.Success)
+            {
+                await ContentService.SetContentAsync(Key, defaultHtml, ContentFormat.Html);
+            }
             _content = defaultHtml;
-
-            // 🔜 Placeholder: here’s where you would send it to your server
-            // await Http.PostAsJsonAsync($"{Options.Address}Api/Content", new { key = Key, defaultHtml });
-
             StateHasChanged();
         }
+    }
+
+    private static readonly Regex BlazorAttrs = new(
+        @"\s@(?:onclick|on\w+|bind(?:-\w+)?|ref|attributes)\s*=\s*""[^""]*""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static string Sanitize(string html) =>
+        string.IsNullOrEmpty(html) ? string.Empty : BlazorAttrs.Replace(html, "");
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " " or "Spacebar")
+            await OpenDialog();
     }
 
     private async Task OpenDialog()
     {
         if (!EditContentService.Enabled) return;
+        if (!_response.Success) return;
 
         var response = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
             new Dictionary<string, object>
@@ -87,7 +97,8 @@ else
             });
         if (response != true) return;
 
-        _content = await ContentService.GetContentAsync(Key, null, null);
+        _response = await ContentService.GetContentAsync(Key, null, null);
+        _content = _response.Value;
         StateHasChanged();
     }
 }
