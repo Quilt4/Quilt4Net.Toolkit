@@ -19,3 +19,10 @@ Client consumer for *Quilt4Net Toolkit Api* and access for *Application Insights
 Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *Metrics* in .NET Web Applications.
 *Quilt4Net Toolkit* is part of this package.
 [Read more here](Quilt4Net.Toolkit.Api/README.md)
+
+## Dependencies
+- Install `dotnet tool install --global DependencyGraphDrawer`
+- Generate `dotnet dg -s dependency.sln -o dependency.puml --includeNugetPackages`
+- [View](https://www.planttext.com/)
+
+![Dependency](dependency.svg)

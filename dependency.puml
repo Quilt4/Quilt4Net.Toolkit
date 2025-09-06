@@ -1,0 +1,46 @@
+@startuml Dependency graph
+
+!theme plain
+skinparam ComponentStyle rectangle
+left to right direction
+
+' Projects
+[Quilt4Net.Toolkit] #3498db
+[Quilt4Net.Toolkit.Api] #3498db
+[Quilt4Net.Toolkit.Blazor] #3498db
+
+' Nuget packages
+[Azure.Identity v1.15.0] as _629364333 #ecf0f1
+[Azure.Monitor.Query v1.7.1] as _623459337 #ecf0f1
+[Microsoft.Extensions.Configuration.Binder v9.0.8] as _103673492 #ecf0f1
+[Microsoft.Extensions.DependencyInjection.Abstractions v9.0.8] as _1188999270 #ecf0f1
+[Microsoft.Extensions.Logging v9.0.8] as __451738671 #ecf0f1
+[System.Linq.Async v6.0.3] as _1305839485 #ecf0f1
+[Microsoft.SourceLink.GitHub v8.0.0] as _249501629 #ecf0f1
+[Microsoft.ApplicationInsights v2.23.0] as __1588050910 #ecf0f1
+[System.Management v9.0.8] as __215071953 #ecf0f1
+[Microsoft.Authentication.WebAssembly.Msal v9.0.8] as _8328335 #ecf0f1
+[Microsoft.Extensions.Configuration.Abstractions v9.0.8] as __1289703355 #ecf0f1
+[Microsoft.Identity.Client v4.76.0] as __1881297890 #ecf0f1
+[Radzen.Blazor v7.3.3] as _820793147 #ecf0f1
+[Tharga.Blazor v0.0.24] as _300951675 #ecf0f1
+
+Quilt4Net.Toolkit --> _629364333
+Quilt4Net.Toolkit --> _623459337
+Quilt4Net.Toolkit --> _103673492
+Quilt4Net.Toolkit --> _1188999270
+Quilt4Net.Toolkit --> __451738671
+Quilt4Net.Toolkit --> _1305839485
+Quilt4Net.Toolkit --> _249501629
+Quilt4Net.Toolkit.Api --> Quilt4Net.Toolkit
+Quilt4Net.Toolkit.Api --> __1588050910
+Quilt4Net.Toolkit.Api --> __215071953
+Quilt4Net.Toolkit.Api --> _249501629
+Quilt4Net.Toolkit.Blazor --> Quilt4Net.Toolkit
+Quilt4Net.Toolkit.Blazor --> _8328335
+Quilt4Net.Toolkit.Blazor --> __1289703355
+Quilt4Net.Toolkit.Blazor --> _103673492
+Quilt4Net.Toolkit.Blazor --> __1881297890
+Quilt4Net.Toolkit.Blazor --> _820793147
+Quilt4Net.Toolkit.Blazor --> _300951675
+@enduml
