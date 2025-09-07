@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -11,7 +10,8 @@ public static class Quilt4ContentRegistration
 
     public static IServiceCollection AddQuilt4Net(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
     {
-        return AddQuilt4Net(services, null, environmentNameLoader, options);
+        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
+        return AddQuilt4Net(services, configuration, environmentNameLoader, options);
     }
 
     public static IServiceCollection AddQuilt4Net(this IServiceCollection services, IConfiguration configuration, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
@@ -29,43 +29,15 @@ public static class Quilt4ContentRegistration
 
     private static Quilt4NetServerOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetServerOptions> options)
     {
-        var o = configuration?.GetSection("Quilt4Net:Service").Get<Quilt4NetServerOptions>() ?? new Quilt4NetServerOptions();
+        var o  = configuration?.GetSection("Quilt4Net:Service").Get<Quilt4NetServerOptions>() ?? new Quilt4NetServerOptions();
+
+        var oRoot = configuration?.GetSection("Quilt4Net").Get<Quilt4NetServerOptions>();
+        o.ApiKey ??= oRoot?.ApiKey;
+        o.Address ??= oRoot?.Address;
+        o.Ttl ??= oRoot?.Ttl;
+
         options?.Invoke(o);
 
         return o;
     }
-}
-
-public interface IEditContentService
-{
-    event EventHandler<EditModeEventArgs> EditModeEvent;
-    bool Enabled { get; set; }
-}
-
-public class EditContentService : IEditContentService
-{
-    private bool _enabled;
-
-    public event EventHandler<EditModeEventArgs> EditModeEvent;
-
-    public bool Enabled
-    {
-        get => _enabled;
-        set
-        {
-            if (_enabled == value) return;
-            _enabled = value;
-            EditModeEvent?.Invoke(this, new EditModeEventArgs(value));
-        }
-    }
-}
-
-public class EditModeEventArgs : EventArgs
-{
-    public EditModeEventArgs(bool enabled)
-    {
-        Enabled = enabled;
-    }
-
-    public bool Enabled { get; }
 }
