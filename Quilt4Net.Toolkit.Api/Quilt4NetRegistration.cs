@@ -197,7 +197,11 @@ public static class Quilt4NetRegistration
             RouteHandlerBuilder route;
             if (healthEndpoint == HealthEndpoint.Health)
             {
-                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+                //NOTE: This code hides the query parameters noDependencies and noCertSelfCheck. They are default false and should only be used by dependency calls. For that reason it makes sense to hide them here.
+                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+
+                //NOTE: This code shows the query parameters noDependencies and noCertSelfCheck.
+                //route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
             }
             else
             {
