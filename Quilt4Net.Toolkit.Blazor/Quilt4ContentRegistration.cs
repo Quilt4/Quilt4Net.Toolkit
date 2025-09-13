@@ -10,8 +10,7 @@ public static class Quilt4ContentRegistration
 
     public static IServiceCollection AddQuilt4Net(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
     {
-        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
-        return AddQuilt4Net(services, configuration, environmentNameLoader, options);
+        return AddQuilt4Net(services, null, environmentNameLoader, options);
     }
 
     public static IServiceCollection AddQuilt4Net(this IServiceCollection services, IConfiguration configuration, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
@@ -29,13 +28,7 @@ public static class Quilt4ContentRegistration
 
     private static Quilt4NetServerOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetServerOptions> options)
     {
-        var o  = configuration?.GetSection("Quilt4Net:Service").Get<Quilt4NetServerOptions>() ?? new Quilt4NetServerOptions();
-
-        var oRoot = configuration?.GetSection("Quilt4Net").Get<Quilt4NetServerOptions>();
-        o.ApiKey ??= oRoot?.ApiKey;
-        o.Address ??= oRoot?.Address;
-        o.Ttl ??= oRoot?.Ttl;
-
+        var o = configuration?.GetSection("Quilt4Net:Service").Get<Quilt4NetServerOptions>() ?? new Quilt4NetServerOptions();
         options?.Invoke(o);
 
         return o;
