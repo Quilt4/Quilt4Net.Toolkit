@@ -11,13 +11,18 @@ internal class ContentService : IContentService
         _remoteContentCallService = remoteContentCallService;
     }
 
-    public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, ContentFormat? contentType)
+    public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType)
     {
-        return _remoteContentCallService.GetContentAsync(key, defaultValue, contentType);
+        return _remoteContentCallService.GetContentAsync(key, defaultValue, languageKey, contentType);
     }
 
-    public Task SetContentAsync(string key, string value, ContentFormat contentType)
+    public Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType)
     {
-        return _remoteContentCallService.SetContentAsync(key, value, contentType);
+        return _remoteContentCallService.SetContentAsync(key, value, languageKey, contentType);
+    }
+
+    public Task ClearCache()
+    {
+        return _remoteContentCallService.ClearContentCache();
     }
 }

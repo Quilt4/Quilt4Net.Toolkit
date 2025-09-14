@@ -2,5 +2,7 @@
 
 public record Language
 {
-    public required string Name { get; init; }
+    public Guid Key { get; set; }
+    public string Name { get; set; }
+    public bool Developer { get; set; }
 }

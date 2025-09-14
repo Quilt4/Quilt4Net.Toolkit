@@ -51,10 +51,10 @@ builder.Logging.AddApplicationInsights();
 
 builder.AddQuilt4NetApi(o =>
 {
-    o.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
-    o.Address = "https://localhost:7129/";
-    //o.FeatureToggle.Ttl = null;
-    //o.FeatureToggle.InstanceLoader = _ => { return "XXX"; };
+    //o.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
+    //o.Address = "https://localhost:7129/";
+    //o.Ttl = null;
+    //o.InstanceLoader = _ => { return "XXX"; };
 
     o.Certificate.SelfCheckEnabled = false;
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;

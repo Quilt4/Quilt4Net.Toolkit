@@ -1,12 +1,14 @@
-﻿@using System.Text.RegularExpressions
+﻿@using System.Net.Http.Json
+@using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.JSInterop
 @using Quilt4Net.Toolkit.Features.Content
 @using Quilt4Net.Toolkit.Features.FeatureToggle
 @using Radzen
-@inject IJSRuntime JS
+@inject IJSRuntime JsRuntime
 @inject IContentService ContentService
 @inject IEditContentService EditContentService
+@inject ILanguageStateService LanguageStateService
 @inject DialogService DialogService
 
 @if (!string.IsNullOrEmpty(_content))
@@ -23,7 +25,7 @@ else
 }
 
 @code {
-    private const string _editStyle = "display: inline-block; padding: 0px; outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
+    private const string EditStyle = "display: inline-block; padding: 0px; outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
     private ElementReference _holder;
     private IJSObjectReference _mod;
     private string _content;
@@ -38,14 +40,25 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        EditContentService.EditModeEvent += (s, e) =>
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
         {
-            _edit = e.Enabled ? _editStyle : "";
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        EditContentService.EditModeEvent += (_, e) =>
+        {
+            _edit = e.Enabled ? EditStyle : "cursor: text;";
             StateHasChanged();
         };
-        _edit = EditContentService.Enabled ? _editStyle : "";
+        _edit = EditContentService.Enabled ? EditStyle : "cursor: text;";
 
-        _response = await ContentService.GetContentAsync(Key, "", null);
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        //NOTE: Provide empty string as default here, because default needs to be loaded after render. (null would give an answer that we do not want.)
+        _response = await ContentService.GetContentAsync(Key, "", LanguageStateService.Selected?.Key ?? Guid.Empty, null);
         if (_response.Success) _content = _response.Value;
     }
 
@@ -55,27 +68,49 @@ else
         {
             const string js = "export function getInnerHtml(el) { return el?.innerHTML ?? ''; }";
             var dataUrl = $"data:text/javascript;charset=utf-8,{Uri.EscapeDataString(js)}";
-            _mod = await JS.InvokeAsync<IJSObjectReference>("import", dataUrl);
+            _mod = await JsRuntime.InvokeAsync<IJSObjectReference>("import", dataUrl);
         }
 
-        if (string.IsNullOrEmpty(_content) && ChildContent is not null && _mod is not null)
+        if (string.IsNullOrEmpty(_content) && _mod is not null)
         {
-            var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
+            string defaultHtml;
+            if (ChildContent is null)
+            {
+                try
+                {
+                    using var client = new HttpClient();
+                    var item = await client.GetAsync("https://lorem-api.com/api/article/foo");
+                    var payload = await item.Content.ReadFromJsonAsync<Article>();
+                    defaultHtml = payload.content;
+                }
+                catch (Exception e)
+                {
+                    defaultHtml = $"No content for '{Key}'.";
+                }
+            }
+            else
+            {
+                defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
+            }
+
             if (_response.Success)
             {
-                await ContentService.SetContentAsync(Key, defaultHtml, ContentFormat.Html);
+                await ContentService.SetContentAsync(Key, defaultHtml, Guid.Empty, ContentFormat.Html);
             }
+
             _content = defaultHtml;
+
+
             StateHasChanged();
         }
     }
 
-    private static readonly Regex BlazorAttrs = new(
+    private static readonly Regex _blazorAttrs = new(
         @"\s@(?:onclick|on\w+|bind(?:-\w+)?|ref|attributes)\s*=\s*""[^""]*""",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static string Sanitize(string html) =>
-        string.IsNullOrEmpty(html) ? string.Empty : BlazorAttrs.Replace(html, "");
+        string.IsNullOrEmpty(html) ? string.Empty : _blazorAttrs.Replace(html, "");
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
@@ -93,12 +128,17 @@ else
             {
                 { "Key", Key },
                 { "Content", _content },
-                { "Format", ContentFormat.Html },
+                { "ContentFormat", ContentFormat.Html },
             });
         if (response != true) return;
 
-        _response = await ContentService.GetContentAsync(Key, null, null);
+        _response = await ContentService.GetContentAsync(Key, null, LanguageStateService.Selected?.Key ?? Guid.Empty, null);
         _content = _response.Value;
         StateHasChanged();
+    }
+
+    public record Article
+    {
+        public string content { get; set; }
     }
 }

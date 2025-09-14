@@ -1,0 +1,39 @@
+﻿@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject IEditContentService EditContentService
+@inject ILanguageStateService LanguageStateService
+
+@_content
+
+@code {
+    private string _content;
+    private (string Value, bool Success) _response;
+
+    [Parameter]
+    public string Key { get; set; }
+
+    [Parameter]
+    public string Default { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, e) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        EditContentService.EditModeEvent += (s, e) =>
+        {
+            StateHasChanged();
+        };
+
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        _response = await ContentService.GetContentAsync(Key, Default, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        _content = _response.Value;
+    }
+}

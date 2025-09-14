@@ -38,7 +38,8 @@ public static class Quilt4NetRegistration
     /// <param name="options"></param>
     public static void AddQuilt4NetApi(this IServiceCollection services, Action<Quilt4NetApiOptions> options = null)
     {
-        AddQuilt4NetApi(services, null, options);
+        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
+        AddQuilt4NetApi(services, configuration, options);
     }
 
     /// <summary>
@@ -88,14 +89,21 @@ public static class Quilt4NetRegistration
     private static Quilt4NetApiOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApiOptions> options)
     {
         var o = configuration?.GetSection("Quilt4Net:Api").Get<Quilt4NetApiOptions>() ?? new Quilt4NetApiOptions();
+
+        var oRoot = configuration?.GetSection("Quilt4Net").Get<Quilt4NetServerOptions>();
+        o.ApiKey ??= oRoot?.ApiKey;
+        o.Address ??= oRoot?.Address;
+        o.Ttl ??= oRoot?.Ttl;
+        o.Application ??= oRoot?.Application;
+
+        //NOTE: Empty controller name is not allowed, automatically revert to default.
+        if (string.IsNullOrEmpty(o.ControllerName)) o.ControllerName = new Quilt4NetApiOptions().ControllerName;
+
         options?.Invoke(o);
 
         //NOTE: the pattern needs to start and end with '/'.
         if (!o.Pattern.EndsWith('/')) o.Pattern = $"{o.Pattern}/";
         if (!o.Pattern.StartsWith('/')) o.Pattern = $"/{o.Pattern}";
-
-        //NOTE: Empty controller name is not allowed, automatically revert to default.
-        if (string.IsNullOrEmpty(o.ControllerName)) o.ControllerName = new Quilt4NetApiOptions().ControllerName;
 
         return o;
     }
@@ -190,7 +198,11 @@ public static class Quilt4NetRegistration
             RouteHandlerBuilder route;
             if (healthEndpoint == HealthEndpoint.Health)
             {
-                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+                //NOTE: This code hides the query parameters noDependencies and noCertSelfCheck. They are default false and should only be used by dependency calls. For that reason it makes sense to hide them here.
+                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+
+                //NOTE: This code shows the query parameters noDependencies and noCertSelfCheck.
+                //route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
             }
             else
             {

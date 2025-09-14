@@ -2,8 +2,15 @@
 
 internal class LanguageService : ILanguageService
 {
-    public async IAsyncEnumerable<Language> GetLanguagesAsync()
+    private readonly IRemoteContentCallService _remoteContentCallService;
+
+    public LanguageService(IRemoteContentCallService remoteContentCallService)
     {
-        yield return new Language { Name = "Default" };
+        _remoteContentCallService = remoteContentCallService;
+    }
+
+    public Task<Language[]> GetLanguagesAsync(bool forceReload)
+    {
+        return _remoteContentCallService.GetLanguagesAsync(forceReload);
     }
 }
