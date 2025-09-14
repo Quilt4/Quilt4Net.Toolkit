@@ -36,12 +36,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         try
         {
-            var assemblyName = Assembly.GetEntryAssembly()?.GetName();
+            var assemblyName = _options.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
             var request = new GetContentRequest
             {
                 Key = key,
                 LanguageKey = languageKey,
-                Application = assemblyName?.Name,
+                Application = assemblyName,
                 Environment = _environmentName.Name,
                 Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
                 DefaultValue = contentType == null ? null : $"{defaultValue}",
@@ -100,12 +100,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         try
         {
-            var assemblyName = Assembly.GetEntryAssembly()?.GetName();
+            var assemblyName = _options.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
             var setContentRequest = new SetContentRequest
             {
                 Key = key,
                 LanguageKey = languageKey,
-                Application = assemblyName?.Name,
+                Application = assemblyName,
                 Environment = _environmentName.Name,
                 Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
                 Value = $"{value}",
@@ -138,15 +138,17 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         try
         {
+            var assemblyName = _options.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+
             using var client = GetHttpClient();
-            var address = "Api/Language";
+            var address = $"Api/Language/{assemblyName}/{_environmentName.Name}";
             var response = await client.GetAsync(address);
             response.EnsureSuccessStatusCode();
 
-            var languages = await response.Content.ReadFromJsonAsync<Language[]>();
-            _languages = languages;
-            _languagesValidTo = DateTime.UtcNow.AddMinutes(1);
-            return languages;
+            var result = await response.Content.ReadFromJsonAsync<LanguageResponse>();
+            _languages = result.Languages;
+            _languagesValidTo = result.ValidTo;
+            return _languages;
         }
         catch (Exception e)
         {

@@ -32,6 +32,13 @@ public static class Quilt4ContentRegistration
     private static Quilt4NetServerOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetServerOptions> options)
     {
         var o = configuration?.GetSection("Quilt4Net:Service").Get<Quilt4NetServerOptions>() ?? new Quilt4NetServerOptions();
+
+        var oRoot = configuration?.GetSection("Quilt4Net").Get<Quilt4NetServerOptions>();
+        o.ApiKey ??= oRoot?.ApiKey;
+        o.Address ??= oRoot?.Address;
+        o.Ttl ??= oRoot?.Ttl;
+        o.Application ??= oRoot?.Application;
+
         options?.Invoke(o);
 
         return o;

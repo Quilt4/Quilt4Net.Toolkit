@@ -94,6 +94,7 @@ public static class Quilt4NetRegistration
         o.ApiKey ??= oRoot?.ApiKey;
         o.Address ??= oRoot?.Address;
         o.Ttl ??= oRoot?.Ttl;
+        o.Application ??= oRoot?.Application;
 
         //NOTE: Empty controller name is not allowed, automatically revert to default.
         if (string.IsNullOrEmpty(o.ControllerName)) o.ControllerName = new Quilt4NetApiOptions().ControllerName;
