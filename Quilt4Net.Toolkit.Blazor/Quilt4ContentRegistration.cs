@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Blazored.LocalStorage;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -23,6 +24,7 @@ public static class Quilt4ContentRegistration
         services.AddContent(environmentNameLoader);
         services.AddScoped<IEditContentService, EditContentService>();
         services.AddScoped<ILanguageStateService, LanguageStateService>();
+        services.AddBlazoredLocalStorage();
 
         return services;
     }
