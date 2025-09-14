@@ -9,8 +9,8 @@ internal class LanguageService : ILanguageService
         _remoteContentCallService = remoteContentCallService;
     }
 
-    public Task<Language[]> GetLanguagesAsync()
+    public Task<Language[]> GetLanguagesAsync(bool forceReload)
     {
-        return _remoteContentCallService.GetLanguagesAsync();
+        return _remoteContentCallService.GetLanguagesAsync(forceReload);
     }
 }

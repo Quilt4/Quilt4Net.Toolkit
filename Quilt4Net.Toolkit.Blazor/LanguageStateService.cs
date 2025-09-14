@@ -19,9 +19,16 @@ internal class LanguageStateService : ILanguageStateService
 
         Task.Run(async () =>
         {
-            var ls = await ReloadAsync();
-            var key = await _localStorageService.GetItemAsync<Guid?>("Language.Selected");
-            Selected = ls.FirstOrDefault(y => y.Key == key) ?? Selected;
+            var ls = await ReloadAsync(false);
+            try
+            {
+                var key = await _localStorageService.GetItemAsync<Guid?>("Language.Selected");
+                Selected = ls.FirstOrDefault(y => y.Key == key) ?? Selected;
+            }
+            catch (InvalidOperationException)
+            {
+                // ignored
+            }
         });
 
         _selected = _defaultLanguage;
@@ -40,13 +47,18 @@ internal class LanguageStateService : ILanguageStateService
             if (_developerMode == value) return;
             _developerMode = value;
             DeveloperModeEvent?.Invoke(this, new DeveloperModeEventArgs(value));
-            Task.Run(async () => await ReloadAsync());
+            Task.Run(async () => await ReloadAsync(false));
         }
     }
 
-    public async Task<Language[]> ReloadAsync()
+    public Task<Language[]> ReloadAsync()
     {
-        var languages = await _languageService.GetLanguagesAsync();
+        return ReloadAsync(true);
+    }
+
+    public async Task<Language[]> ReloadAsync(bool forceReload)
+    {
+        var languages = await _languageService.GetLanguagesAsync(forceReload);
         if (DeveloperMode)
         {
             languages = languages.Union([

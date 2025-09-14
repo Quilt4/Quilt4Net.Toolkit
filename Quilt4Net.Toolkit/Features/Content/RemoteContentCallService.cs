@@ -16,6 +16,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private readonly ILogger<RemoteContentCallService> _logger;
     private readonly Quilt4NetServerOptions _options;
     private readonly ConcurrentDictionary<string, GetContentResponse> _localCache = new();
+    private Language[] _languages;
+    private DateTime _languagesValidTo;
 
     public RemoteContentCallService(EnvironmentName environmentName, IOptions<Quilt4NetServerOptions> options, ILogger<RemoteContentCallService> logger)
     {
@@ -128,11 +130,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    public async Task<Language[]> GetLanguagesAsync()
+    public async Task<Language[]> GetLanguagesAsync(bool forceReload)
     {
-        //if (string.IsNullOrEmpty(_options.ApiKey)) return ("No ApiKey provided.", false);
+        if (string.IsNullOrEmpty(_options.ApiKey)) return [new Language { Name = "No ApiKey provided.", Key = Guid.Parse("8C12E829-318E-40DA-86E9-6B37A68EFFD1") }];
 
-        //TODO: Use cache
+        if (_languages != null && !forceReload && DateTime.UtcNow < _languagesValidTo) return _languages;
 
         try
         {
@@ -142,6 +144,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
             response.EnsureSuccessStatusCode();
 
             var languages = await response.Content.ReadFromJsonAsync<Language[]>();
+            _languages = languages;
+            _languagesValidTo = DateTime.UtcNow.AddMinutes(1);
             return languages;
         }
         catch (Exception e)
@@ -151,6 +155,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
             Debugger.Break();
             throw;
         }
+    }
+
+    public async Task ClearContentCache()
+    {
+        _localCache.Clear();
     }
 
     private static string BuildKey(GetContentRequest request)

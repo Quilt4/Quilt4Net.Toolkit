@@ -6,5 +6,6 @@ public interface IRemoteContentCallService
 {
     Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType);
     Task SetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat contentType);
-    Task<Language[]> GetLanguagesAsync();
+    Task<Language[]> GetLanguagesAsync(bool forceReload);
+    Task ClearContentCache();
 }

@@ -2,5 +2,5 @@
 
 public interface ILanguageService
 {
-    Task<Language[]> GetLanguagesAsync();
+    Task<Language[]> GetLanguagesAsync(bool forceReload);
 }

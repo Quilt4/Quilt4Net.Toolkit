@@ -20,4 +20,9 @@ internal class ContentService : IContentService
     {
         return _remoteContentCallService.SetContentAsync(key, value, languageKey, contentType);
     }
+
+    public Task ClearCache()
+    {
+        return _remoteContentCallService.ClearContentCache();
+    }
 }

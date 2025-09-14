@@ -47,10 +47,10 @@ else
         };
         EditContentService.EditModeEvent += (_, e) =>
         {
-            _edit = e.Enabled ? EditStyle : "";
+            _edit = e.Enabled ? EditStyle : "cursor: text;";
             StateHasChanged();
         };
-        _edit = EditContentService.Enabled ? EditStyle : "";
+        _edit = EditContentService.Enabled ? EditStyle : "cursor: text;";
 
         await LoadContentAsync();
     }
