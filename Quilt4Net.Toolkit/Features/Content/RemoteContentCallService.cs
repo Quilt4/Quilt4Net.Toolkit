@@ -24,7 +24,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _logger = logger;
     }
 
-    public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, ContentFormat? contentType)
+    public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType)
     {
         if (string.IsNullOrEmpty(_options.ApiKey)) return ("No ApiKey provided.", false);
 
@@ -32,13 +32,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         try
         {
-            string selectedLanguage = null; //TODO: null is default, use "selected" language here.
-
             var assemblyName = Assembly.GetEntryAssembly()?.GetName();
             var request = new GetContentRequest
             {
                 Key = key,
-                Language = selectedLanguage,
+                LanguageKey = languageKey,
                 Application = assemblyName?.Name,
                 Environment = _environmentName.Name,
                 Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
@@ -48,20 +46,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var complexKey = BuildKey(request);
 
             var needRefresh = true;
-            if (_localCache.TryGetValue($"{key}_{selectedLanguage}", out var result))
+            if (_localCache.TryGetValue($"{key}_{languageKey}", out var result))
             {
                 needRefresh = DateTime.UtcNow > result.ValidTo;
             }
 
             if (needRefresh)
             {
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
-                client.BaseAddress = new Uri(_options.Address);
+                using var client = GetHttpClient();
                 var address = $"Api/Content/{complexKey}";
                 var response = await client.GetAsync(address);
-                //var address = $"Api/FeatureToggle/{key}/{request.Application}/{request.Environment}/{request.Instance ?? "-"}/{request.Version}";
-                //var response = await client.GetAsync(address);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -74,7 +68,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
                 result = await response.Content.ReadFromJsonAsync<GetContentResponse>();
 
-                _localCache.AddOrUpdate($"{key}_{selectedLanguage}", result, (_, _) => result);
+                _localCache.AddOrUpdate($"{key}_{languageKey}", result, (_, _) => result);
             }
 
             return (result.Value ?? defaultValue, true);
@@ -96,19 +90,17 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    public async Task SetContentAsync(string key, string value, ContentFormat contentType)
+    public async Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType)
     {
         if (string.IsNullOrEmpty(value)) throw new ArgumentNullException(nameof(value), $"No {nameof(value)} provided for key '{key}'.");
 
         try
         {
-            string selectedLanguage = null; //TODO: null is default, use "selected" language here.
-
             var assemblyName = Assembly.GetEntryAssembly()?.GetName();
             var setContentRequest = new SetContentRequest
             {
                 Key = key,
-                Language = selectedLanguage,
+                LanguageKey = languageKey,
                 Application = assemblyName?.Name,
                 Environment = _environmentName.Name,
                 Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
@@ -116,14 +108,39 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 ContentType = contentType
             };
 
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
-            client.BaseAddress = new Uri(_options.Address);
+            using var client = GetHttpClient();
             var address = "Api/Content";
             var response = await client.PostAsJsonAsync(address, setContentRequest);
             response.EnsureSuccessStatusCode();
 
-            _localCache.TryRemove($"{key}_{selectedLanguage}", out _);
+            _localCache.TryRemove($"{key}_{languageKey}", out _);
+
+            //TODO: Notify the user that this content will be updated after this long time on all clients, because of cache.
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, e.Message);
+            Console.WriteLine(e);
+            Debugger.Break();
+            throw;
+        }
+    }
+
+    public async Task<Language[]> GetLanguagesAsync()
+    {
+        //if (string.IsNullOrEmpty(_options.ApiKey)) return ("No ApiKey provided.", false);
+
+        //TODO: Use cache
+
+        try
+        {
+            using var client = GetHttpClient();
+            var address = "Api/Language";
+            var response = await client.GetAsync(address);
+            response.EnsureSuccessStatusCode();
+
+            var languages = await response.Content.ReadFromJsonAsync<Language[]>();
+            return languages;
         }
         catch (Exception e)
         {
@@ -141,5 +158,22 @@ internal class RemoteContentCallService : IRemoteContentCallService
         var base64 = Convert.ToBase64String(bytes);
         var payload = WebUtility.UrlEncode(base64);
         return payload;
+    }
+
+    private HttpClient GetHttpClient()
+    {
+        HttpClient client = null;
+        try
+        {
+            client = new HttpClient();
+            client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
+            client.BaseAddress = new Uri(_options.Address);
+            return client;
+        }
+        catch
+        {
+            client?.Dispose();
+            throw;
+        }
     }
 }

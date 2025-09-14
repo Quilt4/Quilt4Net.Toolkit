@@ -2,5 +2,5 @@
 
 public interface ILanguageService
 {
-    IAsyncEnumerable<Language> GetLanguagesAsync();
+    Task<Language[]> GetLanguagesAsync();
 }

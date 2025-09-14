@@ -4,16 +4,17 @@
 @using Tharga.Blazor.Framework.Buttons
 @inject DialogService DialogService
 @inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
 
 <RadzenTemplateForm TItem="ContentEditModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
     <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
         <RadzenStack>
-            <RadzenColumn Visible="@(Format == ContentFormat.String)">
+            <RadzenColumn Visible="@(ContentFormat == ContentFormat.String)">
                 <RadzenText TextStyle="TextStyle.Caption">Content</RadzenText>
                 <div><RadzenTextBox Name="Content" @bind-Value="@Model.Content" Style="width: 100%; min-width: 174px;" /></div>
                 <RadzenRequiredValidator Component="Content" Text="Content is required." />
             </RadzenColumn>
-            <RadzenColumn Visible="@(Format == ContentFormat.Html)">
+            <RadzenColumn Visible="@(ContentFormat == ContentFormat.Html)">
                 <RadzenHtmlEditor @bind-Value="Model.Content" />
             </RadzenColumn>
             <RadzenRow>
@@ -41,7 +42,7 @@
     public string Content { get; set; }
 
     [Parameter]
-    public ContentFormat Format { get; set; }
+    public ContentFormat ContentFormat { get; set; }
 
     private ContentEditModel Model { get; set; }
 
@@ -59,7 +60,8 @@
     {
         try
         {
-            await ContentService.SetContentAsync(Key, model.Content, ContentFormat.String);
+            var languageKey = LanguageStateService.Selected?.Key ?? Guid.Empty;
+            await ContentService.SetContentAsync(Key, model.Content, languageKey, ContentFormat);
 
             DialogService.Close(true);
         }

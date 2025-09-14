@@ -3,12 +3,13 @@
 @using Quilt4Net.Toolkit.Features.FeatureToggle
 @inject IContentService ContentService
 @inject IEditContentService EditContentService
+@inject ILanguageStateService LanguageStateService
 @inject Radzen.DialogService DialogService
 
 <RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@_edit" Visible="@Visible" />
 
 @code {
-    private const string _editStyle = "outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
+    private const string EditStyle = "outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
     private string _content;
     private string _edit = "";
     private (string Value, bool Success) _response;
@@ -27,14 +28,24 @@
 
     protected override async Task OnInitializedAsync()
     {
+        LanguageStateService.LanguageChangedEvent += async (_, e) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
         EditContentService.EditModeEvent += (s, e) =>
         {
-            _edit = e.Enabled ? _editStyle : "";
+            _edit = e.Enabled ? EditStyle : "";
             StateHasChanged();
         };
-        _edit = EditContentService.Enabled ? _editStyle : "";
+        _edit = EditContentService.Enabled ? EditStyle : "";
 
-        _response = await ContentService.GetContentAsync(Key, Default, ContentFormat.String);
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        _response = await ContentService.GetContentAsync(Key, Default, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
         _content = _response.Value;
     }
 
@@ -48,11 +59,11 @@
             {
                 { "Key", Key },
                 { "Content", _content },
-                { "Format", ContentFormat.String },
+                { "ContentFormat", ContentFormat.String },
             });
         if (result != true) return;
 
-        _response = await ContentService.GetContentAsync(Key, null, null);
+        _response = await ContentService.GetContentAsync(Key, null, LanguageStateService.Selected?.Key ?? Guid.Empty, null);
         _content = _response.Value;
         StateHasChanged();
     }

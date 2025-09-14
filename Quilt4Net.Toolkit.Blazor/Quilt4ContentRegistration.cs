@@ -22,6 +22,7 @@ public static class Quilt4ContentRegistration
         services.AddRemoteConfiguration(environmentNameLoader);
         services.AddContent(environmentNameLoader);
         services.AddScoped<IEditContentService, EditContentService>();
+        services.AddScoped<ILanguageStateService, LanguageStateService>();
 
         return services;
     }
