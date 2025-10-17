@@ -54,7 +54,8 @@ public static class Quilt4NetRegistration
         services.AddSingleton(_ => _options);
         services.AddSingleton(Options.Create(_options));
         services.AddSingleton<Quilt4NetServerOptions>(_ => _options);
-        services.AddSingleton<IOptions<Quilt4NetServerOptions>>(Options.Create(_options));
+        services.AddSingleton(Options.Create((Quilt4NetServerOptions)_options));
+        //services.AddSingleton<IOptions<Quilt4NetServerOptions>>(Options.Create(_options));
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -92,7 +93,7 @@ public static class Quilt4NetRegistration
 
         var oRoot = configuration?.GetSection("Quilt4Net").Get<Quilt4NetServerOptions>();
         o.ApiKey ??= oRoot?.ApiKey;
-        o.Address ??= oRoot?.Address;
+        o.Address ??= oRoot?.Address; //?? "https://quilt4net.com/";
         o.Ttl ??= oRoot?.Ttl;
         o.Application ??= oRoot?.Application;
 

@@ -1,0 +1,45 @@
+﻿@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject ILanguageStateService LanguageStateService
+@inject IContentService ContentService
+
+@* <Tharga.Blazor.StandardButton Text="@_text" Icon="@Icon" Click="@Click" /> *@
+<RadzenButton Text="@_text" Icon="@Icon" Click="@Click" Style="@Style" />
+
+@code {
+    private string _text;
+
+    [Parameter]
+    public string TextKey { get; set; }
+
+    [Parameter]
+    public string DefaultText { get; set; }
+
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public Func<Task> Click { get; set; }
+
+    [Parameter]
+    public string Style{ get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, e) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await LoadContentAsync();
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        _text = (await ContentService.GetContentAsync(TextKey, DefaultText, LanguageStateService.Selected.Key, ContentFormat.String)).Value;
+    }
+
+}
