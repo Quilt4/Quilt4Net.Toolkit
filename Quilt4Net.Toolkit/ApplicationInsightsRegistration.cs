@@ -7,7 +7,7 @@ namespace Quilt4Net.Toolkit;
 
 public static class ApplicationInsightsRegistration
 {
-    public static void AddQuilt4NetApplicationInsights(this IServiceCollection serviceCollection, Action<Quilt4NetApplicationInsightsOptions> options = default)
+    public static void AddQuilt4NetApplicationInsights(this IServiceCollection serviceCollection, Action<Quilt4NetApplicationInsightsOptions> options = null)
     {
         serviceCollection.AddSingleton(s =>
         {

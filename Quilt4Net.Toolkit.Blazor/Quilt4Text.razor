@@ -6,12 +6,12 @@
 @inject ILanguageStateService LanguageStateService
 @inject Radzen.DialogService DialogService
 
-<RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@_edit" Visible="@Visible" />
+<RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@GetStyle()" Visible="@Visible" />
 
 @code {
     private const string EditStyle = "outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
     private string _content;
-    private string _edit = "";
+    private string _edit = null;
     private (string Value, bool Success) _response;
 
     [Parameter]
@@ -26,6 +26,11 @@
     [Parameter]
     public bool Visible { get; set; } = true;
 
+    [Parameter]
+    public string Style { get; set; }
+
+    private string GetStyle() => _edit ?? Style;
+
     protected override async Task OnInitializedAsync()
     {
         LanguageStateService.LanguageChangedEvent += async (_, e) =>
@@ -35,10 +40,10 @@
         };
         EditContentService.EditModeEvent += (s, e) =>
         {
-            _edit = e.Enabled ? EditStyle : "";
+            _edit = e.Enabled ? EditStyle : null;
             StateHasChanged();
         };
-        _edit = EditContentService.Enabled ? EditStyle : "";
+        _edit = EditContentService.Enabled ? EditStyle : null;
 
         await LoadContentAsync();
     }
