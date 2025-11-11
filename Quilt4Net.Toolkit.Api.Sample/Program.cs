@@ -1,6 +1,6 @@
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
