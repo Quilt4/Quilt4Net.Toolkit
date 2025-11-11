@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
-		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Version>1.0.0</Version>
 		<Authors>Thargelion AB</Authors>
@@ -43,7 +43,7 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Microsoft.ApplicationInsights" Version="2.23.0" />
-	  <PackageReference Include="System.Management" Version="9.0.10" />
+	  <PackageReference Include="System.Management" Version="10.0.0" />
 	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
