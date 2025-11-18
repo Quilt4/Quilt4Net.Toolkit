@@ -6,9 +6,9 @@ using Quilt4Net.Toolkit.Features.FeatureToggle;
 
 namespace Quilt4Net.Toolkit;
 
-public static class ContentRegistration
+public static class ContentRegistration //TODO: Revisit
 {
-    public static void AddContent(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader)
+    public static void AddQuilt4NetContent(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader)
     {
         services.AddTransient<ILanguageService, LanguageService>();
         services.AddTransient<IContentService, ContentService>();

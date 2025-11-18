@@ -16,7 +16,6 @@ internal class ReadyService : IReadyService
 
     public async IAsyncEnumerable<KeyValuePair<string, ReadyComponent>> GetStatusAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        //await foreach (var variable in _healthService.GetStatusAsync(x => x.NeededToBeReady ?? x.Essential, false, cancellationToken))
         await foreach (var variable in _healthService.GetStatusAsync(_ => true, false, cancellationToken))
         {
             yield return new KeyValuePair<string, ReadyComponent>(variable.Key, new ReadyComponent { Status = variable.Value.Status.ToReadyStatusResult() });

@@ -4,7 +4,7 @@ using Quilt4Net.Toolkit.Features.Health;
 
 namespace Quilt4Net.Toolkit;
 
-public static class HealthRegistration
+public static class HealthRegistration //TODO: Revisit
 {
     private static Quilt4NetHealthOptions _options;
 
@@ -58,6 +58,6 @@ public static class HealthRegistration
 
     public static void UseQuilt4NetHealthClient(this IServiceProvider serviceProvider)
     {
-        var x = serviceProvider.GetServices<Quilt4NetHealthOptions>();
+        serviceProvider.GetServices<Quilt4NetHealthOptions>();
     }
 }

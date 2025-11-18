@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace Quilt4Net.Toolkit.Blazor;
 
-public static class Quilt4ContentRegistration
+public static class Quilt4ContentRegistration //TODO: Revisit
 {
     private static Quilt4NetServerOptions _options;
 
@@ -21,7 +21,7 @@ public static class Quilt4ContentRegistration
         services.AddSingleton(Options.Create(_options));
 
         services.AddRemoteConfiguration(environmentNameLoader);
-        services.AddContent(environmentNameLoader);
+        services.AddQuilt4NetContent(environmentNameLoader);
         services.AddScoped<IEditContentService, EditContentService>();
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddBlazoredLocalStorage();

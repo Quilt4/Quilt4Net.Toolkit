@@ -5,7 +5,7 @@ using Quilt4Net.Toolkit.Features.FeatureToggle;
 
 namespace Quilt4Net.Toolkit;
 
-public static class RemoteConfigurationRegistration
+public static class RemoteConfigurationRegistration //TODO: Revisit
 {
     public static void AddRemoteConfiguration(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader)
     {

@@ -13,7 +13,7 @@ internal class HealthService : IHealthService
     private readonly Quilt4NetApiOptions _option;
     private readonly ILogger<HealthService> _logger;
 
-    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, IHostedServiceProbeRegistry hostedServiceProbeRegistry, Quilt4NetApiOptions option, ILogger<HealthService> logger = default)
+    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, IHostedServiceProbeRegistry hostedServiceProbeRegistry, Quilt4NetApiOptions option, ILogger<HealthService> logger = null)
     {
         _hostEnvironment = hostEnvironment;
         _serviceProvider = serviceProvider;

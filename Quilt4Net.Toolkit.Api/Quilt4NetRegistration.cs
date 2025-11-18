@@ -17,12 +17,12 @@ namespace Quilt4Net.Toolkit.Api;
 /// <summary>
 /// Quilt4Net service registration.
 /// </summary>
-public static class Quilt4NetRegistration
+public static class Quilt4NetRegistration //TODO: Revisit
 {
     private static Quilt4NetApiOptions _options;
 
     /// <summary>
-    /// Register using WebApplicationBuilder.
+    /// Add Quilt4Net API so that OpenAPI and health endpoints are available.
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="options"></param>
@@ -32,7 +32,7 @@ public static class Quilt4NetRegistration
     }
 
     /// <summary>
-    ///
+    /// Add Quilt4Net API so that OpenAPI and health endpoints are available.
     /// </summary>
     /// <param name="services"></param>
     /// <param name="options"></param>
@@ -43,7 +43,7 @@ public static class Quilt4NetRegistration
     }
 
     /// <summary>
-    /// Register using IServiceCollection and optional IConfiguration.
+    /// Add Quilt4Net API so that OpenAPI and health endpoints are available.
     /// </summary>
     /// <param name="services"></param>
     /// <param name="configuration"></param>
@@ -55,7 +55,6 @@ public static class Quilt4NetRegistration
         services.AddSingleton(Options.Create(_options));
         services.AddSingleton<Quilt4NetServerOptions>(_ => _options);
         services.AddSingleton(Options.Create((Quilt4NetServerOptions)_options));
-        //services.AddSingleton<IOptions<Quilt4NetServerOptions>>(Options.Create(_options));
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -73,8 +72,9 @@ public static class Quilt4NetRegistration
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
 
+        //TODO: Revisit: Remove this from here, it should only be registered from a specific registration
         services.AddRemoteConfiguration(s => s.GetService<IHostEnvironment>().EnvironmentName);
-        services.AddContent(s => s.GetService<IHostEnvironment>().EnvironmentName);
+        services.AddQuilt4NetContent(s => s.GetService<IHostEnvironment>().EnvironmentName);
 
         foreach (var componentServices in _options.ComponentServices)
         {
@@ -265,42 +265,3 @@ public static class Quilt4NetRegistration
         if (flags.Head) yield return "HEAD";
     }
 }
-
-//public class OpenApiDocumentGenerator
-//{
-//    public OpenApiDocument CreateDocument(ApiDescriptionGroupCollection apiGroups)
-//    {
-//        var doc = new OpenApiDocument
-//        {
-//            Info = new OpenApiInfo
-//            {
-//                Title = "Your API",
-//                Version = "v1"
-//            },
-//            Paths = new OpenApiPaths()
-//        };
-
-//        foreach (var group in apiGroups.Items)
-//        {
-//            foreach (var api in group.Items)
-//            {
-//                var path = "/" + api.RelativePath.TrimEnd('/');
-//                if (!doc.Paths.ContainsKey(path))
-//                {
-//                    doc.Paths[path] = new OpenApiPathItem();
-//                }
-
-//                doc.Paths[path].Operations[OperationType.Get] = new OpenApiOperation
-//                {
-//                    Summary = api.ActionDescriptor.DisplayName,
-//                    Responses = new OpenApiResponses
-//                    {
-//                        ["200"] = new OpenApiResponse { Description = "Success" }
-//                    }
-//                };
-//            }
-//        }
-
-//        return doc;
-//    }
-//}

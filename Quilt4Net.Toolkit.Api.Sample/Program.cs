@@ -49,6 +49,10 @@ builder.Services.AddHostedService<MyHostedService>();
 builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
 builder.Logging.AddApplicationInsights();
 
+//TODO: Revisit: Refactor adding of content services.
+builder.Services.AddQuilt4NetContent(s => builder.Environment.EnvironmentName);
+
+//TODO: Revisit: Refactor adding of api services. (This adds open api endpoints to an api service)
 builder.AddQuilt4NetApi(o =>
 {
     //o.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
@@ -96,11 +100,14 @@ builder.AddQuilt4NetApi(o =>
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
 });
+
+//TODO: Revisit: This creates a healt check client. (It has the capability of checking the health of a service).
 builder.Services.AddQuilt4NetHealthClient(o =>
 {
     o.HealthAddress = new Uri("https://localhost:7119/api/Health");
 });
-builder.Services.AddQuilt4NetApplicationInsights();
+
+//builder.Services.AddQuilt4NetApplicationInsights();
 
 var app = builder.Build();
 
@@ -117,6 +124,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetApi();
-app.Services.UseQuilt4NetHealthClient();
+app.UseQuilt4NetHealthClient();
 
 app.Run();
