@@ -6,8 +6,8 @@ using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Api.Sample;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Features.Health.Dependency;
 using Quilt4Net.Toolkit.Sample;
-using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,7 +50,7 @@ builder.Services.AddHostedService<MyHostedService>();
 builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
 builder.Logging.AddApplicationInsights();
 
-builder.Services.AddTransient<Class1>();
+builder.Services.AddTransient<BackgroundHealthCheckService>();
 
 builder.AddQuilt4NetApplicationInsightsClient();
 builder.AddQuilt4NetHealthClient();

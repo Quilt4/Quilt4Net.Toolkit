@@ -4,10 +4,10 @@ using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Quilt4Net.Toolkit.Api.Features.Health;
-using Quilt4Net.Toolkit.Api.Features.Probe;
 using Quilt4Net.Toolkit.Api.Tests.Helper;
+using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Features.Probe;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Api.Tests;

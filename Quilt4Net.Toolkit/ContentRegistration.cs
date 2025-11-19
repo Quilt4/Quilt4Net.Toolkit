@@ -9,7 +9,7 @@ namespace Quilt4Net.Toolkit;
 
 public static class ContentRegistration
 {
-    public static void AddQuilt4NetContent(this IServiceCollection services, Action<ContentOptions> options = null) //, Func<IServiceProvider, string> environmentNameLoader, Action<ContentOptions> options = null)
+    public static void AddQuilt4NetContent(this IServiceCollection services, Action<ContentOptions> options = null)
     {
         var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
 

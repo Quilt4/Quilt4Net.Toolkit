@@ -267,9 +267,9 @@ public class RequestResponseLoggingMiddleware
         };
     }
 
-    private async Task LogRequestAndResponseAsync(Request request, Response response, TimeSpan elapsed, string correlationId, string detailsJson, Exception e = null)
+    private Task LogRequestAndResponseAsync(Request request, Response response, TimeSpan elapsed, string correlationId, string detailsJson, Exception e = null)
     {
-        if (!(_options?.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger) ?? false)) return;
+        if (!(_options?.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger) ?? false)) return Task.CompletedTask;
 
         var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
         var responseJson = response != null ? System.Text.Json.JsonSerializer.Serialize(response) : null;
@@ -282,6 +282,8 @@ public class RequestResponseLoggingMiddleware
         {
             _logger.LogError("Http {Method} to {Path} in {Elapsed} ms, failed {ErrorMessage} @{StackTrace}. {Request} {Details} CorrelationId: {CorrelationId}", request.Method, request.Path, elapsed, e.Message, e.StackTrace, requestJson, detailsJson, correlationId);
         }
+
+        return Task.CompletedTask;
     }
 
     private string BuildDetailsString(Dictionary<string, string> details, Exception e = null)

@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
+using Quilt4Net.Toolkit.Features.Api;
 
 namespace Quilt4Net.Toolkit.Api.Framework;
 

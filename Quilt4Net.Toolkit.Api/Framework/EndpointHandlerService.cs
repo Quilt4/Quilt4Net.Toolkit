@@ -1,12 +1,12 @@
 ﻿using Microsoft.Extensions.Options;
-using Quilt4Net.Toolkit.Api.Features.Dependency;
-using Quilt4Net.Toolkit.Api.Features.Health;
-using Quilt4Net.Toolkit.Api.Features.Live;
-using Quilt4Net.Toolkit.Api.Features.Metrics;
-using Quilt4Net.Toolkit.Api.Features.Ready;
-using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
+using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Features.Health.Dependency;
+using Quilt4Net.Toolkit.Features.Health.Live;
+using Quilt4Net.Toolkit.Features.Health.Metrics;
+using Quilt4Net.Toolkit.Features.Health.Ready;
+using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api.Framework;

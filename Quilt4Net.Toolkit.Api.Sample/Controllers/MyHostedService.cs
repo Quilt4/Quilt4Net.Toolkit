@@ -1,4 +1,4 @@
-using Quilt4Net.Toolkit.Api.Features.Probe;
+using Quilt4Net.Toolkit.Features.Probe;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 
