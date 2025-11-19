@@ -1,12 +1,13 @@
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
-using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Api.Sample;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Features.Health.Dependency;
+using Quilt4Net.Toolkit.Sample;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,14 +50,22 @@ builder.Services.AddHostedService<MyHostedService>();
 builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
 builder.Logging.AddApplicationInsights();
 
+builder.Services.AddTransient<BackgroundHealthCheckService>();
+
+builder.AddQuilt4NetApplicationInsightsClient();
+builder.AddQuilt4NetHealthClient();
+builder.AddQuilt4NetContent();
+builder.AddQuilt4NetRemoteConfiguration();
+builder.AddQuilt4NetLogging(o =>
+{
+    o.Interceptor = async (request, response, details, _) =>
+    {
+        return (request, response, details);
+    };
+});
 builder.AddQuilt4NetApi(o =>
 {
-    //o.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
-    //o.Address = "https://localhost:7129/";
-    //o.Ttl = null;
-    //o.InstanceLoader = _ => { return "XXX"; };
-
-    o.Certificate.SelfCheckEnabled = false;
+    //o.Certificate.SelfCheckEnabled = false;
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
 
     var config = new Dictionary<HealthEndpoint, AccessFlags>
@@ -96,11 +105,6 @@ builder.AddQuilt4NetApi(o =>
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
 });
-builder.Services.AddQuilt4NetHealthClient(o =>
-{
-    o.HealthAddress = new Uri("https://localhost:7119/api/Health");
-});
-builder.Services.AddQuilt4NetApplicationInsights();
 
 var app = builder.Build();
 
@@ -117,6 +121,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetApi();
-app.Services.UseQuilt4NetHealthClient();
+app.UseQuilt4NetLogging();
 
 app.Run();

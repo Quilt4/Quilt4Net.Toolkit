@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Quilt4Net.Toolkit.Api\Quilt4Net.Toolkit.Api.csproj" />
+    <ProjectReference Include="..\Quilt4Net.Toolkit.Sample\Quilt4Net.Toolkit.Sample.csproj" />
   </ItemGroup>
 
 </Project>

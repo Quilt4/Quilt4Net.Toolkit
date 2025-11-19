@@ -2,7 +2,6 @@
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
-//TODO: Add item Id ResourceGUID, IKey
 public record LogItem
 {
     public required string Id { get; init; }

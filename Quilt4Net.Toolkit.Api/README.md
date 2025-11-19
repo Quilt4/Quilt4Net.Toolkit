@@ -102,6 +102,9 @@ Use this endpoint to check if a new instance sould be started. Commonly used in 
 
 Use this endpoint to check if the instance is ready to perform work.
 
+## Service Probe
+TODO: Revisit
+
 ## Troubleshooting
 Error at startup with the message:
 `Unhandled exception. System.InvalidOperationException: EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware and so must be added to the request execution pipeline before EndpointMiddleware. Please add EndpointRoutingMiddleware by calling 'IApplicationBuilder.UseRouting' inside the call to 'Configure(...)' in the application startup code.`

@@ -1,46 +1,23 @@
 ﻿using Blazored.LocalStorage;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
 
 namespace Quilt4Net.Toolkit.Blazor;
 
 public static class Quilt4ContentRegistration
 {
-    private static Quilt4NetServerOptions _options;
-
-    public static IServiceCollection AddQuilt4Net(this IServiceCollection services, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
+    public static IServiceCollection AddQuilt4NetBlazorContent(this IHostApplicationBuilder builder, Action<ContentOptions> options = null)
     {
-        return AddQuilt4Net(services, null, environmentNameLoader, options);
+        return builder.Services.AddQuilt4NetBlazorContent(options);
     }
 
-    public static IServiceCollection AddQuilt4Net(this IServiceCollection services, IConfiguration configuration, Func<IServiceProvider, string> environmentNameLoader, Action<Quilt4NetServerOptions> options = null)
+    public static IServiceCollection AddQuilt4NetBlazorContent(this IServiceCollection services, Action<ContentOptions> options = null)
     {
-        _options = BuildOptions(configuration, options);
-        services.AddSingleton(_ => _options);
-        services.AddSingleton(Options.Create(_options));
-
-        services.AddRemoteConfiguration(environmentNameLoader);
-        services.AddContent(environmentNameLoader);
         services.AddScoped<IEditContentService, EditContentService>();
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddBlazoredLocalStorage();
+        services.AddQuilt4NetContent(options);
 
         return services;
-    }
-
-    private static Quilt4NetServerOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetServerOptions> options)
-    {
-        var o = configuration?.GetSection("Quilt4Net:Service").Get<Quilt4NetServerOptions>() ?? new Quilt4NetServerOptions();
-
-        var oRoot = configuration?.GetSection("Quilt4Net").Get<Quilt4NetServerOptions>();
-        o.ApiKey ??= oRoot?.ApiKey;
-        o.Address ??= oRoot?.Address;
-        o.Ttl ??= oRoot?.Ttl;
-        o.Application ??= oRoot?.Application;
-
-        options?.Invoke(o);
-
-        return o;
     }
 }

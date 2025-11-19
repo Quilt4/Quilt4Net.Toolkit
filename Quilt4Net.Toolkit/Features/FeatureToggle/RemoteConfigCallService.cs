@@ -12,11 +12,11 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly EnvironmentName _environmentName;
-    private readonly Quilt4NetServerOptions _options;
+    private readonly RemoteConfigurationOptions _options;
     private readonly ILogger<RemoteConfigCallService> _logger;
     private readonly ConcurrentDictionary<string, FeatureToggleResponse> _localCache = new();
 
-    public RemoteConfigCallService(IServiceProvider serviceProvider, EnvironmentName environmentName, IOptions<Quilt4NetServerOptions> options, ILogger<RemoteConfigCallService> logger)
+    public RemoteConfigCallService(IServiceProvider serviceProvider, EnvironmentName environmentName, IOptions<RemoteConfigurationOptions> options, ILogger<RemoteConfigCallService> logger)
     {
         _serviceProvider = serviceProvider;
         _environmentName = environmentName;
@@ -57,7 +57,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             {
                 using var client = new HttpClient();
                 client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
-                client.BaseAddress = new Uri(_options.Address);
+                client.BaseAddress = new Uri(_options.Quilt4NetAddress);
                 var address = $"Api/Configuration/{complexKey}";
                 var response = await client.GetAsync(address);
                 //var address = $"Api/FeatureToggle/{key}/{request.Application}/{request.Environment}/{request.Instance ?? "-"}/{request.Version}";

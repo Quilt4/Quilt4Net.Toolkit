@@ -2,7 +2,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Moq;
-using Quilt4Net.Toolkit.Api.Features.Version;
+using Quilt4Net.Toolkit.Features.Api;
+using Quilt4Net.Toolkit.Features.Health.Version;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Api.Tests;

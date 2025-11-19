@@ -4,17 +4,18 @@ using Azure;
 using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
+using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 internal class ApplicationInsightsService : IApplicationInsightsService
 {
-    private readonly Quilt4NetApplicationInsightsOptions _options;
+    private readonly ApplicationInsightsOptions _options;
 
-    public ApplicationInsightsService(Quilt4NetApplicationInsightsOptions options)
+    public ApplicationInsightsService(IOptions<ApplicationInsightsOptions> options)
     {
-        _options = options;
+        _options = options.Value;
     }
 
     public async IAsyncEnumerable<SummaryData> GetSummaryAsync(string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel)
@@ -184,7 +185,7 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     private LogsQueryClient GetClient()
     {
         var optionsClientSecret = _options.ClientSecret;
-        if (string.IsNullOrEmpty(optionsClientSecret)) throw new InvalidOperationException($"No {nameof(Quilt4NetApplicationInsightsOptions.ClientSecret)} has been configured.");
+        if (string.IsNullOrEmpty(optionsClientSecret)) throw new InvalidOperationException($"No {nameof(ApplicationInsightsOptions.ClientSecret)} has been configured.");
         var clientSecretCredential = new ClientSecretCredential(_options.TenantId, _options.ClientId, optionsClientSecret);
         var client = new LogsQueryClient(clientSecretCredential);
         return client;
