@@ -1,0 +1,24 @@
+﻿using Quilt4Net.Toolkit.Features.Health;
+
+namespace Quilt4Net.Toolkit.Api.Features.Live;
+
+/// <summary>
+/// Service for Live.
+/// </summary>
+public interface ILiveService
+{
+    /// <summary>
+    /// Performs Live checks.
+    /// This method always returns Alive.
+    /// </summary>
+    /// <returns></returns>
+    ValueTask<LiveResponse> GetStatusAsync();
+}
+
+internal class LiveService : ILiveService
+{
+    public ValueTask<LiveResponse> GetStatusAsync()
+    {
+        return ValueTask.FromResult(new LiveResponse { Status = LiveStatus.Alive });
+    }
+}

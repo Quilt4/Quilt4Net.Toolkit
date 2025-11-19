@@ -1,11 +1,11 @@
-﻿using Quilt4Net.Toolkit.Features.Health;
+﻿//using Quilt4Net.Toolkit.Features.Health;
 
-namespace Quilt4Net.Toolkit.Api.Features.Live;
+//namespace Quilt4Net.Toolkit.Api.Features.Live;
 
-internal class LiveService : ILiveService
-{
-    public ValueTask<LiveResponse> GetStatusAsync()
-    {
-        return ValueTask.FromResult(new LiveResponse { Status = LiveStatus.Alive });
-    }
-}
+//internal class LiveService : ILiveService
+//{
+//    public ValueTask<LiveResponse> GetStatusAsync()
+//    {
+//        return ValueTask.FromResult(new LiveResponse { Status = LiveStatus.Alive });
+//    }
+//}

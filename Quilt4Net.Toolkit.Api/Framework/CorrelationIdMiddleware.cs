@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Api;
+﻿namespace Quilt4Net.Toolkit.Api.Framework;
 
 public class CorrelationIdMiddleware
 {

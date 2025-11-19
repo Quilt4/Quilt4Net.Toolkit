@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Measure;
 using Quilt4Net.Toolkit.Framework;
 
-namespace Quilt4Net.Toolkit.Api;
+namespace Quilt4Net.Toolkit.Api.Framework;
 
 public class RequestResponseLoggingMiddleware
 {

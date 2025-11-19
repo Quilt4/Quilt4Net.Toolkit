@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc.Abstractions;
+﻿using System.Reflection;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Api.Features.Dependency;
 using Quilt4Net.Toolkit.Api.Features.Health;
@@ -10,7 +11,6 @@ using Quilt4Net.Toolkit.Api.Features.Version;
 using Quilt4Net.Toolkit.Api.Framework;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Features.Health;
-using System.Reflection;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -164,7 +164,7 @@ public static class ApiRegistration
                 //if (response.Item2 != null)
                 //    route.Produces(response.StatusCode, response.Type, "application/json");
                 //else
-                    route.Produces(response.StatusCode);
+                route.Produces(response.StatusCode);
             }
 
             if (!flags.Visible) route.ExcludeFromDescription();
@@ -177,7 +177,7 @@ public static class ApiRegistration
         }
     }
 
-    private static (string Description, string Summary, (int StatusCode,Type Type)[] Responses) GetDocumentation(HealthEndpoint healthEndpoint)
+    private static (string Description, string Summary, (int StatusCode, Type Type)[] Responses) GetDocumentation(HealthEndpoint healthEndpoint)
     {
         switch (healthEndpoint)
         {
