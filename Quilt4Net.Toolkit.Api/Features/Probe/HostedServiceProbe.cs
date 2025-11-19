@@ -10,7 +10,7 @@ internal class HostedServiceProbe<TComponent> : HostedServiceProbe, IHostedServi
     {
     }
 
-    public IHostedServiceProbe Register(TimeSpan? plannedInterval = default, bool autoMaxInterval = true)
+    public IHostedServiceProbe Register(TimeSpan? plannedInterval = null, bool autoMaxInterval = true)
     {
         return Register(Name, plannedInterval, autoMaxInterval);
     }
@@ -55,7 +55,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
         _exception = null;
     }
 
-    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = default, bool autoMaxInterval = true)
+    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = null, bool autoMaxInterval = true)
     {
         _name = name;
         _plannedInterval = plannedInterval;
@@ -159,18 +159,18 @@ internal class HostedServiceProbe : IHostedServiceProbe
 
         // Calculate intervals between pulses
         List<long> intervals = new();
-        for (int i = 1; i < _pulseTimes.Count; i++)
+        for (var i = 1; i < _pulseTimes.Count; i++)
         {
             intervals.Add(_pulseTimes[i] - _pulseTimes[i - 1]);
         }
 
-        double averageInterval = intervals.Average();
-        double variance = intervals.Select(interval => Math.Pow(interval - averageInterval, 2)).Average();
-        double standardDeviation = Math.Sqrt(variance);
+        var averageInterval = intervals.Average();
+        var variance = intervals.Select(interval => Math.Pow(interval - averageInterval, 2)).Average();
+        var standardDeviation = Math.Sqrt(variance);
 
         // Time since last pulse
-        long elapsedSinceLastPulse = _stopwatch.ElapsedMilliseconds - _pulseTimes.Last();
-        TimeSpan timeSinceLastPulse = TimeSpan.FromMilliseconds(elapsedSinceLastPulse);
+        var elapsedSinceLastPulse = _stopwatch.ElapsedMilliseconds - _pulseTimes.Last();
+        var timeSinceLastPulse = TimeSpan.FromMilliseconds(elapsedSinceLastPulse);
 
         //Extra
         var averageFrequency = 1000 / averageInterval;
@@ -182,7 +182,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
         // Determine state
         HealthStatus state;
         string reason;
-        DateTime nextExpectedPulse = DateTime.UtcNow.AddMilliseconds(averageInterval);
+        var nextExpectedPulse = DateTime.UtcNow.AddMilliseconds(averageInterval);
 
         // Logic for determining status
         if (_plannedInterval.HasValue && elapsedSinceLastPulse < _plannedInterval.Value.TotalMilliseconds)

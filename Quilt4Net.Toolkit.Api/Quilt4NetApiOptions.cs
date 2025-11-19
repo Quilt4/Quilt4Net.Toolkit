@@ -6,7 +6,7 @@ namespace Quilt4Net.Toolkit.Api;
 /// <summary>
 /// Configuration options for Quilt4NetApi.
 /// </summary>
-public record Quilt4NetApiOptions : Quilt4NetServerOptions //TODO: Revisit: Remove Quilt4NetServerOptions from here.
+public record Quilt4NetApiOptions
 {
     private readonly ConcurrentDictionary<string, Component> _components = new ();
     private readonly ConcurrentDictionary<Type, Type> _componentServices = new ();

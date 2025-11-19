@@ -1,7 +1,6 @@
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
-using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Api.Sample;
@@ -49,17 +48,12 @@ builder.Services.AddHostedService<MyHostedService>();
 builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
 builder.Logging.AddApplicationInsights();
 
-//TODO: Revisit: Refactor adding of content services.
-builder.Services.AddQuilt4NetContent(s => builder.Environment.EnvironmentName);
-
-//TODO: Revisit: Refactor adding of api services. (This adds open api endpoints to an api service)
+builder.AddQuilt4NetApplicationInsightsClient();
+builder.AddQuilt4NetHealthClient();
+builder.AddQuilt4NetContent();
+builder.AddQuilt4NetRemoteConfiguration();
 builder.AddQuilt4NetApi(o =>
 {
-    //o.ApiKey = "Q1FaQUs4NUhTSk45VTpCNE92SEU0REFKazhpNzR4MDg3MVRrQlM=";
-    //o.Address = "https://localhost:7129/";
-    //o.Ttl = null;
-    //o.InstanceLoader = _ => { return "XXX"; };
-
     o.Certificate.SelfCheckEnabled = false;
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
 
@@ -101,14 +95,6 @@ builder.AddQuilt4NetApi(o =>
     });
 });
 
-//TODO: Revisit: This creates a healt check client. (It has the capability of checking the health of a service).
-builder.Services.AddQuilt4NetHealthClient(o =>
-{
-    o.HealthAddress = new Uri("https://localhost:7119/api/Health");
-});
-
-//builder.Services.AddQuilt4NetApplicationInsights();
-
 var app = builder.Build();
 
 app.UseSwagger();
@@ -124,6 +110,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetApi();
-app.UseQuilt4NetHealthClient();
 
 app.Run();

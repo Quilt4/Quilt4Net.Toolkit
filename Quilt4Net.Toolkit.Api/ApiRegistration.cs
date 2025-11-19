@@ -14,47 +14,22 @@ using System.Reflection;
 
 namespace Quilt4Net.Toolkit.Api;
 
-/// <summary>
-/// Quilt4Net service registration.
-/// </summary>
-public static class Quilt4NetRegistration //TODO: Revisit
+public static class ApiRegistration
 {
     private static Quilt4NetApiOptions _options;
 
-    /// <summary>
-    /// Add Quilt4Net API so that OpenAPI and health endpoints are available.
-    /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="options"></param>
     public static void AddQuilt4NetApi(this WebApplicationBuilder builder, Action<Quilt4NetApiOptions> options = null)
     {
-        AddQuilt4NetApi(builder.Services, builder.Configuration, options);
+        AddQuilt4NetApi(builder.Services, options);
     }
 
-    /// <summary>
-    /// Add Quilt4Net API so that OpenAPI and health endpoints are available.
-    /// </summary>
-    /// <param name="services"></param>
-    /// <param name="options"></param>
     public static void AddQuilt4NetApi(this IServiceCollection services, Action<Quilt4NetApiOptions> options = null)
     {
         var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
-        AddQuilt4NetApi(services, configuration, options);
-    }
 
-    /// <summary>
-    /// Add Quilt4Net API so that OpenAPI and health endpoints are available.
-    /// </summary>
-    /// <param name="services"></param>
-    /// <param name="configuration"></param>
-    /// <param name="options"></param>
-    public static void AddQuilt4NetApi(this IServiceCollection services, IConfiguration configuration, Action<Quilt4NetApiOptions> options = null)
-    {
         _options = BuildOptions(configuration, options);
         services.AddSingleton(_ => _options);
         services.AddSingleton(Options.Create(_options));
-        services.AddSingleton<Quilt4NetServerOptions>(_ => _options);
-        services.AddSingleton(Options.Create((Quilt4NetServerOptions)_options));
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -72,10 +47,6 @@ public static class Quilt4NetRegistration //TODO: Revisit
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
 
-        //TODO: Revisit: Remove this from here, it should only be registered from a specific registration
-        services.AddRemoteConfiguration(s => s.GetService<IHostEnvironment>().EnvironmentName);
-        services.AddQuilt4NetContent(s => s.GetService<IHostEnvironment>().EnvironmentName);
-
         foreach (var componentServices in _options.ComponentServices)
         {
             services.AddTransient(componentServices);
@@ -90,12 +61,6 @@ public static class Quilt4NetRegistration //TODO: Revisit
     private static Quilt4NetApiOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApiOptions> options)
     {
         var o = configuration?.GetSection("Quilt4Net:Api").Get<Quilt4NetApiOptions>() ?? new Quilt4NetApiOptions();
-
-        var oRoot = configuration?.GetSection("Quilt4Net").Get<Quilt4NetServerOptions>();
-        o.ApiKey ??= oRoot?.ApiKey;
-        o.Address ??= oRoot?.Address; //?? "https://quilt4net.com/";
-        o.Ttl ??= oRoot?.Ttl;
-        o.Application ??= oRoot?.Application;
 
         //NOTE: Empty controller name is not allowed, automatically revert to default.
         if (string.IsNullOrEmpty(o.ControllerName)) o.ControllerName = new Quilt4NetApiOptions().ControllerName;

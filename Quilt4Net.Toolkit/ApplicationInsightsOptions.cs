@@ -3,7 +3,7 @@
 /// <summary>
 ///
 /// </summary>
-public record Quilt4NetApplicationInsightsOptions
+public record ApplicationInsightsOptions
 {
     /// <summary>
     /// This value can be found under 'Tennant properties' in Azure portal.

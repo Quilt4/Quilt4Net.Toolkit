@@ -1,28 +1,23 @@
-﻿//using Microsoft.Extensions.Configuration;
-//using Microsoft.Extensions.DependencyInjection;
-//using Quilt4Net.Toolkit.Features.ApplicationInsights;
-//using Quilt4Net.Toolkit.Features.Health;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Quilt4Net.Toolkit.Features.ApplicationInsights;
+using Quilt4Net.Toolkit.Features.Health;
 
-//namespace Quilt4Net.Toolkit;
+namespace Quilt4Net.Toolkit;
 
-//public static class ApplicationInsightsRegistration
-//{
-//    public static void AddQuilt4NetApplicationInsights(this IServiceCollection serviceCollection, Action<Quilt4NetApplicationInsightsOptions> options = null)
-//    {
-//        serviceCollection.AddSingleton(s =>
-//        {
-//            var configuration = s.GetService<IConfiguration>();
-//            var o = BuildOptions(configuration, options);
-//            return o;
-//        });
-//        serviceCollection.AddTransient<IApplicationInsightsService, ApplicationInsightsService>();
-//        serviceCollection.AddTransient<IHealthClient, HealthClient>();
-//    }
+public static class ApplicationInsightsRegistration
+{
+    public static void AddQuilt4NetApplicationInsightsClient(this IServiceCollection services, Action<ApplicationInsightsOptions> options = null)
+    {
+        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
 
-//    private static Quilt4NetApplicationInsightsOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetApplicationInsightsOptions> options)
-//    {
-//        var o = configuration?.GetSection("Quilt4Net:ApplicationInsights").Get<Quilt4NetApplicationInsightsOptions>() ?? new Quilt4NetApplicationInsightsOptions();
-//        options?.Invoke(o);
-//        return o;
-//    }
-//}
+        var o = configuration?.GetSection("Quilt4Net:ApplicationInsights").Get<ApplicationInsightsOptions>() ?? new ApplicationInsightsOptions();
+
+        options?.Invoke(o);
+        services.AddSingleton(Options.Create(o));
+
+        services.AddTransient<IApplicationInsightsService, ApplicationInsightsService>();
+        services.AddTransient<IHealthClient, HealthClient>();
+    }
+}

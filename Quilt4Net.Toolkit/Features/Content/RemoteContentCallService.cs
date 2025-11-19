@@ -13,16 +13,16 @@ namespace Quilt4Net.Toolkit.Features.Content;
 internal class RemoteContentCallService : IRemoteContentCallService
 {
     private readonly EnvironmentName _environmentName;
+    private readonly ContentOptions _contentOptions;
     private readonly ILogger<RemoteContentCallService> _logger;
-    private readonly Quilt4NetServerOptions _options;
     private readonly ConcurrentDictionary<string, GetContentResponse> _localCache = new();
     private Language[] _languages;
     private DateTime _languagesValidTo;
 
-    public RemoteContentCallService(EnvironmentName environmentName, IOptions<Quilt4NetServerOptions> options, ILogger<RemoteContentCallService> logger)
+    public RemoteContentCallService(EnvironmentName environmentName, IOptions<ContentOptions> contentOptions, ILogger<RemoteContentCallService> logger)
     {
         _environmentName = environmentName;
-        _options = options.Value;
+        _contentOptions = contentOptions.Value;
         _logger = logger;
     }
 
@@ -30,13 +30,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
     {
         if (languageKey == Guid.Parse("8C12E829-318E-40DA-86E9-6B37A68EFFD1")) return ("X", true);
 
-        if (string.IsNullOrEmpty(_options.ApiKey)) return ("No ApiKey provided.", false);
+        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return ("No ApiKey provided.", false);
 
         defaultValue ??= $"No content for '{key}'.";
 
         try
         {
-            var assemblyName = _options.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
             var request = new GetContentRequest
             {
                 Key = key,
@@ -100,7 +100,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         try
         {
-            var assemblyName = _options.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
             var setContentRequest = new SetContentRequest
             {
                 Key = key,
@@ -132,13 +132,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
     public async Task<Language[]> GetLanguagesAsync(bool forceReload)
     {
-        if (string.IsNullOrEmpty(_options.ApiKey)) return [new Language { Name = "No ApiKey provided.", Key = Guid.Parse("8C12E829-318E-40DA-86E9-6B37A68EFFD1") }];
+        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return [new Language { Name = "No ApiKey provided.", Key = Guid.Parse("8C12E829-318E-40DA-86E9-6B37A68EFFD1") }];
 
         if (_languages != null && !forceReload && DateTime.UtcNow < _languagesValidTo) return _languages;
 
         try
         {
-            var assemblyName = _options.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
 
             using var client = GetHttpClient();
             var address = $"Api/Language/{assemblyName}/{_environmentName.Name}";
@@ -179,8 +179,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
         try
         {
             client = new HttpClient();
-            client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
-            client.BaseAddress = new Uri(_options.Address);
+            client.DefaultRequestHeaders.Add("X-API-KEY", _contentOptions.ApiKey);
+            client.BaseAddress = new Uri(_contentOptions.Quilt4NetAddress);
             return client;
         }
         catch
