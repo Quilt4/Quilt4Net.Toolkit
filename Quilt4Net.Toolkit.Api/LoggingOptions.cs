@@ -49,5 +49,5 @@ public record LoggingOptions
     /// Create interceptor for the logger so that information can be modified.
     /// This can be used to remove secrets from logging.
     /// </summary>
-    public Func<Request, Response, Dictionary<string, string>, Task<(Request, Response, Dictionary<string, string>)>> Interceptor;
+    public Func<Request, Response, Dictionary<string, string>, IServiceProvider, Task<(Request, Response, Dictionary<string, string>)>> Interceptor;
 }

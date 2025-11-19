@@ -12,13 +12,15 @@ namespace Quilt4Net.Toolkit.Api;
 public class RequestResponseLoggingMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly IServiceProvider _serviceProvider;
     private readonly CompiledLoggingOptions _compiledLoggingOptions;
     private readonly LoggingOptions _options;
     private readonly ILogger<RequestResponseLoggingMiddleware> _logger;
 
-    public RequestResponseLoggingMiddleware(RequestDelegate next, CompiledLoggingOptions compiledLoggingOptions, IOptions<LoggingOptions> options, ILogger<RequestResponseLoggingMiddleware> logger)
+    public RequestResponseLoggingMiddleware(RequestDelegate next, IServiceProvider serviceProvider, CompiledLoggingOptions compiledLoggingOptions, IOptions<LoggingOptions> options, ILogger<RequestResponseLoggingMiddleware> logger)
     {
         _next = next;
+        _serviceProvider = serviceProvider;
         _compiledLoggingOptions = compiledLoggingOptions;
         _options = options.Value;
         _logger = logger;
@@ -256,7 +258,7 @@ public class RequestResponseLoggingMiddleware
         {
             try
             {
-                (request, response, details) = await _options.Interceptor.Invoke(request, response, details);
+                (request, response, details) = await _options.Interceptor.Invoke(request, response, details, _serviceProvider);
             }
             catch (Exception exception)
             {
