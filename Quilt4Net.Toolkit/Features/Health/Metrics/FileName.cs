@@ -16,7 +16,7 @@ public interface IMetricsService
     /// </summary>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<MetricsResponse> GetMetricsAsync(CancellationToken cancellationToken);
+    Task<MetricsResponse> GetMetricsAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>

@@ -1,5 +1,4 @@
-﻿using Quilt4Net.Toolkit.Features.Health;
-using Quilt4Net.Toolkit.Framework;
+﻿using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 

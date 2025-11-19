@@ -9,7 +9,7 @@ namespace Quilt4Net.Toolkit;
 
 public static class RemoteConfigurationRegistration
 {
-    public static void AddQuilt4NetRemoteConfiguration(this IServiceCollection services, Action<RemoteConfigurationOptions> options = null) //, Func<IServiceProvider, string> environmentNameLoader)
+    public static void AddQuilt4NetRemoteConfiguration(this IServiceCollection services, Action<RemoteConfigurationOptions> options = null)
     {
         var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
 
@@ -20,8 +20,10 @@ public static class RemoteConfigurationRegistration
         var o = new RemoteConfigurationOptions
         {
             ApiKey = config?.ApiKey ?? apiKey,
-            Quilt4NetAddress = config?.Quilt4NetAddress ?? address
+            Quilt4NetAddress = config?.Quilt4NetAddress ?? address ?? "https://quilt4net.com/"
         };
+
+        if (!Uri.TryCreate(o.Quilt4NetAddress, UriKind.Absolute, out _)) throw new InvalidOperationException($"Configuration {nameof(o.Quilt4NetAddress)} with value '{o.Quilt4NetAddress}' cannot be parsed to an absolute uri.");
 
         options?.Invoke(o);
 

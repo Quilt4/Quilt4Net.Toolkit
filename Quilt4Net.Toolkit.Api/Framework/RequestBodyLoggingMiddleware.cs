@@ -1,11 +1,11 @@
-﻿using System.Diagnostics;
-using System.Reflection;
-using System.Text;
-using Microsoft.ApplicationInsights.DataContracts;
+﻿using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Measure;
 using Quilt4Net.Toolkit.Framework;
+using System.Diagnostics;
+using System.Reflection;
+using System.Text;
 
 namespace Quilt4Net.Toolkit.Api.Framework;
 
@@ -64,6 +64,7 @@ public class RequestResponseLoggingMiddleware
         var requestDetails = await CaptureRequestDetailsAsync(context, logRequestBody, _options?.MaxBodySize ?? Constants.MaxBodySize);
         var originalResponseBodyStream = context.Response.Body;
         var correlationId = context.Items.TryGetValue("CorrelationId", out var c) ? c?.ToString() : null;
+        var details = BuildDetails();
 
         var sw = new Stopwatch();
         var telemetry = GetRequestTelemetry(context);
@@ -79,7 +80,6 @@ public class RequestResponseLoggingMiddleware
             if (telemetry != null)
             {
                 telemetry.Properties["UserId"] = context.User.Identity?.Name ?? "Anonymous";
-                telemetry.Properties["Request"] = System.Text.Json.JsonSerializer.Serialize(requestDetails);
                 if (!string.IsNullOrEmpty(correlationId)) telemetry.Properties["CorrelationId"] = correlationId;
                 var asm = Assembly.GetEntryAssembly();
                 var nm = asm?.GetName();
@@ -95,14 +95,30 @@ public class RequestResponseLoggingMiddleware
             sw.Stop();
 
             var responseDetails = await CaptureResponseDetailsAsync(context, logResponseBody, _options?.MaxBodySize ?? Constants.MaxBodySize);
-            if (telemetry != null)
+
+            //NOTE: Intercept the request, response and details, so that it can be modified and cleaned from secrets.
+            if (_options?.Interceptor != null)
             {
-                telemetry.Properties["Response"] = System.Text.Json.JsonSerializer.Serialize(responseDetails);
-                telemetry.Properties["Elapsed"] = $"{sw.Elapsed}";
-                telemetry.Properties["Details"] = BuildDetailsString(null);
+                try
+                {
+                    (requestDetails, responseDetails, details) = await _options.Interceptor.Invoke(requestDetails, responseDetails, details, _serviceProvider);
+                }
+                catch (Exception e)
+                {
+                    throw new InvalidOperationException($"Log {nameof(_options.Interceptor)} Exception. {e.Message}", e);
+                }
             }
 
-            await LogRequestAndResponseAsync(requestDetails, responseDetails, sw.Elapsed, correlationId);
+            var detailsJsonString = BuildDetailsString(details);
+            if (telemetry != null)
+            {
+                telemetry.Properties["Request"] = System.Text.Json.JsonSerializer.Serialize(requestDetails);
+                telemetry.Properties["Response"] = System.Text.Json.JsonSerializer.Serialize(responseDetails);
+                telemetry.Properties["Elapsed"] = $"{sw.Elapsed}";
+                telemetry.Properties["Details"] = detailsJsonString;
+            }
+
+            await LogRequestAndResponseAsync(requestDetails, responseDetails, sw.Elapsed, correlationId, detailsJsonString);
 
             if (logResponseBody)
             {
@@ -111,14 +127,17 @@ public class RequestResponseLoggingMiddleware
         }
         catch (Exception e)
         {
+            var detailsJsonString = BuildDetailsString(details, e);
             if (telemetry != null)
             {
-                telemetry.Properties["StackTrace"] = e.StackTrace;
+                telemetry.Properties["ExceptionMessage"] = e.Message;
+                telemetry.Properties["StackTrace"] = e.InnerException?.StackTrace ?? e.StackTrace;
                 telemetry.Properties["Elapsed"] = $"{sw.Elapsed}";
-                telemetry.Properties["Details"] = BuildDetailsString(e);
+                telemetry.Properties["Details"] = detailsJsonString;
+                telemetry.Success = false;
             }
 
-            await LogRequestAndResponseAsync(requestDetails, null, sw.Elapsed, correlationId, e);
+            await LogRequestAndResponseAsync(requestDetails, null, sw.Elapsed, correlationId, detailsJsonString, e);
             throw;
         }
         finally
@@ -248,29 +267,12 @@ public class RequestResponseLoggingMiddleware
         };
     }
 
-    private async Task LogRequestAndResponseAsync(Request request, Response response, TimeSpan elapsed, string correlationId, Exception e = null)
+    private async Task LogRequestAndResponseAsync(Request request, Response response, TimeSpan elapsed, string correlationId, string detailsJson, Exception e = null)
     {
         if (!(_options?.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger) ?? false)) return;
 
-        var details = BuildDetails(e);
-
-        if (_options?.Interceptor != null)
-        {
-            try
-            {
-                (request, response, details) = await _options.Interceptor.Invoke(request, response, details, _serviceProvider);
-            }
-            catch (Exception exception)
-            {
-                Debugger.Break();
-                _logger.LogError(exception, "Custom interceptor exception. {ErrorMessage} @{StackTrace}. CorrelationId: {CorrelationId}. Http {Method} to {Path} in {Elapsed} ms", exception.Message, exception.StackTrace, correlationId, request.Method, request.Path, elapsed);
-                return;
-            }
-        }
-
         var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
         var responseJson = response != null ? System.Text.Json.JsonSerializer.Serialize(response) : null;
-        var detailsJson = System.Text.Json.JsonSerializer.Serialize(details);
 
         if (e == null)
         {
@@ -282,28 +284,27 @@ public class RequestResponseLoggingMiddleware
         }
     }
 
-    private string BuildDetailsString(Exception e)
+    private string BuildDetailsString(Dictionary<string, string> details, Exception e = null)
     {
-        var d = BuildDetails(e);
-        var details = System.Text.Json.JsonSerializer.Serialize(d);
-        return details;
+        if (e != null)
+        {
+            foreach (var data in e.GetData())
+            {
+                details.TryAdd(data.Key, $"{data.Value}");
+            }
+        }
+
+        var json = System.Text.Json.JsonSerializer.Serialize(details);
+        return json;
     }
 
-    private Dictionary<string, string> BuildDetails(Exception e)
+    private Dictionary<string, string> BuildDetails() //Exception e)
     {
         var dictionary = new Dictionary<string, string>
         {
             { "Monitor", _options?.MonitorName ?? Constants.Monitor },
             { "Method", "Http" }
         };
-
-        if (e != null)
-        {
-            foreach (var data in e.GetData())
-            {
-                dictionary.TryAdd(data.Key, $"{data.Value}");
-            }
-        }
 
         var d = dictionary.Where(x => !string.IsNullOrEmpty(x.Value)).ToUniqueDictionary();
         return d;

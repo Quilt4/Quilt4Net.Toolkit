@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
@@ -7,6 +6,8 @@ using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Api.Sample;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Sample;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +50,8 @@ builder.Services.AddHostedService<MyHostedService>();
 builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
 builder.Logging.AddApplicationInsights();
 
+builder.Services.AddTransient<Class1>();
+
 builder.AddQuilt4NetApplicationInsightsClient();
 builder.AddQuilt4NetHealthClient();
 builder.AddQuilt4NetContent();
@@ -57,14 +60,12 @@ builder.AddQuilt4NetLogging(o =>
 {
     o.Interceptor = async (request, response, details, _) =>
     {
-        Debugger.Break();
-        throw new InvalidOperationException("Interceptor error.");
         return (request, response, details);
     };
 });
 builder.AddQuilt4NetApi(o =>
 {
-    o.Certificate.SelfCheckEnabled = false;
+    //o.Certificate.SelfCheckEnabled = false;
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
 
     var config = new Dictionary<HealthEndpoint, AccessFlags>

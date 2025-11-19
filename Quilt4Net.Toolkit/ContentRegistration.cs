@@ -20,8 +20,10 @@ public static class ContentRegistration
         var o = new ContentOptions
         {
             ApiKey = config?.ApiKey ?? apiKey,
-            Quilt4NetAddress = config?.Quilt4NetAddress ?? address
+            Quilt4NetAddress = config?.Quilt4NetAddress ?? address ?? "https://quilt4net.com/"
         };
+
+        if (!Uri.TryCreate(o.Quilt4NetAddress, UriKind.Absolute, out _)) throw new InvalidOperationException($"Configuration {nameof(o.Quilt4NetAddress)} with value '{o.Quilt4NetAddress}' cannot be parsed to an absolute uri.");
 
         options?.Invoke(o);
 
