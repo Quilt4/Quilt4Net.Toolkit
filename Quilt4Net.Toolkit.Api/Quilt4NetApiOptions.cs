@@ -128,11 +128,11 @@ public record Quilt4NetApiOptions
     /// </summary>
     public Uri IpAddressCheckUri { get; set; } = new("http://ipv4.icanhazip.com/");
 
-    /// <summary>
-    /// Configure logging for all requests.
-    /// To make specific configuration on controller or method level use the LoggingAttribute.
-    /// </summary>
-    public Logging Logging { get; set; } = new() { LogHttpRequest = HttpRequestLogMode.ApplicationInsights, UseCorrelationId = true };
+    ///// <summary>
+    ///// Configure logging for all requests.
+    ///// To make specific configuration on controller or method level use the LoggingAttribute.
+    ///// </summary>
+    //public LoggingOptions Logging { get; set; } = new() { LogHttpRequest = HttpRequestLogMode.ApplicationInsights, UseCorrelationId = true };
 
     /// <summary>
     /// Configure certificate check.

@@ -1,11 +1,12 @@
-﻿using Quilt4Net.Toolkit.Framework;
+﻿using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
 /// <summary>
 /// Configuration for logging.
 /// </summary>
-public record Logging
+public record LoggingOptions
 {
     /// <summary>
     /// Add logger for Http request and response with body, headers, query and results.
@@ -43,4 +44,10 @@ public record Logging
     /// To include all paths provide the value ".*".
     /// </summary>
     public string[] IncludePaths { get; set; } = ["^/Api"];
+
+    /// <summary>
+    /// Create interceptor for the logger so that information can be modified.
+    /// This can be used to remove secrets from logging.
+    /// </summary>
+    public Func<Request, Response, Dictionary<string, string>, Task<(Request, Response, Dictionary<string, string>)>> Interceptor;
 }

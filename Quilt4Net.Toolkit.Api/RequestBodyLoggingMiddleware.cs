@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Measure;
 using Quilt4Net.Toolkit.Framework;
 
@@ -12,14 +13,14 @@ public class RequestResponseLoggingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly CompiledLoggingOptions _compiledLoggingOptions;
-    private readonly Quilt4NetApiOptions _options;
+    private readonly LoggingOptions _options;
     private readonly ILogger<RequestResponseLoggingMiddleware> _logger;
 
-    public RequestResponseLoggingMiddleware(RequestDelegate next, CompiledLoggingOptions compiledLoggingOptions, Quilt4NetApiOptions options, ILogger<RequestResponseLoggingMiddleware> logger)
+    public RequestResponseLoggingMiddleware(RequestDelegate next, CompiledLoggingOptions compiledLoggingOptions, IOptions<LoggingOptions> options, ILogger<RequestResponseLoggingMiddleware> logger)
     {
         _next = next;
         _compiledLoggingOptions = compiledLoggingOptions;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -58,7 +59,7 @@ public class RequestResponseLoggingMiddleware
         logResponseBody = loggingAttr?.ResponseBody ?? logResponseBody;
 
         context.Request.EnableBuffering();
-        var requestDetails = await CaptureRequestDetailsAsync(context, logRequestBody, _options.Logging?.MaxBodySize ?? Constants.MaxBodySize);
+        var requestDetails = await CaptureRequestDetailsAsync(context, logRequestBody, _options?.MaxBodySize ?? Constants.MaxBodySize);
         var originalResponseBodyStream = context.Response.Body;
         var correlationId = context.Items.TryGetValue("CorrelationId", out var c) ? c?.ToString() : null;
 
@@ -91,15 +92,15 @@ public class RequestResponseLoggingMiddleware
             await _next(context);
             sw.Stop();
 
-            var responseDetails = await CaptureResponseDetailsAsync(context, logResponseBody, _options.Logging?.MaxBodySize ?? Constants.MaxBodySize);
+            var responseDetails = await CaptureResponseDetailsAsync(context, logResponseBody, _options?.MaxBodySize ?? Constants.MaxBodySize);
             if (telemetry != null)
             {
                 telemetry.Properties["Response"] = System.Text.Json.JsonSerializer.Serialize(responseDetails);
                 telemetry.Properties["Elapsed"] = $"{sw.Elapsed}";
-                telemetry.Properties["Details"] = BuildDetails(default);
+                telemetry.Properties["Details"] = BuildDetailsString(null);
             }
 
-            LogRequestAndResponse(requestDetails, responseDetails, sw.Elapsed, correlationId);
+            await LogRequestAndResponseAsync(requestDetails, responseDetails, sw.Elapsed, correlationId);
 
             if (logResponseBody)
             {
@@ -112,10 +113,10 @@ public class RequestResponseLoggingMiddleware
             {
                 telemetry.Properties["StackTrace"] = e.StackTrace;
                 telemetry.Properties["Elapsed"] = $"{sw.Elapsed}";
-                telemetry.Properties["Details"] = BuildDetails(e);
+                telemetry.Properties["Details"] = BuildDetailsString(e);
             }
 
-            LogRequestAndResponse(requestDetails, null, sw.Elapsed, correlationId, e);
+            await LogRequestAndResponseAsync(requestDetails, null, sw.Elapsed, correlationId, e);
             throw;
         }
         finally
@@ -127,7 +128,7 @@ public class RequestResponseLoggingMiddleware
     private RequestTelemetry GetRequestTelemetry(HttpContext context)
     {
         RequestTelemetry telemetry = null;
-        if (_options.Logging?.LogHttpRequest.HasFlag(HttpRequestLogMode.ApplicationInsights) ?? false)
+        if (_options?.LogHttpRequest.HasFlag(HttpRequestLogMode.ApplicationInsights) ?? false)
         {
             telemetry = context.Features.Get<RequestTelemetry>();
         }
@@ -245,29 +246,43 @@ public class RequestResponseLoggingMiddleware
         };
     }
 
-    private void LogRequestAndResponse(Request request, Response response, TimeSpan elapsed, string correlationId, Exception e = default)
+    private async Task LogRequestAndResponseAsync(Request request, Response response, TimeSpan elapsed, string correlationId, Exception e = null)
     {
-        if (!(_options.Logging?.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger) ?? false)) return;
+        if (!(_options?.LogHttpRequest.HasFlag(HttpRequestLogMode.Logger) ?? false)) return;
+
+        var details = BuildDetails(e);
+
+        if (_options?.Interceptor != null)
+        {
+            (request, response, details) = await _options.Interceptor.Invoke(request, response, details);
+        }
 
         var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
         var responseJson = response != null ? System.Text.Json.JsonSerializer.Serialize(response) : null;
-        var details = BuildDetails(e);
+        var detailsJson = System.Text.Json.JsonSerializer.Serialize(details);
 
         if (e == null)
         {
-            _logger.LogInformation("Http {Method} to {Path} in {Elapsed} ms. {Request} {Response} {Details} CorrelationId: {CorrelationId}", request.Method, request.Path, elapsed, requestJson, responseJson, details, correlationId);
+            _logger.LogInformation("Http {Method} to {Path} in {Elapsed} ms. {Request} {Response} {Details} CorrelationId: {CorrelationId}", request.Method, request.Path, elapsed, requestJson, responseJson, detailsJson, correlationId);
         }
         else
         {
-            _logger.LogError("Http {Method} to {Path} in {Elapsed} ms, failed {ErrorMessage} @{StackTrace}. {Request} {Details} CorrelationId: {CorrelationId}", request.Method, request.Path, elapsed, e.Message, e.StackTrace, requestJson, details, correlationId);
+            _logger.LogError("Http {Method} to {Path} in {Elapsed} ms, failed {ErrorMessage} @{StackTrace}. {Request} {Details} CorrelationId: {CorrelationId}", request.Method, request.Path, elapsed, e.Message, e.StackTrace, requestJson, detailsJson, correlationId);
         }
     }
 
-    private string BuildDetails(Exception e)
+    private string BuildDetailsString(Exception e)
+    {
+        var d = BuildDetails(e);
+        var details = System.Text.Json.JsonSerializer.Serialize(d);
+        return details;
+    }
+
+    private Dictionary<string, string> BuildDetails(Exception e)
     {
         var dictionary = new Dictionary<string, string>
         {
-            { "Monitor", _options.Logging?.MonitorName ?? Constants.Monitor },
+            { "Monitor", _options?.MonitorName ?? Constants.Monitor },
             { "Method", "Http" }
         };
 
@@ -280,24 +295,6 @@ public class RequestResponseLoggingMiddleware
         }
 
         var d = dictionary.Where(x => !string.IsNullOrEmpty(x.Value)).ToUniqueDictionary();
-        var details = System.Text.Json.JsonSerializer.Serialize(d);
-        return details;
-    }
-
-    internal record Request
-    {
-        public required string Method { get; init; }
-        public required string Path { get; init; }
-        public required Dictionary<string, string> Headers { get; init; }
-        public required Dictionary<string, string> Query { get; init; }
-        public required string Body { get; init; }
-        public required string ClientIp { get; init; }
-    }
-
-    internal record Response
-    {
-        public required int StatusCode { get; init; }
-        public required Dictionary<string, string> Headers { get; init; }
-        public required string Body { get; init; }
+        return d;
     }
 }

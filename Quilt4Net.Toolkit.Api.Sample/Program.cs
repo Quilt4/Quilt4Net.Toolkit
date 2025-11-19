@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
@@ -52,6 +53,14 @@ builder.AddQuilt4NetApplicationInsightsClient();
 builder.AddQuilt4NetHealthClient();
 builder.AddQuilt4NetContent();
 builder.AddQuilt4NetRemoteConfiguration();
+builder.AddQuilt4NetLogging(o =>
+{
+    o.Interceptor = async (request, response, details) =>
+    {
+        Debugger.Break();
+        return (request, response, details);
+    };
+});
 builder.AddQuilt4NetApi(o =>
 {
     o.Certificate.SelfCheckEnabled = false;
@@ -110,5 +119,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetApi();
+app.UseQuilt4NetLogging();
 
 app.Run();

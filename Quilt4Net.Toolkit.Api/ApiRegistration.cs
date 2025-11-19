@@ -45,7 +45,6 @@ public static class ApiRegistration
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
-        services.AddSingleton(_ => new CompiledLoggingOptions(_options));
 
         foreach (var componentServices in _options.ComponentServices)
         {
@@ -82,30 +81,10 @@ public static class ApiRegistration
     {
         if (_options == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetApi)} before {nameof(UseQuilt4NetApi)}.");
 
-        if (_options.Logging?.UseCorrelationId ?? false)
-        {
-            app.UseMiddleware<CorrelationIdMiddleware>();
-        }
-
         _options.ShowInOpenApi ??= !app.Services.GetService<IHostEnvironment>().IsProduction();
 
-        RegisterLoggingMiddleware(app);
         CreaetLogScope(app);
         RegisterEndpoints(app, _options.Dependencies.Any());
-    }
-
-    private static void RegisterLoggingMiddleware(WebApplication app)
-    {
-        if ((_options.Logging?.LogHttpRequest ?? HttpRequestLogMode.None) > HttpRequestLogMode.None)
-        {
-            app.UseWhen(
-                _ => true,
-                branch =>
-                {
-                    branch.UseMiddleware<RequestResponseLoggingMiddleware>();
-                }
-            );
-        }
     }
 
     private static void CreaetLogScope(WebApplication app)
