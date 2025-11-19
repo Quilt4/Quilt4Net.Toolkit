@@ -254,7 +254,16 @@ public class RequestResponseLoggingMiddleware
 
         if (_options?.Interceptor != null)
         {
-            (request, response, details) = await _options.Interceptor.Invoke(request, response, details);
+            try
+            {
+                (request, response, details) = await _options.Interceptor.Invoke(request, response, details);
+            }
+            catch (Exception exception)
+            {
+                Debugger.Break();
+                _logger.LogError(exception, "Custom interceptor exception. {ErrorMessage} @{StackTrace}. CorrelationId: {CorrelationId}. Http {Method} to {Path} in {Elapsed} ms", exception.Message, exception.StackTrace, correlationId, request.Method, request.Path, elapsed);
+                return;
+            }
         }
 
         var requestJson = System.Text.Json.JsonSerializer.Serialize(request);

@@ -58,6 +58,7 @@ builder.AddQuilt4NetLogging(o =>
     o.Interceptor = async (request, response, details) =>
     {
         Debugger.Break();
+        throw new InvalidOperationException("Interceptor error.");
         return (request, response, details);
     };
 });
