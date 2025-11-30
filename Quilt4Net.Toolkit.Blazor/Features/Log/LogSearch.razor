@@ -1,0 +1,62 @@
+﻿@using Microsoft.Extensions.Hosting
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+@inject IHostEnvironment HostEnvironment
+
+<RadzenStack Style="margin-bottom: 6px;" Orientation="Orientation.Horizontal">
+    <RadzenTextBox @bind-value="@_searchText" />
+    <RadzenButton Text="Search" Click="@(_ => Search())" />
+</RadzenStack>
+
+@if (_loading)
+{
+    <Loading />
+}
+else if (_model != null)
+{
+    <RadzenDataGrid TItem="LogItem" Data="@_model"
+                    AllowSorting="true"
+                    AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                    AllowPaging="true" PageSize="10" PageSizeOptions="[10, 100]"
+                    ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
+        <Columns>
+            @* <RadzenDataGridColumn TItem="LogItem" Title="" Filterable="false" sortable="false" Width="50px;">
+                <Template>
+                    <RadzenLink Path="@($"/log/detail/{context.Id}?Source=Search&Range={Range}")" Icon="arrow_forward_ios" />
+                </Template>
+            </RadzenDataGridColumn> *@
+            <RadzenDataGridColumn TItem="LogItem" Title="Time" Property="@nameof(LogItem.TimeGenerated)" SortOrder="SortOrder.Descending" >
+                <Template>
+                    <DateTimeView Date="@context.TimeGenerated" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="LogItem" Title="Level" Property="@nameof(LogItem.SeverityLevel)" />
+            <RadzenDataGridColumn TItem="LogItem" Title="Message" Property="@nameof(LogItem.Message)" />
+            <RadzenDataGridColumn TItem="LogItem" Title="Application" Property="@nameof(LogItem.Application)" />
+            <RadzenDataGridColumn TItem="LogItem" Title="Type" Property="@nameof(LogItem.Type)" />
+            @* <RadzenDataGridColumn TItem="LogItem" Title="CorrelationKey" Property="@nameof(LogItem.CorrelationKey)" /> *@
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private bool _loading;
+    private string _searchText;
+
+    [Parameter]
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+
+    private LogItem[] _model { get; set; }
+
+    private async Task Search()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var searchText = Uri.EscapeDataString(_searchText);
+        _model = await ApplicationInsightsService.SearchAsync(HostEnvironment.EnvironmentName, searchText, Range).ToArrayAsync();
+
+        _loading = false;
+        StateHasChanged();
+    }
+}

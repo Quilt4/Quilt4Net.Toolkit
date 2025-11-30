@@ -1,0 +1,34 @@
+﻿<RadzenRow Style="margin-bottom: 6px;">
+    <RadzenColumn>
+        <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+        <RadzenDropDown TValue="TimeSpan" Data="@_ranges" @bind-Value="_selectedRange" TextProperty="Label" ValueProperty="Value" />
+    </RadzenColumn>
+</RadzenRow>
+
+<RadzenTabs Change="StateHasChanged">
+    <Tabs>
+        <RadzenTabsItem Text="Search">
+            <LogSearch Range="@_selectedRange" />
+        </RadzenTabsItem>
+        <RadzenTabsItem Text="Summary">
+            <LogSummary Range="@_selectedRange" />
+        </RadzenTabsItem>
+    </Tabs>
+</RadzenTabs>
+
+@code {
+    private TimeSpan _selectedRange = TimeSpan.FromDays(1);
+    private readonly List<TimeRangeOption> _ranges = [ new("7 days", TimeSpan.FromDays(7)), new("3 days", TimeSpan.FromDays(3)), new("1 day", TimeSpan.FromDays(1)), new("1 hour", TimeSpan.FromHours(1)) ];
+
+    private record TimeRangeOption
+    {
+        public string Label { get; set; }
+        public TimeSpan Value { get; set; }
+
+        public TimeRangeOption(string label, TimeSpan value)
+        {
+            Label = label;
+            Value = value;
+        }
+    }
+}
