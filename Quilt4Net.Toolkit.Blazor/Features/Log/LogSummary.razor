@@ -1,0 +1,68 @@
+﻿@using System.Text.Json
+@using Microsoft.Extensions.Hosting
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+@inject IHostEnvironment HostEnvironment
+
+@if (_model == null)
+{
+    <Loading />
+}
+else
+{
+    <RadzenCard>
+        <RadzenDataGrid Data="@_model"
+        AllowSorting="true"
+        AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+        AllowPaging="true" PageSize="10" PageSizeOptions="[10,100]"
+        ShowPagingSummary="true" PagingSummaryFormat="@("{2:N0} summaries, page {0} of {1}")">
+            <Columns>
+                @* <RadzenDataGridColumn TItem="SummaryData" Width="52px">
+                    <Template>
+                        <span title="@GetPrettyJson(context)">
+                            <RadzenLink Icon="arrow_forward_ios" Path="@($"/log/summary/{context.SummaryId}?Source=Summary&Range{Range}")" />
+                        </span>
+                    </Template>
+                </RadzenDataGridColumn> *@
+                <RadzenDataGridColumn TItem="SummaryData" Title="Last Seen" Property="LastSeen" Width="120px" Filterable="false">
+                    <Template>
+                        <DateTimeView Date="@context.LastSeen" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="SummaryData" Title="Level" Property="SeverityLevel" Width="100px" />
+                <RadzenDataGridColumn TItem="SummaryData" Title="Type" Property="Type" Width="100px" />
+                <RadzenDataGridColumn TItem="SummaryData" Title="Application" Property="Application" Width="240px" />
+                <RadzenDataGridColumn TItem="SummaryData" Title="Environment" Property="Environment" />
+                <RadzenDataGridColumn TItem="SummaryData" Title="Message" Property="Message" />
+                <RadzenDataGridColumn TItem="SummaryData" Title="Count" Property="IssueCount" Width="100px" SortOrder="SortOrder.Descending" Filterable="false" />
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenCard>
+}
+
+@code {
+    [Parameter]
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+
+    private SummaryData[] _model { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model = await ApplicationInsightsService.GetSummaryAsync(HostEnvironment.EnvironmentName, Range).ToArrayAsync();
+
+        await base.OnInitializedAsync();
+    }
+
+    private static string GetPrettyJson(SummaryData context)
+    {
+        var decoded = Base64UrlHelper.DecodeFromBase64Url(context.SummaryId);
+        var summary = JsonSerializer.Deserialize<SummaryDataIdentifier>(decoded);
+
+        var prettyJson = JsonSerializer.Serialize(summary, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+
+        return prettyJson;
+    }
+}
