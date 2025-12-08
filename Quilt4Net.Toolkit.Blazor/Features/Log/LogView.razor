@@ -13,6 +13,10 @@
         <RadzenTabsItem Text="Summary">
             <LogSummary Range="@_selectedRange" />
         </RadzenTabsItem>
+        <RadzenTabsItem Text="Sample">
+            <RadzenButton Text="Simulate Throw" Click="@(() => throw new InvalidOperationException("Simulated exception."))" />
+            <Tharga.Blazor.Features.Clipboard.CopyButton Content="Some content..." />
+        </RadzenTabsItem>
     </Tabs>
 </RadzenTabs>
 
