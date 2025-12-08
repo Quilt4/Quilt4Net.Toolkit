@@ -13,28 +13,28 @@ public record Quilt4NetApiOptions
     private readonly ConcurrentDictionary<Type, Type> _componentServices = new();
     private readonly ConcurrentDictionary<string, Dependency> _dependencies = new();
 
-    /// <summary>
-    /// Visible in OpenApi definition.
-    /// Default for Production environment is false.
-    /// For all other environments default is true.
-    /// </summary>
-    public bool? ShowInOpenApi { get; set; }
+    ///// <summary>
+    ///// Visible in OpenApi definition.
+    ///// Default for Production environment is false.
+    ///// For all other environments default is true.
+    ///// </summary>
+    //public bool? ShowInOpenApi { get; set; }
 
     /// <summary>
-    /// This string value can be used to turn the GET, HEAD and visibility on or off for different endpoints.
-    /// The values are by position Default, Live, Ready, Health, Dependencies, Metrics and Version.
-    ///
-    /// | Value | GET  | HEAD | Visible |
-    /// | ----- | ---- | ---- | ------- |
-    /// | 0     | No   | No   | No      |
-    /// | 1     | Yes  | No   | No      |
-    /// | 2     | No   | Yes  | No      |
-    /// | 3     | Yes  | Yes  | No      |
-    /// | 4     | Yes  | No   | Yes     |
-    /// | 5     | No   | Yes  | Yes     |
-    /// | 6     | Yes  | Yes  | Yes     |
-    ///
-    /// Default is 6666644
+    /// <para>This string value can be used to turn the GET, HEAD and visibility on or off for different endpoints.</para>
+    /// <para>The values are by position Default, Live, Ready, Health, Dependencies, Metrics and Version.</para>
+    /// <para></para>
+    /// <para>| Value | GET  | HEAD | Visible |</para>
+    /// <para>| ----- | ---- | ---- | ------- |</para>
+    /// <para>| 0     | No   | No   | No      |</para>
+    /// <para>| 1     | Yes  | No   | No      |</para>
+    /// <para>| 2     | No   | Yes  | No      |</para>
+    /// <para>| 3     | Yes  | Yes  | No      |</para>
+    /// <para>| 4     | Yes  | No   | Yes     |</para>
+    /// <para>| 5     | No   | Yes  | Yes     |</para>
+    /// <para>| 6     | Yes  | Yes  | Yes     |</para>
+    /// <para></para>
+    /// <para>Default is 6666644</para>
     /// </summary>
     public string Endpoints { get; set; } = "6666644";
 
