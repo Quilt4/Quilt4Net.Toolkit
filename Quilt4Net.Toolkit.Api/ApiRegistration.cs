@@ -81,7 +81,7 @@ public static class ApiRegistration
     {
         if (_options == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetApi)} before {nameof(UseQuilt4NetApi)}.");
 
-        _options.ShowInOpenApi ??= !app.Services.GetService<IHostEnvironment>().IsProduction();
+        //_options.ShowInOpenApi ??= !app.Services.GetService<IHostEnvironment>().IsProduction();
 
         CreaetLogScope(app);
         RegisterEndpoints(app, _options.Dependencies.Any());
