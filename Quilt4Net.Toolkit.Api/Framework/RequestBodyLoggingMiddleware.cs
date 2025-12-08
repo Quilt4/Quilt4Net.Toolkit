@@ -33,7 +33,7 @@ public class RequestResponseLoggingMiddleware
         loggingAttr ??= endpoint?.Metadata.GetMetadata<LoggingStreamAttribute>() == null ? null : new LoggingAttribute { ResponseBody = false };
 
         //NOTE: Behaviour when logging attribute has not been set.
-        var logResponseBody = true;
+        var logResponseBody = _options.LogResponseBodyByDefault;
         if (loggingAttr == null)
         {
             var logThisPath = _compiledLoggingOptions.IncludePathRegex.Any(regex => regex.IsMatch(context.Request.Path));
@@ -43,9 +43,8 @@ public class RequestResponseLoggingMiddleware
                 return;
             }
 
-            //var methodInfo = endpoint?.Metadata.GetMetadata<MethodInfo>();
             var methodInfo = (endpoint as RouteEndpoint)?.Metadata.OfType<ControllerActionDescriptor>().FirstOrDefault()?.MethodInfo;
-            logResponseBody = methodInfo?.ReturnType != typeof(Task);
+            if (methodInfo?.ReturnType == typeof(Task)) logResponseBody = false;
         }
 
         //NOTE: Do not log when logging has been manually disabled:
@@ -57,7 +56,7 @@ public class RequestResponseLoggingMiddleware
         }
 
         // Use flags to control what is logged
-        var logRequestBody = loggingAttr?.RequestBody ?? true;
+        var logRequestBody = loggingAttr?.RequestBody ?? _options.LogRequestBodyByDefault;
         logResponseBody = loggingAttr?.ResponseBody ?? logResponseBody;
 
         context.Request.EnableBuffering();
