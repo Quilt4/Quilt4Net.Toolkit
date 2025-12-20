@@ -26,6 +26,7 @@ public static class ContentRegistration
         if (!Uri.TryCreate(o.Quilt4NetAddress, UriKind.Absolute, out _)) throw new InvalidOperationException($"Configuration {nameof(o.Quilt4NetAddress)} with value '{o.Quilt4NetAddress}' cannot be parsed to an absolute uri.");
 
         options?.Invoke(o);
+        services.AddSingleton(Options.Create(o));
 
         services.AddTransient<ILanguageService, LanguageService>();
         services.AddTransient<IContentService, ContentService>();
