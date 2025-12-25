@@ -8,6 +8,11 @@ namespace Quilt4Net.Toolkit;
 
 public static class ApplicationInsightsRegistration
 {
+    /// <summary>
+    /// Register client for reading Application Insights data.
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="options"></param>
     public static void AddQuilt4NetApplicationInsightsClient(this IServiceCollection services, Action<ApplicationInsightsOptions> options = null)
     {
         var configuration = services.BuildServiceProvider().GetService<IConfiguration>();

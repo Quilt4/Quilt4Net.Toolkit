@@ -2,7 +2,8 @@
 
 public static class HealthRegistration
 {
-    public static void AddQuilt4NetHealthClient(this WebApplicationBuilder builder, Action<HealthOptions> options = null)
+    [Obsolete($"Use {nameof(AddQuilt4NetHealthClient)} with {nameof(IServiceCollection)} instead.")]
+    public static void AddQuilt4NetHealthClient(this WebApplicationBuilder builder, Action<HealthClientOptions> options = null)
     {
         builder.Services.AddQuilt4NetHealthClient(options);
     }

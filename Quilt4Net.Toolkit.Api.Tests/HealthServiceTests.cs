@@ -8,6 +8,7 @@ using Quilt4Net.Toolkit.Api.Tests.Helper;
 using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Probe;
+using Quilt4Net.Toolkit.Health;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Api.Tests;
@@ -15,7 +16,7 @@ namespace Quilt4Net.Toolkit.Api.Tests;
 public class HealthServiceTests
 {
     private readonly Mock<IServiceProvider> _serviceProvider = new(MockBehavior.Strict);
-    private readonly Mock<Quilt4NetApiOptions> _option = new(MockBehavior.Strict);
+    private readonly Mock<Quilt4NetHealthApiOptions> _option = new(MockBehavior.Strict);
     private readonly Mock<ILogger<HealthService>> _logger = new(MockBehavior.Loose);
     private readonly Mock<IHostEnvironment> _hostEnvironment = new(MockBehavior.Strict);
     private readonly Mock<IHostedServiceProbeRegistry> _hostedServiceProbeRegistry = new(MockBehavior.Strict);
@@ -55,7 +56,7 @@ public class HealthServiceTests
             Essential = essential,
             CheckAsync = _ => Task.FromResult(new CheckResult { Success = success, Message = message }),
         };
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponent(component);
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
 
@@ -83,7 +84,7 @@ public class HealthServiceTests
             Essential = essential,
             CheckAsync = _ => throw new InvalidOperationException("some issue"),
         };
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponent(component);
         _hostEnvironment.Setup(x => x.EnvironmentName).Returns("Production");
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
@@ -112,7 +113,7 @@ public class HealthServiceTests
             Essential = true,
             CheckAsync = _ => throw new InvalidOperationException("some issue"),
         };
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponent(component);
         option.ExceptionDetail = exceptionDetailLevel;
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
@@ -160,7 +161,7 @@ public class HealthServiceTests
             Essential = true,
             CheckAsync = _ => throw new InvalidOperationException("some issue"),
         };
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponent(component);
         _hostEnvironment.Setup(x => x.EnvironmentName).Returns(environment);
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
@@ -204,7 +205,7 @@ public class HealthServiceTests
     {
         //Arrange
         var message = new Fixture().Create<string>();
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponentService<OneComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new OneComponentService("One", success, essential, message));
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
@@ -230,7 +231,7 @@ public class HealthServiceTests
     {
         //Arrange
         var message = new Fixture().Create<string>();
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         var component = new Component
         {
             Name = "Other",
@@ -263,7 +264,7 @@ public class HealthServiceTests
     {
         //Arrange
         var message = new Fixture().Create<string>();
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         var component = new Component
         {
             Name = "One",
@@ -298,7 +299,7 @@ public class HealthServiceTests
     {
         //Arrange
         var message = new Fixture().Create<string>();
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         var component = new Component
         {
             Name = name,
@@ -330,7 +331,7 @@ public class HealthServiceTests
     public async Task ManyWithSameName()
     {
         //Arrange
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponentService<ManyComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new ManyComponentService("A", 5));
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
@@ -351,7 +352,7 @@ public class HealthServiceTests
     {
         //Arrange
         var sw = Stopwatch.StartNew();
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponentService<ManyComponentService>();
         _serviceProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns(new ManyComponentService("A", 10, TimeSpan.FromSeconds(1)));
         var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, _hostedServiceProbeRegistry.Object, option, _logger.Object);
@@ -387,7 +388,7 @@ public class HealthServiceTests
     {
         //Arrange
         var sw = Stopwatch.StartNew();
-        var option = new Quilt4NetApiOptions();
+        var option = new Quilt4NetHealthApiOptions();
         option.AddComponent(new Component { Name = "Slow", CheckAsync = async _ =>
             {
                 await Task.Delay(TimeSpan.FromSeconds(3));

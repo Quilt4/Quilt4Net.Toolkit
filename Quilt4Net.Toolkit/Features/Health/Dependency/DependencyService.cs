@@ -8,16 +8,16 @@ namespace Quilt4Net.Toolkit.Features.Health.Dependency;
 
 internal class DependencyService : IDependencyService
 {
-    private readonly Quilt4NetApiOptions _options;
+    private readonly Quilt4NetHealthApiOptions _apiOptions;
 
-    public DependencyService(Quilt4NetApiOptions options)
+    public DependencyService(Quilt4NetHealthApiOptions apiOptions)
     {
-        _options = options;
+        _apiOptions = apiOptions;
     }
 
     public async IAsyncEnumerable<KeyValuePair<string, DependencyComponent>> GetStatusAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var tasks = _options.Dependencies.Select(x => Task.Run<(string Name, bool Essential, Dictionary<string, HealthComponent> Components, Uri Uri)>(async () =>
+        var tasks = _apiOptions.Dependencies.Select(x => Task.Run<(string Name, bool Essential, Dictionary<string, HealthComponent> Components, Uri Uri)>(async () =>
         {
             var handler = new HttpClientHandler();
 
@@ -62,9 +62,9 @@ internal class DependencyService : IDependencyService
 
     private async Task<HealthResponse> CheckCertificateAsync(Dependency x, HealthStatus certificateStatus, string message, HealthResponse content)
     {
-        if (!(_options.Certificate?.DependencyCheckEnabled ?? false)) return content;
+        if (!(_apiOptions.Certificate?.DependencyCheckEnabled ?? false)) return content;
 
-        var certificateHealth = await Certificatehelper.GetCertificateHealthAsync(x.Uri, _options.Certificate, certificateStatus, message);
+        var certificateHealth = await Certificatehelper.GetCertificateHealthAsync(x.Uri, _apiOptions.Certificate, certificateStatus, message);
 
         content = content with
         {

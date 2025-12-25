@@ -14,7 +14,7 @@ public record DependencyComponent
     public required HealthStatus Status { get; init; }
 
     /// <summary>
-    /// Address of the service.
+    /// HealthAddress of the service.
     /// </summary>
     public required Uri Uri { get; init; }
 

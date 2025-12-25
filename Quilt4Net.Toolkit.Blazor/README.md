@@ -65,3 +65,14 @@ When starting the content has a *default* language, that can be named.
 Languages can be added and always derives from the *default* lanauge. When translation is completed the language can be activated to a specific environment. After that it can be promoted between environments.
 
 When the *default* language changes after a translation, there will be a notification suggesting to chage.
+
+
+
+
+## AddQuilt4NetBlazorContent
+Register blazor usages of content from Quilt4Net.
+
+### ContentOptions
+- Application
+- Quilt4NetAddress
+- ApiKey

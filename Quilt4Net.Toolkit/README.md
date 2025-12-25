@@ -7,3 +7,28 @@
 
 Client consumer for *Quilt4Net Toolkit Api* and access for *Application Insights*.
 
+## AddQuilt4NetApplicationInsightsClient
+Register client for reading Application Insights data.
+
+### ApplicationInsightsOptions
+- TenantId
+- WorkspaceId
+- ClientId
+- ClientSecret
+
+## AddQuilt4NetHealthClient
+Register client for reading data from the health API.
+
+### HealthClientOptions
+- HealthAddress
+
+## AddQuilt4NetContent
+Register backend usages of content from Quilt4Net.
+
+### ContentOptions
+- Application
+- Quilt4NetAddress
+- ApiKey
+
+## AddQuilt4NetRemoteConfiguration
+Register backend usages of remote configuration and feature toggles from Quilt4Net.

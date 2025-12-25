@@ -1,5 +1,5 @@
 ﻿using FluentAssertions;
-using Quilt4Net.Toolkit.Api.Framework.Endpoints;
+using Quilt4Net.Toolkit.Health.Framework.Endpoints;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Api.Tests.Framework.Endpoints;

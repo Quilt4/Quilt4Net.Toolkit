@@ -7,9 +7,9 @@
 		<Version>1.0.0</Version>
 		<Authors>Thargelion AB</Authors>
 		<Company>Thargelion AB</Company>
-		<Product>Quilt4Net Toolkit Api</Product>
-		<Tag>Api health liveness readiness</Tag>
-		<Description>Support for API health, liveness, readiness, startup, metrics, version and dependencies.</Description>
+		<Product>Quilt4Net Toolkit Health</Product>
+		<Tag>health liveness readiness</Tag>
+		<Description>Features for health, liveness, readiness, startup, metrics, version and dependencies. Adds a health API.</Description>
 		<PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
@@ -35,11 +35,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
-		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
-	</ItemGroup>
-
-	<ItemGroup>
 	  <PackageReference Include="Microsoft.ApplicationInsights" Version="2.23.0" />
 	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
 		  <PrivateAssets>all</PrivateAssets>
@@ -48,8 +43,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\Quilt4Net.Toolkit.Health\Quilt4Net.Toolkit.Health.csproj" />
-	  <ProjectReference Include="..\Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj" />
+		<ProjectReference Include="..\Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj" />
 	</ItemGroup>
 
 </Project>

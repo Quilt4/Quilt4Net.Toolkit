@@ -3,7 +3,8 @@
 namespace Quilt4Net.Toolkit.Api;
 
 /// <summary>
-/// Configuration for logging.
+/// Configuration for API calls.
+/// This option can be configured by code or with appsettings.json on location "Quilt4Net/ApiLogging"
 /// </summary>
 public record LoggingOptions
 {

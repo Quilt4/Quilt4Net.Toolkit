@@ -1,12 +1,14 @@
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
+using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
-using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Api.Sample;
 using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Health.Dependency;
+using Quilt4Net.Toolkit.Health;
+using Quilt4Net.Toolkit.Health.Framework.Endpoints;
 using Quilt4Net.Toolkit.Sample;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,18 +54,18 @@ builder.Logging.AddApplicationInsights();
 
 builder.Services.AddTransient<BackgroundHealthCheckService>();
 
-builder.AddQuilt4NetApplicationInsightsClient();
-builder.AddQuilt4NetHealthClient();
-builder.AddQuilt4NetContent();
-builder.AddQuilt4NetRemoteConfiguration();
-builder.AddQuilt4NetLogging(o =>
+builder.Services.AddQuilt4NetApplicationInsightsClient();
+builder.Services.AddQuilt4NetHealthClient();
+builder.Services.AddQuilt4NetContent();
+builder.Services.AddQuilt4NetRemoteConfiguration();
+builder.Services.AddQuilt4NetApiLogging(o =>
 {
-    o.Interceptor = async (request, response, details, _) =>
+    o.Interceptor = (request, response, details, _) =>
     {
-        return (request, response, details);
+        return Task.FromResult((request, response, details));
     };
 });
-builder.AddQuilt4NetApi(o =>
+builder.Services.AddQuilt4NetHealthApi(o =>
 {
     //o.Certificate.SelfCheckEnabled = false;
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
@@ -79,7 +81,7 @@ builder.AddQuilt4NetApi(o =>
         [HealthEndpoint.Version] = new(true, false, true)
     };
 
-    o.Endpoints = config.Encode();
+    o.Endpoints = AccessHelper.Encode(config);
 
     o.AddComponent(new Component
     {
@@ -120,7 +122,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.UseQuilt4NetApi();
+app.UseQuilt4NetHealthApi();
 app.UseQuilt4NetLogging();
 
 app.Run();

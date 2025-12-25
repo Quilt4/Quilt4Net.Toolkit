@@ -7,19 +7,19 @@ namespace Quilt4Net.Toolkit.Features.Health.Version;
 internal class VersionService : IVersionService
 {
     private readonly IHostEnvironment _hostEnvironment;
-    private readonly Quilt4NetApiOptions _options;
+    private readonly Quilt4NetHealthApiOptions _apiOptions;
 
-    public VersionService(IHostEnvironment hostEnvironment, Quilt4NetApiOptions options)
+    public VersionService(IHostEnvironment hostEnvironment, Quilt4NetHealthApiOptions apiOptions)
     {
         _hostEnvironment = hostEnvironment;
-        _options = options;
+        _apiOptions = apiOptions;
     }
 
     public async Task<VersionResponse> GetVersionAsync(CancellationToken cancellationToken)
     {
         var asm = Assembly.GetEntryAssembly();
         var name = _hostEnvironment.EnvironmentName;
-        var ipAddress = await GetExternalIpAsync(_options.IpAddressCheckUri);
+        var ipAddress = await GetExternalIpAsync(_apiOptions.IpAddressCheckUri);
 
         var result = new VersionResponse
         {

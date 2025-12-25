@@ -1,6 +1,6 @@
-﻿using Quilt4Net.Toolkit.Api.Framework.Endpoints;
+﻿using Quilt4Net.Toolkit.Health.Framework.Endpoints;
 
-namespace Quilt4Net.Toolkit.Api.Framework;
+namespace Quilt4Net.Toolkit.Health.Framework;
 
 internal interface IEndpointHandlerService
 {

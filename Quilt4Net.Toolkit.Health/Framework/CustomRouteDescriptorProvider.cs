@@ -1,15 +1,15 @@
 ﻿using Microsoft.AspNetCore.Mvc.Abstractions;
 using Quilt4Net.Toolkit.Features.Api;
 
-namespace Quilt4Net.Toolkit.Api.Framework;
+namespace Quilt4Net.Toolkit.Health.Framework;
 
 internal class CustomRouteDescriptorProvider : IActionDescriptorProvider
 {
-    private readonly Quilt4NetApiOptions _options;
+    private readonly Quilt4NetHealthApiOptions _apiOptions;
 
-    public CustomRouteDescriptorProvider(Quilt4NetApiOptions options)
+    public CustomRouteDescriptorProvider(Quilt4NetHealthApiOptions apiOptions)
     {
-        _options = options;
+        _apiOptions = apiOptions;
     }
 
     public int Order => -1000; // Ensure it runs early
@@ -22,7 +22,7 @@ internal class CustomRouteDescriptorProvider : IActionDescriptorProvider
             {
                 if (item == "Health")
                 {
-                    descriptor.RouteValues["controller"] = _options.ControllerName;
+                    descriptor.RouteValues["controller"] = _apiOptions.ControllerName;
                 }
             }
         }

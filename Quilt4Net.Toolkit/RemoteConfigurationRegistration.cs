@@ -9,6 +9,12 @@ namespace Quilt4Net.Toolkit;
 
 public static class RemoteConfigurationRegistration
 {
+    /// <summary>
+    /// Register backend usages of remote configuration and feature toggles from Quilt4Net.
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="options"></param>
+    /// <exception cref="InvalidOperationException"></exception>
     public static void AddQuilt4NetRemoteConfiguration(this IServiceCollection services, Action<RemoteConfigurationOptions> options = null)
     {
         var configuration = services.BuildServiceProvider().GetService<IConfiguration>();

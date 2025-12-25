@@ -7,16 +7,30 @@ public static class LoggingRegistration
 {
     private static LoggingOptions _options;
 
+    [Obsolete($"Use {nameof(AddQuilt4NetApiLogging)} instead.")]
     public static void AddQuilt4NetLogging(this WebApplicationBuilder builder, Action<LoggingOptions> options = null)
     {
         AddQuilt4NetLogging(builder.Services, options);
     }
 
+    [Obsolete($"Use {nameof(AddQuilt4NetApiLogging)} instead.")]
     public static void AddQuilt4NetLogging(this IServiceCollection services, Action<LoggingOptions> options = null)
+    {
+        services.AddQuilt4NetApiLogging(options);
+    }
+
+    /// <summary>
+    /// Add logging for API calls.
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="options"></param>
+    public static void AddQuilt4NetApiLogging(this IServiceCollection services, Action<LoggingOptions> options = null)
     {
         var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
 
-        _options = configuration?.GetSection("Quilt4Net:Logging").Get<LoggingOptions>() ?? new LoggingOptions();
+        _options = configuration?.GetSection("Quilt4Net:ApiLogging").Get<LoggingOptions>()
+                   ?? configuration?.GetSection("Quilt4Net:Logging").Get<LoggingOptions>()
+                   ?? new LoggingOptions();
 
         options?.Invoke(_options);
         services.AddSingleton(Options.Create(_options));

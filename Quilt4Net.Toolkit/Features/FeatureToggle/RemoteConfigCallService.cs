@@ -67,7 +67,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 {
                     if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException($"Unable to get feature toggle for key '{key}' from address '{address}'. Response was '{response.StatusCode} {response.ReasonPhrase}'.");
 
-                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{Address}' Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
+                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}' Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
                         key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase, defaultValue);
                     return defaultValue;
                 }

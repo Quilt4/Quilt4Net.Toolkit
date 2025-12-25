@@ -1,7 +1,7 @@
 trigger:
 - master
 
-name: 0.3.$(Rev:r)
+name: 0.4.$(Rev:r)
 
 pool:
   vmImage: 'windows-latest'
@@ -67,6 +67,13 @@ stages:
       inputs:
         command: 'pack'
         packagesToPack: '**/Quilt4Net.Toolkit.csproj'
+        versioningScheme: 'byBuildNumber'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Pack Quilt4Net.Toolkit.Health'
+      inputs:
+        command: 'pack'
+        packagesToPack: '**/Quilt4Net.Toolkit.Health.csproj'
         versioningScheme: 'byBuildNumber'
 
     - task: DotNetCoreCLI@2

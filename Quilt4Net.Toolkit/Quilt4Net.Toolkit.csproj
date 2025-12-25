@@ -15,9 +15,6 @@
 		<PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
 		<DebugType>portable</DebugType>
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
-	</PropertyGroup>
-
-	<PropertyGroup>
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
 		<IncludeSource>true</IncludeSource>
@@ -36,8 +33,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Tests" />
 		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api" />
+		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Health" />
+		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Tests" />
 		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
 		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
 	</ItemGroup>
