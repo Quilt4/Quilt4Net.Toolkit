@@ -1,34 +1,29 @@
 ﻿<RadzenRow Style="margin-bottom: 6px;">
     <RadzenColumn>
-        <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
-        <RadzenDropDown TValue="TimeSpan" Data="@_ranges" @bind-Value="_selectedRange" TextProperty="Label" ValueProperty="Value" />
+        <RadzenStack Orientation="Orientation.Vertical">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Range"/>
+            <LogRangeView OnSelected="OnRangeSelected"/>
+        </RadzenStack>
     </RadzenColumn>
 </RadzenRow>
 
-<RadzenTabs Change="StateHasChanged">
+<RadzenTabs Change="StateHasChanged" Visible="@(_range != null)">
     <Tabs>
         <RadzenTabsItem Text="Search">
-            <LogSearch Range="@_selectedRange" />
+            <LogSearchView Range="@_range" />
         </RadzenTabsItem>
         <RadzenTabsItem Text="Summary">
-            <LogSummary Range="@_selectedRange" />
+            <LogSummaryView Range="@_range" />
         </RadzenTabsItem>
     </Tabs>
 </RadzenTabs>
 
 @code {
-    private TimeSpan _selectedRange = TimeSpan.FromDays(1);
-    private readonly List<TimeRangeOption> _ranges = [ new("7 days", TimeSpan.FromDays(7)), new("3 days", TimeSpan.FromDays(3)), new("1 day", TimeSpan.FromDays(1)), new("1 hour", TimeSpan.FromHours(1)) ];
+    private LogRangeView.TimeRangeOption _range;
 
-    private record TimeRangeOption
+    private void OnRangeSelected(LogRangeView.TimeRangeOption range)
     {
-        public string Label { get; set; }
-        public TimeSpan Value { get; set; }
-
-        public TimeRangeOption(string label, TimeSpan value)
-        {
-            Label = label;
-            Value = value;
-        }
+        _range = range;
+        StateHasChanged();
     }
 }

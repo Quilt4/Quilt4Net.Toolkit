@@ -18,9 +18,11 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         _options = options.Value;
     }
 
-    public async IAsyncEnumerable<SummaryData> GetSummaryAsync(string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel)
+    public async IAsyncEnumerable<SummaryData> GetSummaryAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel)
     {
-        var client = GetClient();
+        var client = GetClient(context);
+
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
         //NOTE: Pull data from exceptions
         var query = @$"AppExceptions
@@ -39,7 +41,7 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     Message = take_any(Message),
     IssueCount = count()
     by ProblemId";
-        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+        var response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
             foreach (var row in table.Rows)
@@ -74,7 +76,7 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     Message = take_any(Message),
     IssueCount = count()
     by ProblemId";
-        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+        response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
         foreach (var table in response.Value.AllTables)
         {
             foreach (var row in table.Rows)
@@ -182,11 +184,14 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         }
     }
 
-    private LogsQueryClient GetClient()
+    private LogsQueryClient GetClient(IApplicationInsightsContext context = null)
     {
-        var optionsClientSecret = _options.ClientSecret;
-        if (string.IsNullOrEmpty(optionsClientSecret)) throw new InvalidOperationException($"No {nameof(ApplicationInsightsOptions.ClientSecret)} has been configured.");
-        var clientSecretCredential = new ClientSecretCredential(_options.TenantId, _options.ClientId, optionsClientSecret);
+        var clientSecret = context?.ClientSecret ?? _options.ClientSecret;
+        var tenantId = context?.TenantId ?? _options.TenantId;
+        var clientId = context?.ClientId ?? _options.ClientId;
+
+        if (string.IsNullOrEmpty(clientSecret)) throw new InvalidOperationException($"No {nameof(ApplicationInsightsOptions.ClientSecret)} has been configured.");
+        var clientSecretCredential = new ClientSecretCredential(tenantId, clientId, clientSecret);
         var client = new LogsQueryClient(clientSecretCredential);
         return client;
     }
@@ -496,6 +501,22 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         }
 
         //TODO: Search in Traces and Requests
+    }
+
+    public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)
+    {
+        try
+        {
+            var client = GetClient(context);
+            var detailQuery = "AppTraces";
+            _ = await client.QueryWorkspaceAsync(context.WorkspaceId, detailQuery, new QueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
+
+            return true;
+        }
+        catch (Exception e)
+        {
+            return false;
+        }
     }
 
     private static Dictionary<string, object> RowDictionary(LogsTableRow row, IReadOnlyList<LogsTableColumn> columns)

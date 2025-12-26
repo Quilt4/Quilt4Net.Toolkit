@@ -22,7 +22,7 @@ namespace Quilt4Net.Toolkit.Api.Sample.Controllers
         {
             if (string.IsNullOrEmpty(environment)) environment = _hostEnvironment.EnvironmentName;
 
-            var result = await _applicationInsightsClient.GetSummaryAsync(environment, TimeSpan.FromMinutes(15)).ToArrayAsync();
+            var result = await _applicationInsightsClient.GetSummaryAsync(null, environment, TimeSpan.FromMinutes(15)).ToArrayAsync();
             return Ok(result);
         }
 

@@ -1,21 +1,20 @@
-﻿@using System.Text.Json
-@using Microsoft.Extensions.Hosting
+﻿@using Microsoft.Extensions.Hosting
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
 @inject IHostEnvironment HostEnvironment
 
-@if (_model == null)
+@if (Model == null)
 {
     <Loading />
 }
 else
 {
     <RadzenCard>
-        <RadzenDataGrid Data="@_model"
-        AllowSorting="true"
-        AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-        AllowPaging="true" PageSize="10" PageSizeOptions="[10,100]"
-        ShowPagingSummary="true" PagingSummaryFormat="@("{2:N0} summaries, page {0} of {1}")">
+        <RadzenDataGrid Data="@Model"
+                        AllowSorting="true"
+                        AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                        AllowPaging="true" PageSize="10" PageSizeOptions="[10,100]"
+                        ShowPagingSummary="true" PagingSummaryFormat="@("{2:N0} summaries, page {0} of {1}")">
             <Columns>
                 @* <RadzenDataGridColumn TItem="SummaryData" Width="52px">
                     <Template>
@@ -44,25 +43,29 @@ else
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
-    private SummaryData[] _model { get; set; }
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    private SummaryData[] Model { get; set; }
+
+    protected override async Task OnParametersSetAsync()
     {
-        _model = await ApplicationInsightsService.GetSummaryAsync(HostEnvironment.EnvironmentName, Range).ToArrayAsync();
-
-        await base.OnInitializedAsync();
+        Model = null;
+        Model = await ApplicationInsightsService
+            .GetSummaryAsync(Context, HostEnvironment.EnvironmentName, Range)
+            .ToArrayAsync();
     }
 
-    private static string GetPrettyJson(SummaryData context)
-    {
-        var decoded = Base64UrlHelper.DecodeFromBase64Url(context.SummaryId);
-        var summary = JsonSerializer.Deserialize<SummaryDataIdentifier>(decoded);
+    // private static string GetPrettyJson(SummaryData summaryData)
+    // {
+    //     var decoded = Base64UrlHelper.DecodeFromBase64Url(summaryData.SummaryId);
+    //     var summary = JsonSerializer.Deserialize<SummaryDataIdentifier>(decoded);
 
-        var prettyJson = JsonSerializer.Serialize(summary, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
+    //     var prettyJson = JsonSerializer.Serialize(summary, new JsonSerializerOptions
+    //     {
+    //         WriteIndented = true
+    //     });
 
-        return prettyJson;
-    }
+    //     return prettyJson;
+    // }
 }

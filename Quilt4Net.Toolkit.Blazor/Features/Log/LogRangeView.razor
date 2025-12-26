@@ -1,0 +1,43 @@
+﻿<RadzenDropDown Data="@_ranges"
+                @bind-Value="_selectedRange"
+                TValue="TimeSpan"
+                TextProperty="Label"
+                ValueProperty="Value"
+                Change="OnChange" />
+
+@code {
+    private TimeSpan _selectedRange = TimeSpan.FromDays(1);
+    private readonly List<TimeRangeOption> _ranges = [new("7 days", TimeSpan.FromDays(7)), new("3 days", TimeSpan.FromDays(3)), new("1 day", TimeSpan.FromDays(1)), new("1 hour", TimeSpan.FromHours(1))];
+
+    [Parameter]
+    public EventCallback<TimeRangeOption> OnSelected { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await OnChange(default);
+        await base.OnInitializedAsync();
+    }
+
+    private async Task OnChange(object _)
+    {
+        var item = _ranges.Single(x => x.Value == _selectedRange);
+        await OnSelected.InvokeAsync(item);
+    }
+
+    public record TimeRangeOption
+    {
+        public string Label { get; set; }
+        public TimeSpan Value { get; set; }
+
+        public TimeRangeOption(string label, TimeSpan value)
+        {
+            Label = label;
+            Value = value;
+        }
+
+        public static implicit operator TimeSpan(TimeRangeOption option)
+        {
+            return option.Value;
+        }
+    }
+}
