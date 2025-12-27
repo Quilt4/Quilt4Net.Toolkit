@@ -162,4 +162,30 @@ public static class MeasureExtensions
 
         return result;
     }
+
+    public static void Elapsed(this ILogger logger, string action, TimeSpan elapsed, LogLevel logLevel = LogLevel.Information, LogData logData = null)
+    {
+        action ??= "Action";
+
+        var data = logData ?? new LogData();
+        data.AddField("Monitor", Constants.Monitor);
+        data.AddField("Method", "Measure");
+        //data.AddData("Elapsed", elapsed);
+
+        var details = System.Text.Json.JsonSerializer.Serialize(data.GetData().ToUniqueDictionary());
+        logger.Log(logLevel, "Measured {Action} in {Elapsed} ms. {Details}", action, elapsed, details);
+    }
+
+    public static void Count(this ILogger logger, string action, int count, LogLevel logLevel = LogLevel.Information, LogData logData = null)
+    {
+        action ??= "Action";
+
+        var data = logData ?? new LogData();
+        data.AddField("Monitor", Constants.Monitor);
+        data.AddField("Method", "Count");
+        data.AddData("Count", count);
+
+        var details = System.Text.Json.JsonSerializer.Serialize(data.GetData().ToUniqueDictionary());
+        logger.Log(logLevel, "Count {Action} in {Count} ms. {Details}", action, count, details);
+    }
 }

@@ -17,45 +17,38 @@ else
                         <RadzenAxisTitle Text="Time" />
                     </RadzenCategoryAxis>
 
-                    <RadzenValueAxis Formatter="@FormatElapsed">
-                        <RadzenAxisTitle Text="Elapsed" />
+                    <RadzenValueAxis>
+                        <RadzenAxisTitle Text="Count" />
                         <RadzenGridLines Visible="true" />
                     </RadzenValueAxis>
 
                     @foreach (var series in Series)
                     {
-                        <RadzenLineSeries Data="@series.Points"
+                        <RadzenColumnSeries Data="@series.Points"
                                           CategoryProperty="TimeGenerated"
-                                          ValueProperty="ElapsedMs"
+                                          ValueProperty="Count"
                                           Title="@series.Action">
-                            <RadzenMarkers Visible="@(series.Points.Length <= 3)"
-                                           MarkerType="MarkerType.Circle"
-                                           Size="3"/>
-                        </RadzenLineSeries>
+                        </RadzenColumnSeries>
                     }
                 </RadzenChart>
             </RadzenTabsItem>
             <RadzenTabsItem Text="Table">
-                <RadzenDataGrid Data="Model" TItem="MeasureData">
+                <RadzenDataGrid Data="Model" TItem="CountData">
                     <Columns>
                         <RadzenDataGridColumn Title="Id" Width="60px">
                             <Template>
                                 <RadzenLink Path="@($"/log/detail/{context.Id}?Source=Search&Range={Range}")" Icon="arrow_forward_ios" />
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Time" Property="@nameof(MeasureData.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">
+                        <RadzenDataGridColumn Title="Time" Property="@nameof(CountData.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">
                             <Template>
                                 <DateTimeView Date="@context.TimeGenerated" />
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Message" Property="@nameof(MeasureData.Message)" />
-                        <RadzenDataGridColumn Title="Application" Property="@nameof(MeasureData.Application)" />
-                        <RadzenDataGridColumn Title="Environment" Property="@nameof(MeasureData.Environment)" />
-                        <RadzenDataGridColumn Title="Elapsed" Property="@nameof(MeasureData.Elapsed)" Filterable="false">
-                            <Template>
-                                <TimeSpanView TimeSpan="@context.Elapsed" />
-                            </Template>
-                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn Title="Message" Property="@nameof(CountData.Message)" />
+                        <RadzenDataGridColumn Title="Application" Property="@nameof(CountData.Application)" />
+                        <RadzenDataGridColumn Title="Environment" Property="@nameof(CountData.Environment)" />
+                        <RadzenDataGridColumn Title="Count" Property="@nameof(CountData.Count)" Filterable="false" />
                     </Columns>
                 </RadzenDataGrid>
             </RadzenTabsItem>
@@ -64,7 +57,7 @@ else
 }
 
 @code {
-    private MeasureData[] Model { get; set; }
+    private CountData[] Model { get; set; }
     private IReadOnlyList<ActionSeries> Series { get; set; } = Array.Empty<ActionSeries>();
 
     [Parameter]
@@ -77,15 +70,14 @@ else
     {
         Model = null;
         Model = await ApplicationInsightsService
-            .GetMeasureAsync(Context, HostEnvironment.EnvironmentName, Range)
-            .Where(x => x.Elapsed < TimeSpan.FromHours(10)) //TODO: I made a misstake with a log entry, remove this when Neurolito log is clean. That would be about 2026-02-01
+            .GetCountAsync(Context, HostEnvironment.EnvironmentName, Range)
             .ToArrayAsync();
 
         var model = Model.Select(x => new MeasurePoint
         {
             Action = x.Action,
             TimeGenerated = x.TimeGenerated,
-            ElapsedMs = x.Elapsed.TotalMilliseconds
+            Count = x.Count
         });
 
         Series = model
@@ -95,34 +87,11 @@ else
             .ToArray();
     }
 
-    private string FormatElapsed(object value)
-    {
-        var ms = Convert.ToDouble(value);
-        var ts = TimeSpan.FromMilliseconds(ms);
-
-        if (ts.TotalHours >= 1)
-        {
-            return $"{ts.TotalHours:0.#} h";
-        }
-
-        if (ts.TotalMinutes >= 1)
-        {
-            return $"{ts.TotalMinutes:0.#} min";
-        }
-
-        if (ts.TotalSeconds >= 1)
-        {
-            return $"{ts.TotalSeconds:0.#} s";
-        }
-
-        return $"{ts.TotalMilliseconds:0} ms";
-    }
-
     private sealed class MeasurePoint
     {
         public string Action { get; set; }
         public DateTime TimeGenerated { get; set; }
-        public double ElapsedMs { get; set; }
+        public int Count { get; set; }
     }
 
     private sealed record ActionSeries(string Action, MeasurePoint[] Points);

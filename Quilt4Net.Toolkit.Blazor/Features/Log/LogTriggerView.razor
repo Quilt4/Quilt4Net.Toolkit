@@ -1,0 +1,48 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Extensions.Logging
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject ILogger<LogTriggerView> Logger
+@inject NotificationService NotificationService
+
+<RadzenDropDown Data="@_levels"
+                @bind-Value="_level"
+                TextProperty="Text"
+                ValueProperty="Value"
+                Style="width:200px" />
+<RadzenButton Text="Exception" Icon="error_med" Click="ThrowAsync" />
+<RadzenButton Text="Trace" Icon="barefoot" Click="TraceAsync" />
+
+@code {
+    private LogLevel _level;
+    private readonly IEnumerable<object> _levels = Enum
+        .GetValues<LogLevel>()
+        .Select(level => new
+        {
+            Text = level.ToString(),
+            Value = level
+        });
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    private async Task ThrowAsync(MouseEventArgs arg)
+    {
+        try
+        {
+            throw new InvalidOperationException("Manual trigger exception.");
+        }
+        catch (Exception e)
+        {
+            Logger.Log(_level, e, e.Message);
+        }
+
+        NotificationService.Notify(new NotificationMessage { Summary = "Logged" });
+    }
+
+    private async Task TraceAsync(MouseEventArgs arg)
+    {
+        Logger.Log(_level, "Manual trigger trace.");
+        NotificationService.Notify(new NotificationMessage { Summary = "Logged" });
+    }
+
+}

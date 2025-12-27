@@ -18,12 +18,3 @@ public record SummaryData
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required LogSource Type { get; init; }
 }
-
-public record MeasureData
-{
-    public required DateTimeOffset TimeGenerated { get; init; }
-    public required string Action { get; init;  }
-    public required string ApplicationName { get; init;  }
-    public required string Environment { get; init; }
-    public required TimeSpan Elapsed { get; init; }
-}

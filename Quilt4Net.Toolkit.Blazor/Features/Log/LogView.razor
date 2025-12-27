@@ -15,10 +15,16 @@
         </RadzenTabsItem>
         @* <RadzenTabsItem Text="Summary">
             <LogSummaryView Range="@RangeToUse" Context="Context" />
-        </RadzenTabsItem>
+        </RadzenTabsItem> *@
         <RadzenTabsItem Text="Measure">
             <LogMeasureView Range="@RangeToUse" Context="Context" />
-        </RadzenTabsItem> *@
+        </RadzenTabsItem>
+        <RadzenTabsItem Text="Count">
+            <LogCountView Range="@RangeToUse" Context="Context" />
+        </RadzenTabsItem>
+        <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
+            <LogTriggerView Context="Context" />
+        </RadzenTabsItem>
     </Tabs>
 </RadzenTabs>
 

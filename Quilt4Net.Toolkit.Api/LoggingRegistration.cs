@@ -38,7 +38,13 @@ public static class LoggingRegistration
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
     }
 
+    [Obsolete($"Use {nameof(UseQuilt4NetApiLogging)} instead.")]
     public static void UseQuilt4NetLogging(this WebApplication app)
+    {
+        UseQuilt4NetApiLogging(app);
+    }
+
+    public static void UseQuilt4NetApiLogging(this WebApplication app)
     {
         if (_options == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetLogging)} before {nameof(UseQuilt4NetLogging)}.");
 

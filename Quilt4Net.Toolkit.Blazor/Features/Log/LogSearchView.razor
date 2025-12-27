@@ -20,26 +20,29 @@ else if (_model != null)
                     AllowPaging="true" PageSize="10" PageSizeOptions="[10, 100]"
                     ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
         <Columns>
-            <RadzenDataGridColumn Title="Id" Property="@nameof(LogItem.Id)" />
-            <RadzenDataGridColumn Title="Fingerprint" Property="@nameof(LogItem.Fingerprint)" />
+            <RadzenDataGridColumn Title="Id" Width="60px">
+                <Template>
+                    <RadzenLink Path="@($"/log/detail/{context.Id}?Source=Search&Range={Range}")" Icon="arrow_forward_ios" />
+                </Template>
+            </RadzenDataGridColumn>
+            @* <RadzenDataGridColumn Title="Fingerprint" Property="@nameof(LogItem.Fingerprint)" Filterable="false" /> *@
+            <RadzenDataGridColumn Title="Time" Property="@nameof(LogItem.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">
+                <Template>
+                    <DateTimeView Date="@context.TimeGenerated" />
+                </Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Source" Property="@nameof(LogItem.Source)" />
+            <RadzenDataGridColumn Title="Level" Property="@nameof(LogItem.SeverityLevel)" />
             <RadzenDataGridColumn Title="Message" Property="@nameof(LogItem.Message)" />
+            <RadzenDataGridColumn Title="Application" Property="@nameof(LogItem.Application)" />
+            <RadzenDataGridColumn Title="Environment" Property="@nameof(LogItem.Environment)" />
 
             @* <RadzenDataGridColumn TItem="LogItem" Title="" Filterable="false" sortable="false" Width="50px;">
                 <Template>
                     <RadzenLink Path="@($"/log/detail/{context.Id}?Source=Search&Range={Range}")" Icon="arrow_forward_ios" />
                 </Template>
             </RadzenDataGridColumn> *@
-            @* <RadzenDataGridColumn TItem="LogItem" Title="Time" Property="@nameof(LogItem.TimeGenerated)" SortOrder="SortOrder.Descending" >
-                <Template>
-                    <DateTimeView Date="@context.TimeGenerated" />
-                </Template>
-            </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="LogItem" Title="Level" Property="@nameof(LogItem.SeverityLevel)" />
-            <RadzenDataGridColumn TItem="LogItem" Title="Source" Property="@nameof(LogItem.Source)" />
-            <RadzenDataGridColumn TItem="LogItem" Title="Application" Property="@nameof(LogItem.Application)" />
-            <RadzenDataGridColumn TItem="LogItem" Title="Environment" Property="@nameof(LogItem.Environment)" />
-            <RadzenDataGridColumn TItem="LogItem" Title="Message" Property="@nameof(LogItem.Message)" /> *@
+            @*
             @* <RadzenDataGridColumn TItem="LogItem" Title="CorrelationKey" Property="@nameof(LogItem.CorrelationKey)" /> *@
         </Columns>
     </RadzenDataGrid>

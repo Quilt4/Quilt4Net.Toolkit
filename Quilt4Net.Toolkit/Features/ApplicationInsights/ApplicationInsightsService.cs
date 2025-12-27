@@ -1,11 +1,11 @@
-﻿using System.Diagnostics;
-using System.Text.Json;
-using Azure;
+﻿using Azure;
 using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Framework;
+using System.Diagnostics;
+using System.Text.Json;
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
@@ -20,106 +20,421 @@ internal class ApplicationInsightsService : IApplicationInsightsService
 
     public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
     {
+        var items = await SearchInternalAsync(context, environment, text, timeSpan, minSeverityLevel).ToArrayAsync();
+        var duplicates = items.GroupBy(x => x.Id).Where(x => x.Count() > 1).ToArray();
+        if (duplicates.Any())
+        {
+            //TODO: Fix error with Id, it should always be unique.
+            Debugger.Break();
+        }
+
+        foreach (var item in items)
+        {
+            yield return item;
+        }
+    }
+
+    private async IAsyncEnumerable<LogItem> SearchInternalAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
+    {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
+        // =========================
+        // AppExceptions
+        // =========================
         var query = @$"
 AppExceptions
+| extend _p = todynamic(Properties)
 | extend
-    Message = tostring(Message),
-    Id = tostring(
-        hash(
-            strcat(
-                tostring(TimeGenerated), ""|"",
-                tostring(OperationId), ""|"",
-                tostring(ProblemId)
-            )
-        )
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    ApplicationName = coalesce(
+        tostring(_p[""ApplicationName""]),
+        tostring(AppRoleName)
     ),
+    Message = tostring(OuterMessage)
+| where SeverityLevel >= {(int)minSeverityLevel}
+| extend
+    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", ProblemId))),
     Fingerprint = tostring(ProblemId)
+| project
+    TimeGenerated,
+    ApplicationName,
+    Environment,
+    Message,
+    SeverityLevel,
+    Id,
+    Fingerprint,
+    OperationId
 | order by TimeGenerated desc";
-        var response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+
+        var response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(timeSpan));
+
         foreach (var table in response.Value.AllTables)
         {
+            var idIndex = GetColumnIndex(table, "Id");
+            var fingerprintIndex = GetColumnIndex(table, "Fingerprint");
+            var timeIndex = GetColumnIndex(table, "TimeGenerated");
+            var severityIndex = GetColumnIndex(table, "SeverityLevel");
+            var messageIndex = GetColumnIndex(table, "Message");
+            var environmentIndex = GetColumnIndex(table, "Environment");
+            var applicationIndex = GetColumnIndex(table, "ApplicationName");
+
             foreach (var row in table.Rows)
             {
                 yield return new LogItem
                 {
-                    Id = BuildItemIdentifier(row, LogSource.Exception),
-                    Fingerprint = row["Fingerprint"]?.ToString(),
+                    Id = BuildItemIdentifier(row, idIndex, LogSource.Exception),
+                    Fingerprint = row[fingerprintIndex]?.ToString(),
+                    TimeGenerated = GetDateTime(row, timeIndex),
                     Source = LogSource.Exception,
-                    Message = row["Message"]?.ToString(),
+                    SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
+                    Message = row[messageIndex]?.ToString(),
+                    Environment = row[environmentIndex]?.ToString(),
+                    Application = row[applicationIndex]?.ToString()
                 };
             }
         }
 
+        // =========================
+        // AppTraces
+        // =========================
         query = @$"
 AppTraces
+| extend _p = todynamic(Properties)
 | extend
-    Message = tostring(Message),
-    OriginalFormat = column_ifexists(""customDimensions.OriginalFormat"", """")
-| extend
-    Id = tostring(
-        hash(
-            strcat(
-                tostring(TimeGenerated), ""|"",
-                tostring(OperationId), ""|"",
-                Message
-            )
-        )
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    ApplicationName = coalesce(
+        tostring(_p[""ApplicationName""]),
+        tostring(AppRoleName)
     ),
-    Fingerprint = tostring(
-        hash(OriginalFormat)
-    )
+    Message = tostring(Message),
+    OriginalFormat = tostring(_p[""OriginalFormat""])
+| where SeverityLevel >= {(int)minSeverityLevel}
+| extend
+    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Fingerprint = tostring(hash(OriginalFormat))
+| project
+    TimeGenerated,
+    ApplicationName,
+    Environment,
+    Message,
+    SeverityLevel,
+    Id,
+    Fingerprint,
+    OperationId
 | order by TimeGenerated desc";
 
-        response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+        response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(timeSpan));
+
         foreach (var table in response.Value.AllTables)
         {
+            var idIndex = GetColumnIndex(table, "Id");
+            var fingerprintIndex = GetColumnIndex(table, "Fingerprint");
+            var timeIndex = GetColumnIndex(table, "TimeGenerated");
+            var severityIndex = GetColumnIndex(table, "SeverityLevel");
+            var messageIndex = GetColumnIndex(table, "Message");
+            var environmentIndex = GetColumnIndex(table, "Environment");
+            var applicationIndex = GetColumnIndex(table, "ApplicationName");
+
             foreach (var row in table.Rows)
             {
                 yield return new LogItem
                 {
-                    Id = BuildItemIdentifier(row, LogSource.Trace),
-                    Fingerprint = row["Fingerprint"]?.ToString(),
+                    Id = BuildItemIdentifier(row, idIndex, LogSource.Trace),
+                    Fingerprint = row[fingerprintIndex]?.ToString(),
+                    TimeGenerated = GetDateTime(row, timeIndex),
                     Source = LogSource.Trace,
-                    Message = row["Message"]?.ToString(),
+                    SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
+                    Message = row[messageIndex]?.ToString(),
+                    Environment = row[environmentIndex]?.ToString(),
+                    Application = row[applicationIndex]?.ToString()
                 };
             }
         }
 
+        // =========================
+        // AppRequests
+        // =========================
         query = @$"
 AppRequests
+| extend _p = todynamic(Properties)
 | extend
-    Message = tostring(Name),
-    OriginalFormat = tostring(Name)
-| extend
-    Id = tostring(
-        hash(
-            strcat(
-                tostring(TimeGenerated), ""|"",
-                tostring(OperationId), ""|"",
-                Message
-            )
-        )
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    ApplicationName = coalesce(
+        tostring(_p[""ApplicationName""]),
+        tostring(AppRoleName)
     ),
-    Fingerprint = tostring(
-        hash(OriginalFormat)
+    Message = tostring(Name)
+| extend
+    SeverityLevel = case(
+        ResultCode startswith ""5"", 3,
+        ResultCode startswith ""4"", 2,
+        1
     )
+| where SeverityLevel >= {(int)minSeverityLevel}
+| extend
+    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Fingerprint = tostring(hash(Message))
+| project
+    TimeGenerated,
+    ApplicationName,
+    Environment,
+    Message,
+    SeverityLevel,
+    Id,
+    Fingerprint,
+    OperationId,
+    ResultCode,
+    Success
 | order by TimeGenerated desc";
-        response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+
+        response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(timeSpan));
+
         foreach (var table in response.Value.AllTables)
         {
+            var idIndex = GetColumnIndex(table, "Id");
+            var fingerprintIndex = GetColumnIndex(table, "Fingerprint");
+            var timeIndex = GetColumnIndex(table, "TimeGenerated");
+            var severityIndex = GetColumnIndex(table, "SeverityLevel");
+            var messageIndex = GetColumnIndex(table, "Message");
+            var environmentIndex = GetColumnIndex(table, "Environment");
+            var applicationIndex = GetColumnIndex(table, "ApplicationName");
+
             foreach (var row in table.Rows)
             {
                 yield return new LogItem
                 {
-                    Id = BuildItemIdentifier(row, LogSource.Request),
-                    Fingerprint = row["Fingerprint"]?.ToString(),
+                    Id = BuildItemIdentifier(row, idIndex, LogSource.Request),
+                    Fingerprint = row[fingerprintIndex]?.ToString(),
+                    TimeGenerated = GetDateTime(row, timeIndex),
                     Source = LogSource.Request,
-                    Message = row["Message"]?.ToString(),
+                    SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
+                    Message = row[messageIndex]?.ToString(),
+                    Environment = row[environmentIndex]?.ToString(),
+                    Application = row[applicationIndex]?.ToString()
                 };
             }
+        }
+    }
+
+    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    {
+        var items = await GetMeasureInternalAsync(context, environment, timeSpan).ToArrayAsync();
+        var duplicates = items.GroupBy(x => x.Id).Where(x => x.Count() > 1).ToArray();
+        if (duplicates.Any())
+        {
+            //TODO: Fix error with Id, it should always be unique.
+            Debugger.Break();
+        }
+
+        foreach (var item in items)
+        {
+            yield return item;
+        }
+    }
+
+    private async IAsyncEnumerable<MeasureData> GetMeasureInternalAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    {
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        var envFilter = environment ?? string.Empty;
+
+        var query = @$"
+AppTraces
+| extend _p = todynamic(Properties)
+| extend
+    Method = tostring(parse_json(tostring(_p[""Details""]))[""Method""])
+| where Method == ""Measure""
+| extend
+    Action = tostring(_p[""Action""]),
+    ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, Message)
+| extend
+    Elapsed = totimespan(ElapsedRaw),
+    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Fingerprint = tostring(hash(strcat(""Measure|"", Action)))
+| project
+    TimeGenerated,
+    Id,
+    Fingerprint,
+    Message,
+    Environment,
+    ApplicationName,
+    Action,
+    Elapsed
+| order by TimeGenerated desc";
+
+        var response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(timeSpan));
+
+        foreach (var table in response.Value.AllTables)
+        {
+            var timeIndex = GetColumnIndex(table, "TimeGenerated");
+            var idIndex = GetColumnIndex(table, "Id");
+            var fingerprintIndex = GetColumnIndex(table, "Fingerprint");
+            var messageIndex = GetColumnIndex(table, "Message");
+            var environmentIndex = GetColumnIndex(table, "Environment");
+            var applicationIndex = GetColumnIndex(table, "ApplicationName");
+            var actionIndex = GetColumnIndex(table, "Action");
+            var elapsedIndex = GetColumnIndex(table, "Elapsed");
+
+            foreach (var row in table.Rows)
+            {
+                yield return new MeasureData
+                {
+                    Id = row[idIndex]?.ToString()!,
+                    Fingerprint = row[fingerprintIndex]?.ToString()!,
+                    TimeGenerated = GetDateTime(row, timeIndex),
+
+                    Message = row[messageIndex]?.ToString()!,
+                    Environment = row[environmentIndex]?.ToString()!,
+                    Application = row[applicationIndex]?.ToString()!,
+
+                    Action = row[actionIndex]?.ToString()!,
+                    Elapsed = GetTimeSpan(row, elapsedIndex)
+                };
+            }
+        }
+    }
+
+    public async IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    {
+        var items = await GetCountInternalAsync(context, environment, timeSpan).ToArrayAsync();
+        var duplicates = items.GroupBy(x => x.Id).Where(x => x.Count() > 1).ToArray();
+        if (duplicates.Any())
+        {
+            //TODO: Fix error with Id, it should always be unique.
+            Debugger.Break();
+        }
+
+        foreach (var item in items)
+        {
+            yield return item;
+        }
+    }
+
+    private async IAsyncEnumerable<CountData> GetCountInternalAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    {
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        var envFilter = environment ?? string.Empty;
+
+        var query = @$"
+AppTraces
+| extend _p = todynamic(Properties)
+| extend
+    Method = tostring(parse_json(tostring(_p[""Details""]))[""Method""])
+| where Method == ""Count""
+| extend
+    Action = tostring(_p[""Action""]),
+    ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Count = tostring(parse_json(tostring(_p[""Details""]))[""Count""])
+| extend
+    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Fingerprint = tostring(hash(strcat(""Measure|"", Action)))
+| project
+    TimeGenerated,
+    Id,
+    Fingerprint,
+    Message,
+    Environment,
+    ApplicationName,
+    Action,
+    Count
+| order by TimeGenerated desc";
+
+        var response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(timeSpan));
+
+        foreach (var table in response.Value.AllTables)
+        {
+            var timeIndex = GetColumnIndex(table, "TimeGenerated");
+            var idIndex = GetColumnIndex(table, "Id");
+            var fingerprintIndex = GetColumnIndex(table, "Fingerprint");
+            var messageIndex = GetColumnIndex(table, "Message");
+            var environmentIndex = GetColumnIndex(table, "Environment");
+            var applicationIndex = GetColumnIndex(table, "ApplicationName");
+            var actionIndex = GetColumnIndex(table, "Action");
+            var countIndex = GetColumnIndex(table, "Count");
+
+            foreach (var row in table.Rows)
+            {
+                yield return new CountData
+                {
+                    Id = row[idIndex]?.ToString()!,
+                    Fingerprint = row[fingerprintIndex]?.ToString()!,
+                    TimeGenerated = GetDateTime(row, timeIndex),
+
+                    Message = row[messageIndex]?.ToString()!,
+                    Environment = row[environmentIndex]?.ToString()!,
+                    Application = row[applicationIndex]?.ToString()!,
+
+                    Action = row[actionIndex]?.ToString()!,
+                    Count = GetInt(row, countIndex)
+                };
+            }
+        }
+    }
+
+    //--->
+
+    private static async Task GetSchema(TimeSpan timeSpan, LogsQueryClient client, string workspaceId)
+    {
+        await PrintSchema("AppExceptions", client, workspaceId, timeSpan);
+        Console.WriteLine();
+        await PrintSchema("AppTraces", client, workspaceId, timeSpan);
+        Console.WriteLine();
+        await PrintSchema("AppRequests", client, workspaceId, timeSpan);
+    }
+
+    private static async Task PrintSchema(
+        string tableName,
+        LogsQueryClient client,
+        string workspaceId,
+        TimeSpan timeSpan)
+    {
+        Console.WriteLine($"{tableName}:");
+
+        var query = $@"
+{tableName}
+| getschema";
+
+        var response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(timeSpan));
+
+        var table = response.Value.Table;
+
+        // getschema returns rows where each row describes ONE column
+        // Row layout:
+        // [0] ColumnName
+        // [1] ColumnOrdinal
+        // [2] DataType
+        // [3] ColumnType
+        foreach (var row in table.Rows)
+        {
+            var columnName = row[0]?.ToString();
+            var dataType = row[2]?.ToString();
+
+            Console.WriteLine($"  {columnName} ({dataType})");
         }
     }
 
@@ -169,7 +484,7 @@ AppRequests
         //NOTE: Pull data from traces
         query = @$"AppTraces
 | where SeverityLevel >= 0
-| where Properties['AspNetCoreEnvironment'] == 'Production' or isempty(Properties['AspNetCoreEnvironment'])
+| where Properties['AspNetCoreEnvironment'] == '{environment}' or isempty(Properties['AspNetCoreEnvironment'])
 | extend ProblemId = tostring(hash(tostring(Properties['OriginalFormat'])))
 | extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
 | extend Environment = tostring(Properties['AspNetCoreEnvironment'])
@@ -229,123 +544,123 @@ AppRequests
         //        }
     }
 
-    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
-    {
-        var client = GetClient(context);
-        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+//    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+//    {
+//        var client = GetClient(context);
+//        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-        if (!Guid.TryParse(workspaceId, out _))
-        {
-            throw new InvalidOperationException("workspaceId must be a Log Analytics Workspace GUID");
-        }
+//        if (!Guid.TryParse(workspaceId, out _))
+//        {
+//            throw new InvalidOperationException("workspaceId must be a Log Analytics Workspace GUID");
+//        }
 
-        var environmentFilter = string.IsNullOrWhiteSpace(environment)
-            ? string.Empty
-            : $"| where AspNetCoreEnvironment == \"{environment}\"";
+//        var environmentFilter = string.IsNullOrWhiteSpace(environment)
+//            ? string.Empty
+//            : $"| where AspNetCoreEnvironment == \"{environment}\"";
 
-        var detailQuery = @$"
-AppTraces
-| extend
-    DetailsRaw = column_ifexists(""customDimensions.Details"", """"),
-    Action = column_ifexists(""customDimensions.Action"", """"),
-    ApplicationName = column_ifexists(""customDimensions.ApplicationName"", """"),
-    AspNetCoreEnvironment = column_ifexists(""customDimensions.AspNetCoreEnvironment"", """")
-| extend Details = parse_json(DetailsRaw)
-| extend Method = tostring(Details.Method)
-| where Method == ""Measure""
-{environmentFilter}
-| extend
-    ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, Message)
-| project
-    TimeGenerated,
-    Action,
-    ApplicationName,
-    AspNetCoreEnvironment,
-    ElapsedRaw
-| order by TimeGenerated desc";
+//        var detailQuery = @$"
+//AppTraces
+//| extend
+//    DetailsRaw = column_ifexists(""customDimensions.Details"", """"),
+//    Action = column_ifexists(""customDimensions.Action"", """"),
+//    ApplicationName = column_ifexists(""customDimensions.ApplicationName"", """"),
+//    AspNetCoreEnvironment = column_ifexists(""customDimensions.AspNetCoreEnvironment"", """")
+//| extend Details = parse_json(DetailsRaw)
+//| extend Method = tostring(Details.Method)
+//| where Method == ""Measure""
+//{environmentFilter}
+//| extend
+//    ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, Message)
+//| project
+//    TimeGenerated,
+//    Action,
+//    ApplicationName,
+//    AspNetCoreEnvironment,
+//    ElapsedRaw
+//| order by TimeGenerated desc";
 
-        var response = await client.QueryWorkspaceAsync(
-            workspaceId,
-            detailQuery,
-            new QueryTimeRange(timeSpan));
+//        var response = await client.QueryWorkspaceAsync(
+//            workspaceId,
+//            detailQuery,
+//            new QueryTimeRange(timeSpan));
 
-        var table = response.Value.Table;
+//        var table = response.Value.Table;
 
-        var timeIndex = GetColumnIndex(table, "TimeGenerated");
-        var actionIndex = GetColumnIndex(table, "Action");
-        var applicationNameIndex = GetColumnIndex(table, "ApplicationName");
-        var environmentIndex = GetColumnIndex(table, "AspNetCoreEnvironment");
-        var elapsedIndex = GetColumnIndex(table, "ElapsedRaw");
+//        var timeIndex = GetColumnIndex(table, "TimeGenerated");
+//        var actionIndex = GetColumnIndex(table, "Action");
+//        var applicationNameIndex = GetColumnIndex(table, "ApplicationName");
+//        var environmentIndex = GetColumnIndex(table, "AspNetCoreEnvironment");
+//        var elapsedIndex = GetColumnIndex(table, "ElapsedRaw");
 
-        foreach (var row in table.Rows)
-        {
-            if (row == null)
-            {
-                continue;
-            }
+//        foreach (var row in table.Rows)
+//        {
+//            if (row == null)
+//            {
+//                continue;
+//            }
 
-            yield return new MeasureData
-            {
-                TimeGenerated = GetDateTimeOffset(row, timeIndex),
-                Action = GetString(row, actionIndex),
-                ApplicationName = GetString(row, applicationNameIndex),
-                Environment = GetString(row, environmentIndex),
-                Elapsed = GetTimeSpan(row, elapsedIndex)
-            };
-        }
+//            yield return new MeasureData
+//            {
+//                TimeGenerated = GetDateTimeOffset(row, timeIndex),
+//                Action = GetString(row, actionIndex),
+//                ApplicationName = GetString(row, applicationNameIndex),
+//                Environment = GetString(row, environmentIndex),
+//                Elapsed = GetTimeSpan(row, elapsedIndex)
+//            };
+//        }
 
-        static int GetColumnIndex(LogsTable table, string name)
-        {
-            for (var i = 0; i < table.Columns.Count; i++)
-            {
-                if (string.Equals(table.Columns[i].Name, name, StringComparison.Ordinal))
-                {
-                    return i;
-                }
-            }
+//        static int GetColumnIndex(LogsTable table, string name)
+//        {
+//            for (var i = 0; i < table.Columns.Count; i++)
+//            {
+//                if (string.Equals(table.Columns[i].Name, name, StringComparison.Ordinal))
+//                {
+//                    return i;
+//                }
+//            }
 
-            throw new InvalidOperationException($"Column '{name}' was not returned by the query.");
-        }
+//            throw new InvalidOperationException($"Column '{name}' was not returned by the query.");
+//        }
 
-        static string GetString(IReadOnlyList<object> row, int index)
-        {
-            return row[index]?.ToString();
-        }
+//        static string GetString(IReadOnlyList<object> row, int index)
+//        {
+//            return row[index]?.ToString();
+//        }
 
-        static DateTimeOffset GetDateTimeOffset(IReadOnlyList<object> row, int index)
-        {
-            var value = row[index];
+//        static DateTimeOffset GetDateTimeOffset(IReadOnlyList<object> row, int index)
+//        {
+//            var value = row[index];
 
-            if (value is DateTimeOffset dto)
-            {
-                return dto;
-            }
+//            if (value is DateTimeOffset dto)
+//            {
+//                return dto;
+//            }
 
-            if (value is DateTime dt)
-            {
-                return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc));
-            }
+//            if (value is DateTime dt)
+//            {
+//                return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc));
+//            }
 
-            return DateTimeOffset.Parse(value.ToString());
-        }
+//            return DateTimeOffset.Parse(value.ToString());
+//        }
 
-        static TimeSpan GetTimeSpan(IReadOnlyList<object> row, int index)
-        {
-            var value = row[index]?.ToString();
+//        static TimeSpan GetTimeSpan(IReadOnlyList<object> row, int index)
+//        {
+//            var value = row[index]?.ToString();
 
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return TimeSpan.Zero;
-            }
+//            if (string.IsNullOrWhiteSpace(value))
+//            {
+//                return TimeSpan.Zero;
+//            }
 
-            if (TimeSpan.TryParse(value, out var result))
-            {
-                return result;
-            }
+//            if (TimeSpan.TryParse(value, out var result))
+//            {
+//                return result;
+//            }
 
-            throw new InvalidOperationException($"Invalid TimeSpan value '{value}'.");
-        }
-    }
+//            throw new InvalidOperationException($"Invalid TimeSpan value '{value}'.");
+//        }
+//    }
 
     //    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     //    {
@@ -769,5 +1084,82 @@ AppTraces
         var result = json.TryGetProperty(key, out var val) ? val.GetString() : null;
         if (string.IsNullOrEmpty(result)) return null;
         return result;
+    }
+
+    static int GetColumnIndex(LogsTable table, string name)
+    {
+        for (var i = 0; i < table.Columns.Count; i++)
+        {
+            if (string.Equals(table.Columns[i].Name, name, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        throw new InvalidOperationException($"Column '{name}' not found.");
+    }
+
+    static DateTime GetDateTime(IReadOnlyList<object> row, int index)
+    {
+        var value = row[index];
+
+        if (value is DateTimeOffset dto)
+        {
+            return dto.UtcDateTime;
+        }
+
+        if (value is DateTime dt)
+        {
+            return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+        }
+
+        return DateTime.Parse(value.ToString()!);
+    }
+
+    static int GetInt(IReadOnlyList<object> row, int index)
+    {
+        var value = row[index];
+
+        if (value is int i)
+        {
+            return i;
+        }
+
+        if (value is long l)
+        {
+            return (int)l;
+        }
+
+        return int.Parse(value.ToString()!);
+    }
+
+    static string BuildItemIdentifier(
+        IReadOnlyList<object> row,
+        int idIndex,
+        LogSource type)
+    {
+        var identifier = row[idIndex]?.ToString();
+
+        return Base64UrlHelper.EncodeToBase64Url(
+            JsonSerializer.Serialize(
+                new ItemIdentifier
+                {
+                    Type = type,
+                    Identifier = identifier
+                }
+            )
+        );
+    }
+
+    static TimeSpan GetTimeSpan(IReadOnlyList<object> row, int index)
+    {
+        var value = row[index];
+
+        if (value is TimeSpan ts)
+        {
+            return ts;
+        }
+
+        return TimeSpan.Parse(value?.ToString() ?? "00:00:00");
     }
 }
