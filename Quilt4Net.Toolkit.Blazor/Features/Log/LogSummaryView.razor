@@ -40,13 +40,13 @@ else
 }
 
 @code {
+    private SummaryData[] Model { get; set; }
+
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
-
-    private SummaryData[] Model { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {

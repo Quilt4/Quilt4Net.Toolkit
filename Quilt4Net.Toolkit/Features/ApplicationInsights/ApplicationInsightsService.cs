@@ -18,10 +18,116 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         _options = options.Value;
     }
 
+    public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
+    {
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        var query = @$"
+AppExceptions
+| extend
+    Message = tostring(Message),
+    Id = tostring(
+        hash(
+            strcat(
+                tostring(TimeGenerated), ""|"",
+                tostring(OperationId), ""|"",
+                tostring(ProblemId)
+            )
+        )
+    ),
+    Fingerprint = tostring(ProblemId)
+| order by TimeGenerated desc";
+        var response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+        foreach (var table in response.Value.AllTables)
+        {
+            foreach (var row in table.Rows)
+            {
+                yield return new LogItem
+                {
+                    Id = BuildItemIdentifier(row, LogSource.Exception),
+                    Fingerprint = row["Fingerprint"]?.ToString(),
+                    Source = LogSource.Exception,
+                    Message = row["Message"]?.ToString(),
+                };
+            }
+        }
+
+        query = @$"
+AppTraces
+| extend
+    Message = tostring(Message),
+    OriginalFormat = column_ifexists(""customDimensions.OriginalFormat"", """")
+| extend
+    Id = tostring(
+        hash(
+            strcat(
+                tostring(TimeGenerated), ""|"",
+                tostring(OperationId), ""|"",
+                Message
+            )
+        )
+    ),
+    Fingerprint = tostring(
+        hash(OriginalFormat)
+    )
+| order by TimeGenerated desc";
+
+        response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+        foreach (var table in response.Value.AllTables)
+        {
+            foreach (var row in table.Rows)
+            {
+                yield return new LogItem
+                {
+                    Id = BuildItemIdentifier(row, LogSource.Trace),
+                    Fingerprint = row["Fingerprint"]?.ToString(),
+                    Source = LogSource.Trace,
+                    Message = row["Message"]?.ToString(),
+                };
+            }
+        }
+
+        query = @$"
+AppRequests
+| extend
+    Message = tostring(Name),
+    OriginalFormat = tostring(Name)
+| extend
+    Id = tostring(
+        hash(
+            strcat(
+                tostring(TimeGenerated), ""|"",
+                tostring(OperationId), ""|"",
+                Message
+            )
+        )
+    ),
+    Fingerprint = tostring(
+        hash(OriginalFormat)
+    )
+| order by TimeGenerated desc";
+        response = await client.QueryWorkspaceAsync(workspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+        foreach (var table in response.Value.AllTables)
+        {
+            foreach (var row in table.Rows)
+            {
+                yield return new LogItem
+                {
+                    Id = BuildItemIdentifier(row, LogSource.Request),
+                    Fingerprint = row["Fingerprint"]?.ToString(),
+                    Source = LogSource.Request,
+                    Message = row["Message"]?.ToString(),
+                };
+            }
+        }
+    }
+
+    //TODO: --> Revisit
+
     public async IAsyncEnumerable<SummaryData> GetSummaryAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel)
     {
         var client = GetClient(context);
-
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
         //NOTE: Pull data from exceptions
@@ -48,14 +154,14 @@ internal class ApplicationInsightsService : IApplicationInsightsService
             {
                 yield return new SummaryData
                 {
-                    SummaryId = BuildSummaryIdentifier(row, LogType.Exception),
+                    SummaryId = BuildSummaryIdentifier(row, LogSource.Exception),
                     Application = row["AppName"].ToString(),
                     Environment = row["Environment"]?.ToString(),
                     Message = row["Message"].ToString(),
                     SeverityLevel = (SeverityLevel)Convert.ToInt32(row["SeverityLevel"]),
                     LastSeen = DateTime.TryParse(row["LastSeen"].ToString(), out var lastEntry) ? lastEntry : null,
                     IssueCount = Convert.ToInt32(row["IssueCount"]),
-                    Type = LogType.Exception
+                    Type = LogSource.Exception
                 };
             }
         }
@@ -83,14 +189,14 @@ internal class ApplicationInsightsService : IApplicationInsightsService
             {
                 yield return new SummaryData
                 {
-                    SummaryId = BuildSummaryIdentifier(row, LogType.Trace),
+                    SummaryId = BuildSummaryIdentifier(row, LogSource.Trace),
                     Application = row["AppName"].ToString(),
                     Environment = row["Environment"]?.ToString(),
                     Message = Convert.ToString(row["Message"]),
                     SeverityLevel = (SeverityLevel)Convert.ToInt32(row["SeverityLevel"]),
                     LastSeen = DateTime.TryParse(row["LastSeen"].ToString(), out var lastEntry) ? lastEntry : null,
                     IssueCount = Convert.ToInt32(row["IssueCount"]),
-                    Type = LogType.Trace
+                    Type = LogSource.Trace
                 };
             }
         }
@@ -123,56 +229,231 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         //        }
     }
 
-    private static string BuildItemIdentifier(LogsTableRow x, LogType type)
+    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    {
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        if (!Guid.TryParse(workspaceId, out _))
+        {
+            throw new InvalidOperationException("workspaceId must be a Log Analytics Workspace GUID");
+        }
+
+        var environmentFilter = string.IsNullOrWhiteSpace(environment)
+            ? string.Empty
+            : $"| where AspNetCoreEnvironment == \"{environment}\"";
+
+        var detailQuery = @$"
+AppTraces
+| extend
+    DetailsRaw = column_ifexists(""customDimensions.Details"", """"),
+    Action = column_ifexists(""customDimensions.Action"", """"),
+    ApplicationName = column_ifexists(""customDimensions.ApplicationName"", """"),
+    AspNetCoreEnvironment = column_ifexists(""customDimensions.AspNetCoreEnvironment"", """")
+| extend Details = parse_json(DetailsRaw)
+| extend Method = tostring(Details.Method)
+| where Method == ""Measure""
+{environmentFilter}
+| extend
+    ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, Message)
+| project
+    TimeGenerated,
+    Action,
+    ApplicationName,
+    AspNetCoreEnvironment,
+    ElapsedRaw
+| order by TimeGenerated desc";
+
+        var response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            detailQuery,
+            new QueryTimeRange(timeSpan));
+
+        var table = response.Value.Table;
+
+        var timeIndex = GetColumnIndex(table, "TimeGenerated");
+        var actionIndex = GetColumnIndex(table, "Action");
+        var applicationNameIndex = GetColumnIndex(table, "ApplicationName");
+        var environmentIndex = GetColumnIndex(table, "AspNetCoreEnvironment");
+        var elapsedIndex = GetColumnIndex(table, "ElapsedRaw");
+
+        foreach (var row in table.Rows)
+        {
+            if (row == null)
+            {
+                continue;
+            }
+
+            yield return new MeasureData
+            {
+                TimeGenerated = GetDateTimeOffset(row, timeIndex),
+                Action = GetString(row, actionIndex),
+                ApplicationName = GetString(row, applicationNameIndex),
+                Environment = GetString(row, environmentIndex),
+                Elapsed = GetTimeSpan(row, elapsedIndex)
+            };
+        }
+
+        static int GetColumnIndex(LogsTable table, string name)
+        {
+            for (var i = 0; i < table.Columns.Count; i++)
+            {
+                if (string.Equals(table.Columns[i].Name, name, StringComparison.Ordinal))
+                {
+                    return i;
+                }
+            }
+
+            throw new InvalidOperationException($"Column '{name}' was not returned by the query.");
+        }
+
+        static string GetString(IReadOnlyList<object> row, int index)
+        {
+            return row[index]?.ToString();
+        }
+
+        static DateTimeOffset GetDateTimeOffset(IReadOnlyList<object> row, int index)
+        {
+            var value = row[index];
+
+            if (value is DateTimeOffset dto)
+            {
+                return dto;
+            }
+
+            if (value is DateTime dt)
+            {
+                return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc));
+            }
+
+            return DateTimeOffset.Parse(value.ToString());
+        }
+
+        static TimeSpan GetTimeSpan(IReadOnlyList<object> row, int index)
+        {
+            var value = row[index]?.ToString();
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return TimeSpan.Zero;
+            }
+
+            if (TimeSpan.TryParse(value, out var result))
+            {
+                return result;
+            }
+
+            throw new InvalidOperationException($"Invalid TimeSpan value '{value}'.");
+        }
+    }
+
+    //    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    //    {
+    //        var client = GetClient(context);
+    //        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+    //        if (!Guid.TryParse(workspaceId, out _)) throw new InvalidOperationException("workspaceId must be a Log Analytics Workspace GUID");
+
+    //        /*
+    //        | where Properties['AspNetCoreEnvironment'] == '{environment}' or isempty(Properties['AspNetCoreEnvironment'])
+    //         */
+    //        var detailQuery = @$"
+    //AppTraces
+    //| extend
+    //    DetailsRaw = column_ifexists(""customDimensions.Details"", """"),
+    //    Action = column_ifexists(""customDimensions.Action"", """"),
+    //    ApplicationName = column_ifexists(""customDimensions.ApplicationName"", """"),
+    //    AspNetCoreEnvironment = column_ifexists(""customDimensions.AspNetCoreEnvironment"", """")
+    //| extend Details = parse_json(DetailsRaw)
+    //| extend Method = tostring(Details.Method)
+    //| where Method == ""Measure""
+    //| extend
+    //    Elapsed = extract(@""in ([0-9:\.]+) ms"", 1, Message)
+    //| project
+    //    TimeGenerated,
+    //    Action,
+    //    ApplicationName,
+    //    AspNetCoreEnvironment,
+    //    Elapsed
+    //| order by TimeGenerated desc";
+
+    //        var response = await client.QueryWorkspaceAsync(
+    //            workspaceId,
+    //            detailQuery,
+    //            new QueryTimeRange(timeSpan));
+
+    //        var table = response.Value.Table;
+
+    //        var timeIndex = table.Columns.FindIndex(c => c.Name == "TimeGenerated");
+    //        var actionIndex = table.Columns.FindIndex(c => c.Name == "Action");
+    //        var applicationNameIndex = table.Columns.FindIndex(c => c.Name == "ApplicationName");
+    //        var environmentIndex = table.Columns.FindIndex(c => c.Name == "AspNetCoreEnvironment");
+    //        var elapsedIndex = table.Columns.FindIndex(c => c.Name == "Elapsed");
+
+    //        foreach (var row in table.Rows)
+    //        {
+    //            if (row == null)
+    //            {
+    //                continue;
+    //            }
+
+    //            yield return new MeasureData
+    //            {
+    //                TimeGenerated = (DateTimeOffset)row[timeIndex],
+    //                Action = row[actionIndex]?.ToString(),
+    //                ApplicationName = row[applicationNameIndex]?.ToString(),
+    //                AspNetCoreEnvironment = row[environmentIndex]?.ToString(),
+    //                Elapsed = row[elapsedIndex]?.ToString()
+    //            };
+    //        }
+    //    }
+
+    private static string BuildItemIdentifier(LogsTableRow x, LogSource type)
     {
         switch (type)
         {
-            case LogType.Exception:
+            case LogSource.Exception:
                 return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
                 {
                     Type = type,
                     Identifier = x["Id"]?.ToString()
                 }));
-            case LogType.Trace:
-                //return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
-                //{
-                //    Type = type,
-                //    Identifier = x["MessageId"].ToString(),
-                //    Application = x["AppName"].ToString()
-                //}));
-                throw new NotImplementedException();
-            case LogType.Request:
-                //return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
-                //{
-                //    Type = type,
-                //    Identifier = x["Name"].ToString(),
-                //    Application = x["AppName"].ToString()
-                //}));
-                throw new NotImplementedException();
+            case LogSource.Trace:
+                return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
+                {
+                    Type = type,
+                    Identifier = x["Id"].ToString(),
+                }));
+            case LogSource.Request:
+                return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
+                {
+                    Type = type,
+                    Identifier = x["Id"].ToString(),
+                }));
             default:
                 throw new ArgumentOutOfRangeException(nameof(type), type, null);
         }
     }
 
-    private static string BuildSummaryIdentifier(LogsTableRow x, LogType type)
+    private static string BuildSummaryIdentifier(LogsTableRow x, LogSource type)
     {
         switch (type)
         {
-            case LogType.Exception:
+            case LogSource.Exception:
                 return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new SummaryDataIdentifier
                 {
                     Type = type,
                     Identifier = x["ProblemId"]?.ToString(),
                     Application = x["AppName"]?.ToString()
                 }));
-            case LogType.Trace:
+            case LogSource.Trace:
                 return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new SummaryDataIdentifier
                 {
                     Type = type,
                     Identifier = x["ProblemId"].ToString(),
                     Application = x["AppName"].ToString()
                 }));
-            case LogType.Request:
+            case LogSource.Request:
                 return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new SummaryDataIdentifier
                 {
                     Type = type,
@@ -205,21 +486,21 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         string detailQuery;
         switch (summaryIdentifier.Type)
         {
-            case LogType.Exception:
+            case LogSource.Exception:
                 detailQuery = @$"AppExceptions
 | where tostring(hash(strcat(ProblemId, Properties['OriginalFormat']))) == '{summaryIdentifier.Identifier}'
 | extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage)))))
 | extend ProblemId = tostring(hash(strcat(ProblemId, Properties['OriginalFormat'])))
 | order by TimeGenerated desc";
                 break;
-            case LogType.Trace:
+            case LogSource.Trace:
                 detailQuery = @$"AppTraces
 | where tostring(hash(tostring(Properties['OriginalFormat']))) == '{summaryIdentifier.Identifier}'
 | extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message))))
 | extend ProblemId = tostring(hash(tostring(Properties['OriginalFormat'])))
 | order by TimeGenerated desc";
                 break;
-            case LogType.Request:
+            case LogSource.Request:
 //                detailQuery = @$"AppRequests
 //| where Name == '{summaryDataIdentifier.Identifier}'
 //| order by TimeGenerated desc | take 1";
@@ -245,21 +526,21 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         string detailQuery;
         switch (itemIdentifier.Type)
         {
-            case LogType.Exception:
+            case LogSource.Exception:
                 detailQuery = @$"AppExceptions
 | where tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage))))) == '{itemIdentifier.Identifier}'
 | extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage)))))
 | extend ProblemId = tostring(hash(strcat(ProblemId, Properties['OriginalFormat'])))
 | order by TimeGenerated desc";
                 break;
-            case LogType.Trace:
+            case LogSource.Trace:
                 detailQuery = @$"AppTraces
 | where tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message)))) == '{itemIdentifier.Identifier}'
 | extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message))))
 | extend ProblemId = tostring(hash(tostring(Properties['OriginalFormat'])))
 | order by TimeGenerated desc | take 1";
                 break;
-            case LogType.Request:
+            case LogSource.Request:
                 //                detailQuery = @$"AppRequests
                 //| where Name == '{summaryDataIdentifier.Identifier}'
                 //| order by TimeGenerated desc | take 1";
@@ -317,7 +598,7 @@ internal class ApplicationInsightsService : IApplicationInsightsService
 
             return new LogDetails
             {
-                Id = BuildItemIdentifier(row, LogType.Exception),
+                Id = BuildItemIdentifier(row, LogSource.Exception),
                 TenantId = $"{row["TenantId"]}",
                 TimeGenerated = DateTime.Parse($"{row["TimeGenerated"]}"),
                 SeverityLevel = Enum.Parse<SeverityLevel>($"{row["SeverityLevel"]}"),
@@ -436,71 +717,6 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         //        }
         throw new NotImplementedException();
         yield break;
-    }
-
-    public async IAsyncEnumerable<LogItem> SearchAsync(string environment, string text, TimeSpan timeSpan)
-    {
-        var client = GetClient();
-
-        var query = @$"AppExceptions
-| where Properties['AspNetCoreEnvironment'] == '{environment}' or isempty(Properties['AspNetCoreEnvironment'])
-| where Properties['CorrelationId'] == '{text}' or coalesce(Message, OuterMessage) contains '{text}'
-| extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage)))))
-| extend Message = coalesce(Message, OuterMessage)
-| extend ProblemId = tostring(hash(strcat(ProblemId, Properties['OriginalFormat'])))
-| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
-| extend Environment = tostring(Properties['AspNetCoreEnvironment'])
-| order by TimeGenerated desc";
-        var response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
-        foreach (var table in response.Value.AllTables)
-        {
-            foreach (var row in table.Rows)
-            {
-                yield return new LogItem
-                {
-                    Id = BuildItemIdentifier(row, LogType.Exception),
-                    TimeGenerated = DateTime.Parse($"{row["TimeGenerated"]}"),
-                    SummaryId = BuildSummaryIdentifier(row, LogType.Exception),
-                    Message = row["Message"]?.ToString(),
-                    CorrelationId = default, //TODO: Find this
-                    Application = row["AppName"]?.ToString(),
-                    Environment = row["Environment"]?.ToString(),
-                    Type = LogType.Exception,
-                    SeverityLevel = (SeverityLevel)Convert.ToInt32(row["SeverityLevel"])
-                };
-            }
-        }
-
-//TODO: Need to fix properties
-        query = @$"AppTraces
-| where Properties['AspNetCoreEnvironment'] == '{environment}' or isempty(Properties['AspNetCoreEnvironment'])
-| where Properties['CorrelationId'] == '{text}' or Message contains '{text}'
-| extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message))))
-| extend ProblemId = tostring(hash(strcat(ProblemId, Properties['OriginalFormat'])))
-| extend AppName = coalesce(Properties['Source'], Properties['ApplicationName'], AppRoleName)
-| extend Environment = tostring(Properties['AspNetCoreEnvironment'])
-| order by TimeGenerated desc";
-        response = await client.QueryWorkspaceAsync(_options.WorkspaceId, query, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
-        foreach (var table in response.Value.AllTables)
-        {
-            foreach (var row in table.Rows)
-            {
-                yield return new LogItem
-                {
-                    Id = BuildItemIdentifier(row, LogType.Exception),
-                    TimeGenerated = DateTime.Parse($"{row["TimeGenerated"]}"),
-                    SummaryId = BuildSummaryIdentifier(row, LogType.Exception),
-                    Message = row["Message"]?.ToString(),
-                    CorrelationId = default, //TODO: Find this
-                    Application = row["AppName"]?.ToString(),
-                    Environment = row["Environment"]?.ToString(),
-                    Type = LogType.Exception,
-                    SeverityLevel = (SeverityLevel)Convert.ToInt32(row["SeverityLevel"])
-                };
-            }
-        }
-
-        //TODO: Search in Traces and Requests
     }
 
     public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)

@@ -16,5 +16,14 @@ public record SummaryData
     public required int IssueCount { get; init; }
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required LogType Type { get; init; }
+    public required LogSource Type { get; init; }
+}
+
+public record MeasureData
+{
+    public required DateTimeOffset TimeGenerated { get; init; }
+    public required string Action { get; init;  }
+    public required string ApplicationName { get; init;  }
+    public required string Environment { get; init; }
+    public required TimeSpan Elapsed { get; init; }
 }

@@ -20,20 +20,26 @@ else if (_model != null)
                     AllowPaging="true" PageSize="10" PageSizeOptions="[10, 100]"
                     ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
         <Columns>
+            <RadzenDataGridColumn Title="Id" Property="@nameof(LogItem.Id)" />
+            <RadzenDataGridColumn Title="Fingerprint" Property="@nameof(LogItem.Fingerprint)" />
+            <RadzenDataGridColumn Title="Source" Property="@nameof(LogItem.Source)" />
+            <RadzenDataGridColumn Title="Message" Property="@nameof(LogItem.Message)" />
+
             @* <RadzenDataGridColumn TItem="LogItem" Title="" Filterable="false" sortable="false" Width="50px;">
                 <Template>
                     <RadzenLink Path="@($"/log/detail/{context.Id}?Source=Search&Range={Range}")" Icon="arrow_forward_ios" />
                 </Template>
             </RadzenDataGridColumn> *@
-            <RadzenDataGridColumn TItem="LogItem" Title="Time" Property="@nameof(LogItem.TimeGenerated)" SortOrder="SortOrder.Descending" >
+            @* <RadzenDataGridColumn TItem="LogItem" Title="Time" Property="@nameof(LogItem.TimeGenerated)" SortOrder="SortOrder.Descending" >
                 <Template>
                     <DateTimeView Date="@context.TimeGenerated" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn TItem="LogItem" Title="Level" Property="@nameof(LogItem.SeverityLevel)" />
-            <RadzenDataGridColumn TItem="LogItem" Title="Message" Property="@nameof(LogItem.Message)" />
+            <RadzenDataGridColumn TItem="LogItem" Title="Source" Property="@nameof(LogItem.Source)" />
             <RadzenDataGridColumn TItem="LogItem" Title="Application" Property="@nameof(LogItem.Application)" />
-            <RadzenDataGridColumn TItem="LogItem" Title="Type" Property="@nameof(LogItem.Type)" />
+            <RadzenDataGridColumn TItem="LogItem" Title="Environment" Property="@nameof(LogItem.Environment)" />
+            <RadzenDataGridColumn TItem="LogItem" Title="Message" Property="@nameof(LogItem.Message)" /> *@
             @* <RadzenDataGridColumn TItem="LogItem" Title="CorrelationKey" Property="@nameof(LogItem.CorrelationKey)" /> *@
         </Columns>
     </RadzenDataGrid>
@@ -42,19 +48,24 @@ else if (_model != null)
 @code {
     private bool _loading;
     private string _searchText;
+    private LogItem[] _model { get; set; }
 
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
-    private LogItem[] _model { get; set; }
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
 
     private async Task Search()
     {
         _loading = true;
         StateHasChanged();
 
-        var searchText = Uri.EscapeDataString(_searchText);
-        _model = await ApplicationInsightsService.SearchAsync(HostEnvironment.EnvironmentName, searchText, Range).ToArrayAsync();
+        var searchText = Uri.EscapeDataString(_searchText ?? string.Empty);
+        _model = await ApplicationInsightsService.SearchAsync(Context, HostEnvironment.EnvironmentName, searchText, Range).ToArrayAsync();
+
+        var mm = _model.ToDictionary(x => x.Id, x => x);
+        var g = _model.GroupBy(x => x.Fingerprint);
 
         _loading = false;
         StateHasChanged();

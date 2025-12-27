@@ -1,25 +1,40 @@
-﻿<RadzenRow Style="margin-bottom: 6px;">
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+<RadzenRow Style="margin-bottom: 6px;" Visible="ShowRangeSelector">
     <RadzenColumn>
-        <RadzenStack Orientation="Orientation.Vertical">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
             <RadzenText TextStyle="TextStyle.Caption" Text="Range"/>
             <LogRangeView OnSelected="OnRangeSelected"/>
         </RadzenStack>
     </RadzenColumn>
 </RadzenRow>
 
-<RadzenTabs Change="StateHasChanged" Visible="@(_range != null)">
+<RadzenTabs Change="StateHasChanged">
     <Tabs>
         <RadzenTabsItem Text="Search">
-            <LogSearchView Range="@_range" />
+            <LogSearchView Range="@RangeToUse" Context="Context" />
         </RadzenTabsItem>
-        <RadzenTabsItem Text="Summary">
-            <LogSummaryView Range="@_range" />
+        @* <RadzenTabsItem Text="Summary">
+            <LogSummaryView Range="@RangeToUse" Context="Context" />
         </RadzenTabsItem>
+        <RadzenTabsItem Text="Measure">
+            <LogMeasureView Range="@RangeToUse" Context="Context" />
+        </RadzenTabsItem> *@
     </Tabs>
 </RadzenTabs>
 
 @code {
     private LogRangeView.TimeRangeOption _range;
+
+    [Parameter]
+    public bool ShowRangeSelector { get; set; } = true;
+
+    [Parameter]
+    public TimeSpan? Range { get; set; }
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    private TimeSpan RangeToUse => ShowRangeSelector ? _range : (Range ?? TimeSpan.Zero);
 
     private void OnRangeSelected(LogRangeView.TimeRangeOption range)
     {
