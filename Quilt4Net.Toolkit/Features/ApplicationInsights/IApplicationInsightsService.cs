@@ -7,10 +7,11 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan);
     IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan);
     Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, TimeSpan timeSpan);
+    Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, TimeSpan timeSpan);
 
     //TODO: --> Revisit
 
-    IAsyncEnumerable<SummaryData> GetSummaryAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose);
-    IAsyncEnumerable<LogDetails> GetDetails(string environment, string summaryIdentifier, TimeSpan timeSpan);
-    IAsyncEnumerable<LogMeasurement> GetMeasurements(string environment, TimeSpan timeSpan);
+    //IAsyncEnumerable<SummaryData> GetSummaryAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose);
+    //IAsyncEnumerable<LogDetails> GetDetails(string environment, string summaryIdentifier, TimeSpan timeSpan);
+    //IAsyncEnumerable<LogMeasurement> GetMeasurements(string environment, TimeSpan timeSpan);
 }

@@ -1,20 +1,20 @@
-﻿using System.Text.Json.Serialization;
+﻿//namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
-namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
+//public record SummaryData
+//{
+//    public required string Fingerprint { get; init; }
 
-public record SummaryData
-{
-    public required string SummaryId { get; init; }
-    public required string Application { get; init; }
-    public required string Environment { get; init; }
-    public required string Message { get; init; }
+//    //public required string SummaryId { get; init; }
+//    //public required string Application { get; init; }
+//    //public required string Environment { get; init; }
+//    //public required string Message { get; init; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required SeverityLevel SeverityLevel { get; init; }
+//    //[JsonConverter(typeof(JsonStringEnumConverter))]
+//    //public required SeverityLevel SeverityLevel { get; init; }
 
-    public required DateTime? LastSeen { get; init; }
-    public required int IssueCount { get; init; }
+//    //public required DateTime? LastSeen { get; init; }
+//    //public required int IssueCount { get; init; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required LogSource Type { get; init; }
-}
+//    //[JsonConverter(typeof(JsonStringEnumConverter))]
+//    //public required LogSource Type { get; init; }
+//}

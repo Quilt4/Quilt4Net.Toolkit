@@ -16,7 +16,9 @@ else
         </RadzenColumn>
         <RadzenColumn>
             <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@Model.Fingerprint" />
+            <div>
+                <RadzenLink Text="@Model.Fingerprint" Path="@($"/log/summary/{Model.Fingerprint}?Reference=Detail&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" />
+            </div>
         </RadzenColumn>
         <RadzenColumn>
             <RadzenText Text="Time Generated" TextStyle="TextStyle.Caption" />
@@ -24,6 +26,10 @@ else
                 <span title="@Model.TimeGenerated.ToLocalDateTimeString()">@Model.TimeGenerated.ToLocalDurationString()</span>
             </div>
         </RadzenColumn>
+        @* <RadzenColumn>
+            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.SeverityLevel}")" />
+        </RadzenColumn> *@
     </RadzenRow>
     <RadzenRow>
         <RadzenColumn>

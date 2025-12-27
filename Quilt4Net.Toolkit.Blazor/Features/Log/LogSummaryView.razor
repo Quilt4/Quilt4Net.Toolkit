@@ -9,41 +9,61 @@
 }
 else
 {
-    <RadzenCard>
-        <RadzenDataGrid Data="@Model"
-                        AllowSorting="true"
-                        AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                        AllowPaging="true" PageSize="10" PageSizeOptions="[10,100]"
-                        ShowPagingSummary="true" PagingSummaryFormat="@("{2:N0} summaries, page {0} of {1}")">
-            <Columns>
-                @* <RadzenDataGridColumn TItem="SummaryData" Width="52px">
-                    <Template>
-                        <span title="@GetPrettyJson(context)">
-                            <RadzenLink Icon="arrow_forward_ios" Path="@($"/log/summary/{context.SummaryId}?Source=Summary&Range{Range}")" />
-                        </span>
-                    </Template>
-                </RadzenDataGridColumn> *@
-                <RadzenDataGridColumn TItem="SummaryData" Title="Last Seen" Property="LastSeen" Width="120px" Filterable="false">
-                    <Template>
-                        <DateTimeView Date="@context.LastSeen" />
-                    </Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="SummaryData" Title="Level" Property="SeverityLevel" Width="100px" />
-                <RadzenDataGridColumn TItem="SummaryData" Title="Type" Property="Type" Width="100px" />
-                <RadzenDataGridColumn TItem="SummaryData" Title="Application" Property="Application" Width="240px" />
-                <RadzenDataGridColumn TItem="SummaryData" Title="Environment" Property="Environment" />
-                <RadzenDataGridColumn TItem="SummaryData" Title="Message" Property="Message" />
-                <RadzenDataGridColumn TItem="SummaryData" Title="Count" Property="IssueCount" Width="100px" SortOrder="SortOrder.Descending" Filterable="false" />
-            </Columns>
-        </RadzenDataGrid>
-    </RadzenCard>
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Fingerprint" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.SeverityLevel}")" />
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Environment" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Application" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Source" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.Source}")" />
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenDataGrid Data="@Model.Items" TItem="SummaryData.Item">
+        <Columns>
+            @* <RadzenDataGridColumn Title="Id" Property="@nameof(SummaryData.Item.Id)" /> *@
+            <RadzenDataGridColumn Title="Id" Width="60px">
+                <Template>
+                    <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Time" Property="@nameof(SummaryData.Item.TimeGenerated)">
+                <Template>
+                    <DateTimeView Date="@context.TimeGenerated" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Message" Property="@nameof(SummaryData.Item.Message)" />
+        </Columns>
+    </RadzenDataGrid>
+
 }
 
 @code {
-    private SummaryData[] Model { get; set; }
+    private SummaryData Model { get; set; }
 
     [Parameter]
-    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+    public string Fingerprint { get; set; }
+
+    [Parameter]
+    public TimeSpan? Range { get; set; }
+
+    [Parameter]
+    public LogSource? Source { get; set; }
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
@@ -51,10 +71,21 @@ else
     protected override async Task OnParametersSetAsync()
     {
         Model = null;
-        Model = await ApplicationInsightsService
-            .GetSummaryAsync(Context, HostEnvironment.EnvironmentName, Range)
-            .ToArrayAsync();
+
+        if (!Source.HasValue || !Range.HasValue) return;
+
+        Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Range.Value);
+
+        await base.OnParametersSetAsync();
     }
+
+    // protected override async Task OnParametersSetAsync()
+    // {
+    //     Model = null;
+    //     Model = await ApplicationInsightsService
+    //         .GetSummaryAsync(Context, HostEnvironment.EnvironmentName, Range)
+    //         .ToArrayAsync();
+    // }
 
     // private static string GetPrettyJson(SummaryData summaryData)
     // {
