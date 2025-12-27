@@ -22,7 +22,7 @@ else if (_model != null)
         <Columns>
             <RadzenDataGridColumn Title="Id" Width="60px">
                 <Template>
-                    <RadzenLink Path="@($"/log/detail/{context.Id}?Source=Search&Range={Range}")" Icon="arrow_forward_ios" />
+                    <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Search&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
                 </Template>
             </RadzenDataGridColumn>
             @* <RadzenDataGridColumn Title="Fingerprint" Property="@nameof(LogItem.Fingerprint)" Filterable="false" /> *@
@@ -66,9 +66,6 @@ else if (_model != null)
 
         var searchText = Uri.EscapeDataString(_searchText ?? string.Empty);
         _model = await ApplicationInsightsService.SearchAsync(Context, HostEnvironment.EnvironmentName, searchText, Range).ToArrayAsync();
-
-        var mm = _model.ToDictionary(x => x.Id, x => x);
-        var g = _model.GroupBy(x => x.Fingerprint);
 
         _loading = false;
         StateHasChanged();

@@ -33,3 +33,10 @@ public record MeasureData : LogItemBase
     public required string Action { get; init; }
     public required TimeSpan Elapsed { get; init; }
 }
+
+public record LogDetails : LogItemBase
+{
+    public required LogSource Source { get; init; }
+    public required IReadOnlyDictionary<string, object> Raw { get; init; }
+    public required string RawJson { get; init; }
+}

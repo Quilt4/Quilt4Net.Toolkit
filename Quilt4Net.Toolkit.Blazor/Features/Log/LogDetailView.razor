@@ -1,0 +1,168 @@
+﻿@using System.Text.Json
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Tharga.Toolkit
+@inject IApplicationInsightsService ApplicationInsightsService
+
+@if (Model == null)
+{
+    <Loading />
+}
+else
+{
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Id" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Id" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Fingerprint" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Time Generated" TextStyle="TextStyle.Caption" />
+            <div>
+                <span title="@Model.TimeGenerated.ToLocalDateTimeString()">@Model.TimeGenerated.ToLocalDurationString()</span>
+            </div>
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Environment" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Application" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Source" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.Source}")" />
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Message" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Message" />
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenCard>
+        <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
+                <RadzenSwitch @bind-Value="_showEmptyValues"/>
+                <RadzenText Text="Show empty values"/>
+            </RadzenStack>
+            <pre>@DisplayedJson</pre>
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@code {
+    private bool _showEmptyValues;
+
+    private string DisplayedJson => _showEmptyValues ? FormatJson(Model.RawJson) : FilterEmptyValues(Model.RawJson);
+    private LogDetails Model { get; set; }
+
+    [Parameter]
+    public string Id { get; set; }
+
+    [Parameter]
+    public TimeSpan? Range { get; set; }
+
+    [Parameter]
+    public LogSource? Source { get; set; }
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Model = null;
+
+        if (!Source.HasValue || !Range.HasValue) return;
+
+        Model = await ApplicationInsightsService.GetDetail(Context, Id, Source.Value, Range.Value);
+
+        await base.OnParametersSetAsync();
+    }
+
+    private static string FormatJson(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return JsonSerializer.Serialize(
+            doc.RootElement,
+            new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+    }
+
+    private static string FilterEmptyValues(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var filtered = FilterElement(doc.RootElement);
+
+        return JsonSerializer.Serialize(
+            filtered,
+            new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+    }
+
+    private static object FilterElement(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                {
+                    var dict = new Dictionary<string, object>();
+
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        var value = FilterElement(prop.Value);
+
+                        if (value is null)
+                        {
+                            continue;
+                        }
+
+                        dict[prop.Name] = value;
+                    }
+
+                    return dict.Count == 0 ? null : dict;
+                }
+
+            case JsonValueKind.Array:
+                {
+                    var list = new List<object>();
+
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        var value = FilterElement(item);
+
+                        if (value is not null)
+                        {
+                            list.Add(value);
+                        }
+                    }
+
+                    return list.Count == 0 ? null : list;
+                }
+
+            case JsonValueKind.String:
+                {
+                    var s = element.GetString();
+                    return string.IsNullOrWhiteSpace(s) ? null : s;
+                }
+
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                return null;
+
+            default:
+                // Number, Boolean, etc.
+                return JsonSerializer.Deserialize<object>(element.GetRawText());
+        }
+    }
+}

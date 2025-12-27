@@ -37,7 +37,7 @@ else
                     <Columns>
                         <RadzenDataGridColumn Title="Id" Width="60px">
                             <Template>
-                                <RadzenLink Path="@($"/log/detail/{context.Id}?Source=Search&Range={Range}")" Icon="arrow_forward_ios" />
+                                <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Range={Range.TotalMinutes}&Source={LogSource.Trace}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="Time" Property="@nameof(CountData.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">

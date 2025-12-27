@@ -3,7 +3,6 @@ using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
 using Microsoft.Extensions.Options;
-using Quilt4Net.Toolkit.Framework;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -16,6 +15,22 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     public ApplicationInsightsService(IOptions<ApplicationInsightsOptions> options)
     {
         _options = options.Value;
+    }
+
+    public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)
+    {
+        try
+        {
+            var client = GetClient(context);
+            var detailQuery = "AppTraces";
+            _ = await client.QueryWorkspaceAsync(context.WorkspaceId, detailQuery, new QueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
+
+            return true;
+        }
+        catch (Exception e)
+        {
+            return false;
+        }
     }
 
     public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
@@ -54,7 +69,7 @@ AppExceptions
     Message = tostring(OuterMessage)
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
-    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", ProblemId))),
+    Id = _ItemId,
     Fingerprint = tostring(ProblemId)
 | project
     TimeGenerated,
@@ -86,7 +101,7 @@ AppExceptions
             {
                 yield return new LogItem
                 {
-                    Id = BuildItemIdentifier(row, idIndex, LogSource.Exception),
+                    Id = row[idIndex]?.ToString(),
                     Fingerprint = row[fingerprintIndex]?.ToString(),
                     TimeGenerated = GetDateTime(row, timeIndex),
                     Source = LogSource.Exception,
@@ -114,7 +129,7 @@ AppTraces
     OriginalFormat = tostring(_p[""OriginalFormat""])
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
-    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Id = _ItemId,
     Fingerprint = tostring(hash(OriginalFormat))
 | project
     TimeGenerated,
@@ -146,7 +161,7 @@ AppTraces
             {
                 yield return new LogItem
                 {
-                    Id = BuildItemIdentifier(row, idIndex, LogSource.Trace),
+                    Id = row[idIndex]?.ToString(),
                     Fingerprint = row[fingerprintIndex]?.ToString(),
                     TimeGenerated = GetDateTime(row, timeIndex),
                     Source = LogSource.Trace,
@@ -179,7 +194,7 @@ AppRequests
     )
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
-    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Id = _ItemId,
     Fingerprint = tostring(hash(Message))
 | project
     TimeGenerated,
@@ -213,7 +228,7 @@ AppRequests
             {
                 yield return new LogItem
                 {
-                    Id = BuildItemIdentifier(row, idIndex, LogSource.Request),
+                    Id = row[idIndex]?.ToString(),
                     Fingerprint = row[fingerprintIndex]?.ToString(),
                     TimeGenerated = GetDateTime(row, timeIndex),
                     Source = LogSource.Request,
@@ -247,7 +262,7 @@ AppRequests
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-        var envFilter = environment ?? string.Empty;
+        //var envFilter = environment ?? string.Empty;
 
         var query = @$"
 AppTraces
@@ -262,7 +277,7 @@ AppTraces
     ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, Message)
 | extend
     Elapsed = totimespan(ElapsedRaw),
-    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Id = _ItemId,
     Fingerprint = tostring(hash(strcat(""Measure|"", Action)))
 | project
     TimeGenerated,
@@ -345,7 +360,7 @@ AppTraces
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     Count = tostring(parse_json(tostring(_p[""Details""]))[""Count""])
 | extend
-    Id = tostring(hash(strcat(TimeGenerated, ""|"", OperationId, ""|"", Message))),
+    Id = _ItemId,
     Fingerprint = tostring(hash(strcat(""Measure|"", Action)))
 | project
     TimeGenerated,
@@ -393,7 +408,145 @@ AppTraces
         }
     }
 
-    //--->
+    public async Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, TimeSpan timeSpan)
+    {
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        var query = source switch
+        {
+            LogSource.Exception => $@"
+AppExceptions
+| where _ItemId == ""{id}""
+| extend _p = todynamic(Properties)
+| extend
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Application = coalesce(
+        tostring(_p[""ApplicationName""]),
+        tostring(AppRoleName)
+    ),
+    Message = tostring(OuterMessage),
+    Fingerprint = tostring(ProblemId),
+    Raw = pack_all()
+| project TimeGenerated, Message, Environment, Application, Fingerprint, Raw
+| take 1",
+
+            LogSource.Trace => $@"
+AppTraces
+| where _ItemId == ""{id}""
+| extend _p = todynamic(Properties)
+| extend
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Application = coalesce(
+        tostring(_p[""ApplicationName""]),
+        tostring(AppRoleName)
+    ),
+    Message = tostring(Message),
+    Fingerprint = tostring(hash(tostring(_p[""OriginalFormat""]))),
+    Raw = pack_all()
+| project TimeGenerated, Message, Environment, Application, Fingerprint, Raw
+| take 1",
+
+            LogSource.Request => $@"
+AppRequests
+| where _ItemId == ""{id}""
+| extend _p = todynamic(Properties)
+| extend
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Application = coalesce(
+        tostring(_p[""ApplicationName""]),
+        tostring(AppRoleName)
+    ),
+    Message = tostring(Name),
+    Fingerprint = tostring(hash(Name)),
+    Raw = pack_all()
+| project TimeGenerated, Message, Environment, Application, Fingerprint, Raw
+| take 1",
+
+            _ => throw new ArgumentOutOfRangeException(nameof(source))
+        };
+
+        var response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(timeSpan));
+
+        var table = response.Value.Table;
+        var row = table.Rows.Single();
+
+        var timeIndex = GetColumnIndex(table, "TimeGenerated");
+        var messageIndex = GetColumnIndex(table, "Message");
+        var envIndex = GetColumnIndex(table, "Environment");
+        var appIndex = GetColumnIndex(table, "Application");
+        var fpIndex = GetColumnIndex(table, "Fingerprint");
+        var rawIndex = GetColumnIndex(table, "Raw");
+
+        var binary = (BinaryData)row[rawIndex]!;
+        var json = binary.ToString();
+        var raw = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            json,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            })!;
+
+        //var raw = (IDictionary<string, object>)row[rawIndex]!;
+
+        return new LogDetails
+        {
+            Id = id,
+            Source = source,
+            Fingerprint = row[fpIndex]?.ToString()!,
+            TimeGenerated = GetDateTime(row, timeIndex),
+            Message = row[messageIndex]?.ToString()!,
+            Environment = row[envIndex]?.ToString()!,
+            Application = row[appIndex]?.ToString()!,
+            Raw = new Dictionary<string, object>(raw),
+            RawJson = JsonSerializer.Serialize(raw, new JsonSerializerOptions { WriteIndented = true })
+        };
+    }
+
+    //TODO: --> Revisit
+
+    //    public async Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, TimeSpan timeSpan)
+    //    {
+    ////        var itemIdentifier = JsonSerializer.Deserialize<ItemIdentifier>(Base64UrlHelper.DecodeFromBase64Url(id));
+
+    ////        var client = GetClient();
+
+    ////        string detailQuery;
+    ////        switch (itemIdentifier.Type)
+    ////        {
+    ////            case LogSource.Exception:
+    ////                detailQuery = @$"AppExceptions
+    ////| where tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage))))) == '{itemIdentifier.Identifier}'
+    ////| extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage)))))
+    ////| extend ProblemId = tostring(hash(strcat(ProblemId, Properties['OriginalFormat'])))
+    ////| order by TimeGenerated desc";
+    ////                break;
+    ////            case LogSource.Trace:
+    ////                detailQuery = @$"AppTraces
+    ////| where tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message)))) == '{itemIdentifier.Identifier}'
+    ////| extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message))))
+    ////| extend ProblemId = tostring(hash(tostring(Properties['OriginalFormat'])))
+    ////| order by TimeGenerated desc | take 1";
+    ////                break;
+    ////            case LogSource.Request:
+    ////                //                detailQuery = @$"AppRequests
+    ////                //| where Name == '{summaryDataIdentifier.Identifier}'
+    ////                //| order by TimeGenerated desc | take 1";
+    ////                throw new NotImplementedException();
+    ////                break;
+    ////            default:
+    ////                throw new ArgumentOutOfRangeException();
+    ////        }
+
+    ////        var detailedResponse = await client.QueryWorkspaceAsync(_options.WorkspaceId, detailQuery, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
+    ////        var row = detailedResponse.Value.Table.Rows.FirstOrDefault();
+    ////        if (row == null) return null;
+    ////        return GetRow(row, detailedResponse);
+    //        throw new NotImplementedException();
+    //    }
 
     private static async Task GetSchema(TimeSpan timeSpan, LogsQueryClient client, string workspaceId)
     {
@@ -437,8 +590,6 @@ AppTraces
             Console.WriteLine($"  {columnName} ({dataType})");
         }
     }
-
-    //TODO: --> Revisit
 
     public async IAsyncEnumerable<SummaryData> GetSummaryAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, SeverityLevel minSeverityLevel)
     {
@@ -723,32 +874,32 @@ AppTraces
     //        }
     //    }
 
-    private static string BuildItemIdentifier(LogsTableRow x, LogSource type)
-    {
-        switch (type)
-        {
-            case LogSource.Exception:
-                return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
-                {
-                    Type = type,
-                    Identifier = x["Id"]?.ToString()
-                }));
-            case LogSource.Trace:
-                return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
-                {
-                    Type = type,
-                    Identifier = x["Id"].ToString(),
-                }));
-            case LogSource.Request:
-                return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
-                {
-                    Type = type,
-                    Identifier = x["Id"].ToString(),
-                }));
-            default:
-                throw new ArgumentOutOfRangeException(nameof(type), type, null);
-        }
-    }
+    //private static string BuildItemIdentifier(LogsTableRow x, LogSource type)
+    //{
+    //    switch (type)
+    //    {
+    //        case LogSource.Exception:
+    //            return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
+    //            {
+    //                Type = type,
+    //                Identifier = x["Id"]?.ToString()
+    //            }));
+    //        case LogSource.Trace:
+    //            return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
+    //            {
+    //                Type = type,
+    //                Identifier = x["Id"].ToString(),
+    //            }));
+    //        case LogSource.Request:
+    //            return Base64UrlHelper.EncodeToBase64Url(JsonSerializer.Serialize(new ItemIdentifier
+    //            {
+    //                Type = type,
+    //                Identifier = x["Id"].ToString(),
+    //            }));
+    //        default:
+    //            throw new ArgumentOutOfRangeException(nameof(type), type, null);
+    //    }
+    //}
 
     private static string BuildSummaryIdentifier(LogsTableRow x, LogSource type)
     {
@@ -832,104 +983,66 @@ AppTraces
         }
     }
 
-    public async Task<LogDetails> GetDetail(string environment, string id, TimeSpan timeSpan)
-    {
-        var itemIdentifier = JsonSerializer.Deserialize<ItemIdentifier>(Base64UrlHelper.DecodeFromBase64Url(id));
-
-        var client = GetClient();
-
-        string detailQuery;
-        switch (itemIdentifier.Type)
-        {
-            case LogSource.Exception:
-                detailQuery = @$"AppExceptions
-| where tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage))))) == '{itemIdentifier.Identifier}'
-| extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(coalesce(Message, OuterMessage)))))
-| extend ProblemId = tostring(hash(strcat(ProblemId, Properties['OriginalFormat'])))
-| order by TimeGenerated desc";
-                break;
-            case LogSource.Trace:
-                detailQuery = @$"AppTraces
-| where tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message)))) == '{itemIdentifier.Identifier}'
-| extend Id = tostring(hash(strcat(tostring(TimeGenerated), '|', tostring(Message))))
-| extend ProblemId = tostring(hash(tostring(Properties['OriginalFormat'])))
-| order by TimeGenerated desc | take 1";
-                break;
-            case LogSource.Request:
-                //                detailQuery = @$"AppRequests
-                //| where Name == '{summaryDataIdentifier.Identifier}'
-                //| order by TimeGenerated desc | take 1";
-                throw new NotImplementedException();
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
-
-        var detailedResponse = await client.QueryWorkspaceAsync(_options.WorkspaceId, detailQuery, new QueryTimeRange(timeSpan, DateTimeOffset.Now));
-        var row = detailedResponse.Value.Table.Rows.FirstOrDefault();
-        if (row == null) return null;
-        return GetRow(row, detailedResponse);
-    }
-
     private static LogDetails GetRow(LogsTableRow row, Response<LogsQueryResult> detailedResponse)
     {
-        try
-        {
+        //try
+        //{
 
-            var propertiesData = (BinaryData)row["Properties"];
-            var properties = JsonSerializer.Deserialize<JsonElement>(propertiesData);
+        //    var propertiesData = (BinaryData)row["Properties"];
+        //    var properties = JsonSerializer.Deserialize<JsonElement>(propertiesData);
 
-            //string message = null;
+        //    //string message = null;
 
-            //if (row.Contains("Message"))
-            //    message = row["Message"]?.ToString();
+        //    //if (row.Contains("Message"))
+        //    //    message = row["Message"]?.ToString();
 
-            //if (string.IsNullOrWhiteSpace(message) && row.Contains("OuterMessage"))
-            //    message = row["OuterMessage"]?.ToString();
+        //    //if (string.IsNullOrWhiteSpace(message) && row.Contains("OuterMessage"))
+        //    //    message = row["OuterMessage"]?.ToString();
 
-            //if (string.IsNullOrWhiteSpace(message) && row.Contains("InnermostMessage"))
-            //    message = row["InnermostMessage"]?.ToString();
+        //    //if (string.IsNullOrWhiteSpace(message) && row.Contains("InnermostMessage"))
+        //    //    message = row["InnermostMessage"]?.ToString();
 
-            //if (string.IsNullOrWhiteSpace(message))
-            //{
-            //}
+        //    //if (string.IsNullOrWhiteSpace(message))
+        //    //{
+        //    //}
 
-            var rowDictionary = RowDictionary(row, detailedResponse.Value.Table.Columns);
-            var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
-            var raw = JsonSerializer.Serialize(rowDictionary, jsonOptions);
+        //    var rowDictionary = RowDictionary(row, detailedResponse.Value.Table.Columns);
+        //    var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+        //    var raw = JsonSerializer.Serialize(rowDictionary, jsonOptions);
 
-            var message = TryGetColumn(row, "Message")
-                              ?? TryGetColumn(row, "OuterMessage")
-                              ?? TryGetProperty(properties, "Message")
-                              ?? TryGetProperty(properties, "OuterMessage")
-                              ?? TryGetProperty(properties, "InnermostMessage")
-                              ?? rowDictionary.GetValueOrDefault("Message")?.ToString().NullIfEmpty()
-                              ?? rowDictionary.GetValueOrDefault("OuterMessage")?.ToString().NullIfEmpty()
-                              ?? rowDictionary.GetValueOrDefault("InnermostMessage")?.ToString().NullIfEmpty();
+        //    var message = TryGetColumn(row, "Message")
+        //                      ?? TryGetColumn(row, "OuterMessage")
+        //                      ?? TryGetProperty(properties, "Message")
+        //                      ?? TryGetProperty(properties, "OuterMessage")
+        //                      ?? TryGetProperty(properties, "InnermostMessage")
+        //                      ?? rowDictionary.GetValueOrDefault("Message")?.ToString().NullIfEmpty()
+        //                      ?? rowDictionary.GetValueOrDefault("OuterMessage")?.ToString().NullIfEmpty()
+        //                      ?? rowDictionary.GetValueOrDefault("InnermostMessage")?.ToString().NullIfEmpty();
 
-            if (string.IsNullOrEmpty(message))
-            {
-            }
+        //    if (string.IsNullOrEmpty(message))
+        //    {
+        //    }
 
-            return new LogDetails
-            {
-                Id = BuildItemIdentifier(row, LogSource.Exception),
-                TenantId = $"{row["TenantId"]}",
-                TimeGenerated = DateTime.Parse($"{row["TimeGenerated"]}"),
-                SeverityLevel = Enum.Parse<SeverityLevel>($"{row["SeverityLevel"]}"),
-                Message = message,
-                ProblemId = $"{row["ProblemId"]}",
-                AppName = GetAppName(properties, row),
-                Environment = GetEnvironment(properties),
-                Raw = raw
-            };
-        }
-        catch (Exception e)
-        {
-            Debugger.Break();
-            Console.WriteLine(e);
-            throw;
-        }
+        //    return new LogDetails
+        //    {
+        //        Id = BuildItemIdentifier(row, LogSource.Exception),
+        //        TenantId = $"{row["TenantId"]}",
+        //        TimeGenerated = DateTime.Parse($"{row["TimeGenerated"]}"),
+        //        SeverityLevel = Enum.Parse<SeverityLevel>($"{row["SeverityLevel"]}"),
+        //        Message = message,
+        //        ProblemId = $"{row["ProblemId"]}",
+        //        AppName = GetAppName(properties, row),
+        //        Environment = GetEnvironment(properties),
+        //        Raw = raw
+        //    };
+        //}
+        //catch (Exception e)
+        //{
+        //    Debugger.Break();
+        //    Console.WriteLine(e);
+        //    throw;
+        //}
+        throw new NotImplementedException();
     }
 
     private static string GetAppName(JsonElement properties, LogsTableRow row)
@@ -1034,22 +1147,6 @@ AppTraces
         yield break;
     }
 
-    public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)
-    {
-        try
-        {
-            var client = GetClient(context);
-            var detailQuery = "AppTraces";
-            _ = await client.QueryWorkspaceAsync(context.WorkspaceId, detailQuery, new QueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
-
-            return true;
-        }
-        catch (Exception e)
-        {
-            return false;
-        }
-    }
-
     private static Dictionary<string, object> RowDictionary(LogsTableRow row, IReadOnlyList<LogsTableColumn> columns)
     {
         var rowDictionary = new Dictionary<string, object>();
@@ -1133,23 +1230,23 @@ AppTraces
         return int.Parse(value.ToString()!);
     }
 
-    static string BuildItemIdentifier(
-        IReadOnlyList<object> row,
-        int idIndex,
-        LogSource type)
-    {
-        var identifier = row[idIndex]?.ToString();
+    //static string BuildItemIdentifier(
+    //    IReadOnlyList<object> row,
+    //    int idIndex,
+    //    LogSource type)
+    //{
+    //    var identifier = row[idIndex]?.ToString();
 
-        return Base64UrlHelper.EncodeToBase64Url(
-            JsonSerializer.Serialize(
-                new ItemIdentifier
-                {
-                    Type = type,
-                    Identifier = identifier
-                }
-            )
-        );
-    }
+    //    return Base64UrlHelper.EncodeToBase64Url(
+    //        JsonSerializer.Serialize(
+    //            new ItemIdentifier
+    //            {
+    //                Type = type,
+    //                Identifier = identifier
+    //            }
+    //        )
+    //    );
+    //}
 
     static TimeSpan GetTimeSpan(IReadOnlyList<object> row, int index)
     {
