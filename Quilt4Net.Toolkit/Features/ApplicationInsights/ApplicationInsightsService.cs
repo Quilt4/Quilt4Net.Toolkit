@@ -503,7 +503,7 @@ AppTraces
         }
     }
 
-    public async Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, TimeSpan timeSpan)
+    public async Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, string environment, TimeSpan timeSpan)
     {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
@@ -614,7 +614,7 @@ AppRequests
         };
     }
 
-    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, TimeSpan timeSpan)
+    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
     {
         //TODO: Cache here...
         var client = GetClient(context);
@@ -705,73 +705,91 @@ AppRequests
         };
     }
 
-    public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, TimeSpan timeSpan)
+    public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
         //TODO: Cache here...
-        var items = await GetSummariesInternal(context, timeSpan).ToArrayAsync();
+        var items = await GetSummariesInternal(context, environment, timeSpan).ToArrayAsync();
         foreach (var item in items.GroupBy(x => x.Fingerprint).Select(x => x.First()))
         {
             yield return item;
         }
     }
 
-    private async IAsyncEnumerable<SummarySubset> GetSummariesInternal(IApplicationInsightsContext context, TimeSpan timeSpan)
+    private async IAsyncEnumerable<SummarySubset> GetSummariesInternal(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-        var appExceptionsQuery = @"
+        static string EscapeKqlSingleQuoted(string value)
+        {
+            return value
+                .Replace("'", "''")
+                .Replace("\r", " ")
+                .Replace("\n", " ");
+        }
+
+        var envValue = string.IsNullOrWhiteSpace(environment) ? null : environment.Trim();
+
+        // If env is provided: include matching env OR rows with no env (empty/null).
+        // If env is not provided: no filter (all envs).
+        var envFilter = envValue is null
+            ? string.Empty
+            : $"\n| where isempty(Environment) or Environment =~ '{EscapeKqlSingleQuoted(envValue)}'";
+
+        var appExceptionsQuery = $@"
 AppExceptions
 | extend _p = todynamic(Properties)
 | project
     TimeGenerated,
     Fingerprint = base64_encode_tostring(tostring(hash(ProblemId))),
     Message = tostring(OuterMessage),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = toint(SeverityLevel)
+{envFilter}
 | summarize
     Count = count(),
     LastTimeGenerated = max(TimeGenerated)
     by Fingerprint, Message, Environment, Application, SeverityLevel
 | order by LastTimeGenerated desc";
 
-        var appTracesQuery = @"
+        var appTracesQuery = $@"
 AppTraces
 | extend _p = todynamic(Properties)
-| extend OriginalFormat = tostring(_p[""OriginalFormat""])
+| extend OriginalFormat = trim(' ', tostring(_p[""OriginalFormat""]))
+| extend FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
 | project
     TimeGenerated,
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat))),
+    Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource))),
     Message = tostring(Message),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = toint(SeverityLevel)
+{envFilter}
 | summarize
     Count = count(),
     LastTimeGenerated = max(TimeGenerated)
     by Fingerprint, Message, Environment, Application, SeverityLevel
 | order by LastTimeGenerated desc";
 
-        var appRequestsQuery = @"
+        var appRequestsQuery = $@"
 AppRequests
 | extend _p = todynamic(Properties)
 | project
     TimeGenerated,
     Fingerprint = base64_encode_tostring(tostring(hash(Name))),
     Message = tostring(Name),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
-    SeverityLevel = iif(tobool(Success), 1, 3)
+    SeverityLevel = iif(tobool(coalesce(Success, true)), 1, 3)
+{envFilter}
 | summarize
     Count = count(),
     LastTimeGenerated = max(TimeGenerated)
     by Fingerprint, Message, Environment, Application, SeverityLevel
 | order by LastTimeGenerated desc";
 
-        async IAsyncEnumerable<SummarySubset> Run(
-            string query,
-            LogSource source)
+        async IAsyncEnumerable<SummarySubset> Run(string query, LogSource source)
         {
             var response = await client.QueryWorkspaceAsync(
                 workspaceId,

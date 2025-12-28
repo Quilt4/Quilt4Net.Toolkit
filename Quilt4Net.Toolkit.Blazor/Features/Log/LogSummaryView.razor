@@ -1,7 +1,5 @@
-﻿@using Microsoft.Extensions.Hosting
-@using Quilt4Net.Toolkit.Features.ApplicationInsights
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
-@inject IHostEnvironment HostEnvironment
 
 @if (Model == null)
 {
@@ -38,7 +36,7 @@ else
         <Columns>
             <RadzenDataGridColumn Title="Id" Width="60px">
                 <Template>
-                    <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                    <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Environment={Environment}&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Time" Property="@nameof(SummaryData.Item.TimeGenerated)">
@@ -59,6 +57,9 @@ else
     public string Fingerprint { get; set; }
 
     [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
     public TimeSpan? Range { get; set; }
 
     [Parameter]
@@ -73,7 +74,7 @@ else
 
         if (!Source.HasValue || !Range.HasValue) return;
 
-        Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Range.Value);
+        Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
 
         await base.OnParametersSetAsync();
     }

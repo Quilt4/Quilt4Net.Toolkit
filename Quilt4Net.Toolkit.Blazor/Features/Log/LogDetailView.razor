@@ -17,7 +17,7 @@ else
         <RadzenColumn>
             <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
             <div>
-                <RadzenLink Text="@Model.Fingerprint" Path="@($"/log/summary/{Model.Fingerprint}?Reference=Detail&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" />
+                <RadzenLink Text="@Model.Fingerprint" Path="@($"/log/summary/{Model.Fingerprint}?Reference=Detail&Environment={Environment}&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" />
             </div>
         </RadzenColumn>
         <RadzenColumn>
@@ -79,6 +79,9 @@ else
     public string Id { get; set; }
 
     [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
     public TimeSpan? Range { get; set; }
 
     [Parameter]
@@ -93,7 +96,7 @@ else
 
         if (!Source.HasValue || !Range.HasValue) return;
 
-        Model = await ApplicationInsightsService.GetDetail(Context, Id, Source.Value, Range.Value);
+        Model = await ApplicationInsightsService.GetDetail(Context, Id, Source.Value, Environment, Range.Value);
 
         await base.OnParametersSetAsync();
     }

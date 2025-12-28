@@ -44,7 +44,7 @@ else
                     <Columns>
                         <RadzenDataGridColumn Title="Id" Width="60px" Sortable="false">
                             <Template>
-                                <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Measure&Range={Range.TotalMinutes}&Source={LogSource.Trace}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                                <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Measure&Environment={Environment}&Range={Range.TotalMinutes}&Source={LogSource.Trace}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="Time" Property="@nameof(MeasureData.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">

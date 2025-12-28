@@ -1,8 +1,6 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
 
-<p>E: @Environment</p>
-
 @if (Model == null)
 {
     <Loading />
@@ -17,7 +15,7 @@ else
         <Columns>
             <RadzenDataGridColumn Title="Fingerprint" Width="60px" Sortable="false">
                 <Template>
-                    <RadzenLink Path="@($"/log/summary/{context.Fingerprint}?Reference=Detail&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios"/>
+                    <RadzenLink Path="@($"/log/summary/{context.Fingerprint}?Reference=Detail&Environment={Environment}&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)" Filterable="false">
@@ -51,7 +49,7 @@ else
     {
         Model = null;
         Model = await ApplicationInsightsService
-            .GetSummaries(Context, Range)
+            .GetSummaries(Context, Environment, Range)
             .ToArrayAsync();
     }
 
