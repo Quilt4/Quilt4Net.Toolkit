@@ -1,26 +1,38 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Tharga.Toolkit.Timer
 @inject IApplicationInsightsService ApplicationInsightsService
 
-<RadzenDataGrid Data="Model" TItem="SummarySubset">
-    <Columns>
-        <RadzenDataGridColumn Title="Fingerprint" Property="@nameof(SummarySubset.Fingerprint)">
-            <Template>
-                <RadzenLink Path="@($"/log/summary/{context.Fingerprint}?Reference=Detail&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
-            </Template>
-        </RadzenDataGridColumn>
-        <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)" Filterable="false">
-            <Template>
-                <DateTimeView Date="@context.LastTimeGenerated" />
-            </Template>
-        </RadzenDataGridColumn>
-        <RadzenDataGridColumn Title="Count" Property="@nameof(SummarySubset.Count)" SortOrder="SortOrder.Descending" />
-        <RadzenDataGridColumn Title="Source" Property="@nameof(SummarySubset.Source)" />
-        <RadzenDataGridColumn Title="Level" Property="@nameof(SummarySubset.SeverityLevel)" />
-        <RadzenDataGridColumn Title="Message" Property="@nameof(SummarySubset.Message)" />
-        <RadzenDataGridColumn Title="Application" Property="@nameof(SummarySubset.Application)" />
-        <RadzenDataGridColumn Title="Environment" Property="@nameof(SummarySubset.Environment)" />
-    </Columns>
-</RadzenDataGrid>
+@if (Model == null)
+{
+    <Loading />
+}
+else
+{
+    <RadzenDataGrid Data="Model" TItem="SummarySubset"
+                    AllowSorting="true"
+                    AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                    AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
+                    ShowPagingSummary="true" PagingSummaryFormat="{2:N0} summary items, page {0} of {1}">
+        <Columns>
+            <RadzenDataGridColumn Title="Fingerprint" Width="60px" Sortable="false">
+                <Template>
+                    <RadzenLink Path="@($"/log/summary/{context.Fingerprint}?Reference=Detail&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios"/>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)" Filterable="false">
+                <Template>
+                    <DateTimeView Date="@context.LastTimeGenerated"/>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Count" Property="@nameof(SummarySubset.Count)" SortOrder="SortOrder.Descending" Filterable="false" />
+            <RadzenDataGridColumn Title="Source" Property="@nameof(SummarySubset.Source)"/>
+            <RadzenDataGridColumn Title="Level" Property="@nameof(SummarySubset.SeverityLevel)"/>
+            <RadzenDataGridColumn Title="Message" Property="@nameof(SummarySubset.Message)"/>
+            <RadzenDataGridColumn Title="Application" Property="@nameof(SummarySubset.Application)"/>
+            <RadzenDataGridColumn Title="Environment" Property="@nameof(SummarySubset.Environment)"/>
+        </Columns>
+    </RadzenDataGrid>
+}
 
 @code {
     private SummarySubset[] Model { get; set; }

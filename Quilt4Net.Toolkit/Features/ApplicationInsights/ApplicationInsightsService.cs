@@ -46,19 +46,64 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
+        static string EscapeKqlSingleQuoted(string value)
+        {
+            return value
+                .Replace("'", "''")
+                .Replace("\r", " ")
+                .Replace("\n", " ");
+        }
+
+        static string StripWrappingQuotes(string value)
+        {
+            if (value.Length < 2)
+            {
+                return value;
+            }
+
+            var first = value[0];
+            var last = value[^1];
+
+            var isStraightDouble = first == '"' && last == '"';
+            var isStraightSingle = first == '\'' && last == '\'';
+            var isCurlyDouble = first == '“' && last == '”';
+            var isCurlySingle = first == '‘' && last == '’';
+
+            if (isStraightDouble || isStraightSingle || isCurlyDouble || isCurlySingle)
+            {
+                return value.Substring(1, value.Length - 2).Trim();
+            }
+
+            return value;
+        }
+
+        var envValue = string.IsNullOrWhiteSpace(environment) ? null : environment.Trim();
+        var textValue = string.IsNullOrWhiteSpace(text) ? null : StripWrappingQuotes(text.Trim());
+
+        var envFilter = envValue is null
+            ? string.Empty
+            : $"\n| where Environment == '{EscapeKqlSingleQuoted(envValue)}' or isempty(Environment)";
+
+        var textFilterExceptionsAndTraces = textValue is null
+            ? string.Empty
+            : $"\n| where Message contains '{EscapeKqlSingleQuoted(textValue)}'";
+
+        var textFilterRequests = textValue is null
+            ? string.Empty
+            : $"\n| where Message contains '{EscapeKqlSingleQuoted(textValue)}' or CorrelationId contains '{EscapeKqlSingleQuoted(textValue)}'";
+
         // =========================
         // AppExceptions
         // =========================
-        var query = @$"
+        var query = $@"
 AppExceptions
 | extend _p = todynamic(Properties)
 | extend
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
-    ApplicationName = coalesce(
-        tostring(_p[""ApplicationName""]),
-        tostring(AppRoleName)
-    ),
+    ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(OuterMessage)
+{envFilter}
+{textFilterExceptionsAndTraces}
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
     Id = _ItemId,
@@ -108,26 +153,26 @@ AppExceptions
         // =========================
         // AppTraces
         // =========================
-        query = @$"
+        query = $@"
 AppTraces
 | extend _p = todynamic(Properties)
 | extend
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
-    ApplicationName = coalesce(
-        tostring(_p[""ApplicationName""]),
-        tostring(AppRoleName)
-    ),
-    Message = tostring(Message),
+    ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     OriginalFormat = tostring(_p[""OriginalFormat""])
+{envFilter}
+{textFilterExceptionsAndTraces}
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
+    FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
+| extend
     Id = _ItemId,
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat)))
+    Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
 | project
     TimeGenerated,
     ApplicationName,
     Environment,
-    Message,
+    Message = tostring(Message),
     SeverityLevel,
     Id,
     Fingerprint,
@@ -172,11 +217,14 @@ AppTraces
 AppRequests
 | extend _p = todynamic(Properties)
 | extend
+    CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(Name)
+{envFilter}
+{textFilterRequests}
 | extend
-    SeverityLevel = iif(tobool(Success), 1, 3)
+    SeverityLevel = iif(tobool(coalesce(Success, true)), 1, 3)
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
     Id = _ItemId,

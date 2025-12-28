@@ -33,9 +33,13 @@ else
                 </RadzenChart>
             </RadzenTabsItem>
             <RadzenTabsItem Text="Table">
-                <RadzenDataGrid Data="Model" TItem="CountData">
+                <RadzenDataGrid Data="Model" TItem="CountData"
+                                AllowSorting="true"
+                                AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
+                                ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
                     <Columns>
-                        <RadzenDataGridColumn Title="Id" Width="60px">
+                        <RadzenDataGridColumn Title="Id" Width="60px" Sortable="false">
                             <Template>
                                 <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Range={Range.TotalMinutes}&Source={LogSource.Trace}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
                             </Template>

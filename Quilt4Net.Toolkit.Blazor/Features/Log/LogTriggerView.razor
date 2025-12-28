@@ -11,6 +11,8 @@
                 Style="width:200px" />
 <RadzenButton Text="Exception" Icon="error_med" Click="ThrowAsync" />
 <RadzenButton Text="Trace" Icon="barefoot" Click="TraceAsync" />
+<br/>
+<RadzenButton Text="Boundary Exception" Icon="error_med" Click="@(e => { throw new InvalidOperationException("Some exception that should be caught byt Error Boundary."); })" />
 
 @code {
     private LogLevel _level;
