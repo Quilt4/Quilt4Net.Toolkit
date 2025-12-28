@@ -1,6 +1,6 @@
 using Microsoft.ApplicationInsights.AspNetCore.Extensions;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Api.Sample;
@@ -29,20 +29,21 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Description = "API Key needed to access the endpoints"
     });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "ApiKey"
-                }
-            },
-            new List<string>()
-        }
-    });
+    //TODO: Fix
+    //c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    //{
+    //    {
+    //        new OpenApiSecurityScheme
+    //        {
+    //            Reference = new OpenApiReference
+    //            {
+    //                Type = ReferenceType.SecurityScheme,
+    //                Id = "ApiKey"
+    //            }
+    //        },
+    //        new List<string>()
+    //    }
+    //});
     c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "Quilt4Net.Toolkit.Api.Sample.xml"));
 });
 

@@ -1,7 +1,11 @@
 ﻿# Quilt4Net Toolkit Api
 [![GitHub repo](https://img.shields.io/github/repo-size/Quilt4/Quilt4Net.Toolkit?style=flat&logo=github&logoColor=red&label=Repo)](https://github.com/Quilt4/Quilt4Net.Toolkit)
 
-Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *Metrics* in .NET Web Applications.
+Add extra api logging with `AddQuilt4NetApiLogging`.
+
+---
+# Features moved
+Some features have moved to *Quilt4Net Toolkit Health*.
 
 ## Get started
 After having installed the nuget package.
@@ -110,16 +114,3 @@ Error at startup with the message:
 `Unhandled exception. System.InvalidOperationException: EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware and so must be added to the request execution pipeline before EndpointMiddleware. Please add EndpointRoutingMiddleware by calling 'IApplicationBuilder.UseRouting' inside the call to 'Configure(...)' in the application startup code.`
 
 The solution is to add `app.UseRouting();` before `app.UseQuilt4NetApi();` in *Program.cs*.
-
-
-
-
-## AddQuilt4NetHealthApi
-Add API with Health endpoints.
-
-### Quilt4NetHealthApiOptions
-
-## AddQuilt4NetApiLogging
-Logging for API calls.
-
-### LoggingOptions

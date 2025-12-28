@@ -1,59 +1,55 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-	<PropertyGroup>
-		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Version>1.0.0</Version>
-		<Authors>Thargelion AB</Authors>
-		<Company>Thargelion AB</Company>
-		<Product>Quilt4Net Toolkit Client</Product>
-		<Tag>Health ApplicationInsights</Tag>
-		<Description>Tools for Health checks via Quilt4Net.Toolkit.Api and Application Insigts.</Description>
-		<PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
-		<GenerateDocumentationFile>True</GenerateDocumentationFile>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
-		<DebugType>portable</DebugType>
-		<EmbedUntrackedSources>true</EmbedUntrackedSources>
-		<PublishRepositoryUrl>true</PublishRepositoryUrl>
-		<EmbedUntrackedSources>true</EmbedUntrackedSources>
-		<IncludeSource>true</IncludeSource>
-		<IncludeSymbols>true</IncludeSymbols>
-	</PropertyGroup>
-
-	<PropertyGroup>
-		<NoWarn>1701;1702;CS1591;CS0809</NoWarn>
-	</PropertyGroup>
-
-	<ItemGroup>
-		<None Include="README.md">
-			<Pack>True</Pack>
-			<PackagePath>\</PackagePath>
-		</None>
-	</ItemGroup>
-
-	<ItemGroup>
-		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api" />
-		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Health" />
-		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Tests" />
-		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
-		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<PackageReference Include="Azure.Identity" Version="1.17.1" />
-		<PackageReference Include="Azure.Monitor.Query" Version="1.7.1" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
-		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="System.Management" Version="10.0.1" />
-		<PackageReference Include="System.Linq.Async" Version="7.0.0" />
-		<PackageReference Include="Tharga.Cache" Version="0.2.13" />
-	</ItemGroup>
-
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <Authors>Thargelion AB</Authors>
+    <Company>Thargelion AB</Company>
+    <Product>Quilt4Net Toolkit Client</Product>
+    <Tag>Health ApplicationInsights</Tag>
+    <Description>Tools for Health checks via Quilt4Net.Toolkit.Api and Application Insigts.</Description>
+    <PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
+    <DebugType>portable</DebugType>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSource>true</IncludeSource>
+    <IncludeSymbols>true</IncludeSymbols>
+  </PropertyGroup>
+  <PropertyGroup>
+    <NoWarn>1701;1702;CS1591;CS0809</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Quilt4Net.Toolkit.Api" />
+    <InternalsVisibleTo Include="Quilt4Net.Toolkit.Health" />
+    <InternalsVisibleTo Include="Quilt4Net.Toolkit.Tests" />
+    <InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.17.1" />
+    <PackageReference Include="Azure.Monitor.Query" Version="1.7.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Management" Version="10.0.1" />
+    <PackageReference Include="System.Linq.Async" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Toolkit\Cache\Tharga.Cache\Tharga.Cache.csproj" />
+  </ItemGroup>
 </Project>

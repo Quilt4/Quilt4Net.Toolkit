@@ -3,7 +3,7 @@ using Quilt4Net.Toolkit.Api.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
-public static class LoggingRegistration
+public static class ApiLoggingRegistration
 {
     private static LoggingOptions _options;
 
