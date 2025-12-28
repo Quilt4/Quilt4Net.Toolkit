@@ -1,0 +1,42 @@
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+
+<RadzenDataGrid Data="Model" TItem="SummarySubset">
+    <Columns>
+        <RadzenDataGridColumn Title="Fingerprint" Property="@nameof(SummarySubset.Fingerprint)">
+            <Template>
+                <RadzenLink Path="@($"/log/summary/{context.Fingerprint}?Reference=Detail&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)" Filterable="false">
+            <Template>
+                <DateTimeView Date="@context.LastTimeGenerated" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn Title="Count" Property="@nameof(SummarySubset.Count)" SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn Title="Source" Property="@nameof(SummarySubset.Source)" />
+        <RadzenDataGridColumn Title="Level" Property="@nameof(SummarySubset.SeverityLevel)" />
+        <RadzenDataGridColumn Title="Message" Property="@nameof(SummarySubset.Message)" />
+        <RadzenDataGridColumn Title="Application" Property="@nameof(SummarySubset.Application)" />
+        <RadzenDataGridColumn Title="Environment" Property="@nameof(SummarySubset.Environment)" />
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    private SummarySubset[] Model { get; set; }
+
+    [Parameter]
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Model = null;
+        Model = await ApplicationInsightsService
+            .GetSummaries(Context, Range)
+            .ToArrayAsync();
+    }
+
+}

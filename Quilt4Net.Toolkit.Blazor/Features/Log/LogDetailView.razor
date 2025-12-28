@@ -26,10 +26,16 @@ else
                 <span title="@Model.TimeGenerated.ToLocalDateTimeString()">@Model.TimeGenerated.ToLocalDurationString()</span>
             </div>
         </RadzenColumn>
-        @* <RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
+        <RadzenColumn Size="4">
             <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
             <RadzenText Text="@($"{Model.SeverityLevel}")" />
-        </RadzenColumn> *@
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="CorrelationId" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.CorrelationId}")" />
+        </RadzenColumn>
     </RadzenRow>
     <RadzenRow>
         <RadzenColumn>

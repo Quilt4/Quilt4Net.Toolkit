@@ -8,6 +8,7 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan);
     Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, TimeSpan timeSpan);
     Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, TimeSpan timeSpan);
+    IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, TimeSpan timeSpan);
 
     //TODO: --> Revisit
 

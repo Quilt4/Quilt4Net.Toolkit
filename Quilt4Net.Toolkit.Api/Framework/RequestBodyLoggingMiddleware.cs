@@ -107,6 +107,22 @@ public class RequestResponseLoggingMiddleware
                     throw new InvalidOperationException($"Log {nameof(_options.Interceptor)} Exception. {e.Message}", e);
                 }
             }
+            else
+            {
+                requestDetails = requestDetails with
+                {
+                    Headers = requestDetails.Headers
+                        .Where(x => x.Key != "Cookie")
+                        .Where(x => !string.IsNullOrEmpty(x.Value))
+                        .ToDictionary(x => x.Key, x => x.Value)
+                };
+                responseDetails = responseDetails with
+                {
+                    Headers = responseDetails.Headers
+                        .Where(x => !string.IsNullOrEmpty(x.Value))
+                        .ToDictionary(x => x.Key, x => x.Value)
+                };
+            }
 
             var detailsJsonString = BuildDetailsString(details);
             if (telemetry != null)
@@ -176,7 +192,7 @@ public class RequestResponseLoggingMiddleware
             {
                 // Read into buffer and cut off if too big
                 using var memStream = new MemoryStream();
-                await context.Request.Body.CopyToAsync(memStream);
+                await context.Request.Body.CopyToAsync(memStream); //TODO: Change to use a pass-through-stream. This will make the call halt, until the buffer here is complete.
                 if (memStream.Length <= maxBodySize)
                 {
                     context.Request.Body.Position = 0;

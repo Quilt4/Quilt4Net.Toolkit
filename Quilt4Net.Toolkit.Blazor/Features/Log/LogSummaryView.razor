@@ -36,7 +36,6 @@ else
 
     <RadzenDataGrid Data="@Model.Items" TItem="SummaryData.Item">
         <Columns>
-            @* <RadzenDataGridColumn Title="Id" Property="@nameof(SummaryData.Item.Id)" /> *@
             <RadzenDataGridColumn Title="Id" Width="60px">
                 <Template>
                     <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />

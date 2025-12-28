@@ -10,7 +10,7 @@ public static class LoggingRegistration
     [Obsolete($"Use {nameof(AddQuilt4NetApiLogging)} instead.")]
     public static void AddQuilt4NetLogging(this WebApplicationBuilder builder, Action<LoggingOptions> options = null)
     {
-        AddQuilt4NetLogging(builder.Services, options);
+        AddQuilt4NetApiLogging(builder.Services, options);
     }
 
     [Obsolete($"Use {nameof(AddQuilt4NetApiLogging)} instead.")]
