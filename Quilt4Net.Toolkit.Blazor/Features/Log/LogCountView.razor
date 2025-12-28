@@ -1,7 +1,5 @@
-﻿@using Microsoft.Extensions.Hosting
-@using Quilt4Net.Toolkit.Features.ApplicationInsights
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
-@inject IHostEnvironment HostEnvironment
 
 @if (Model == null)
 {
@@ -65,10 +63,10 @@ else
     private IReadOnlyList<ActionSeries> Series { get; set; } = Array.Empty<ActionSeries>();
 
     [Parameter]
-    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+    public string Environment { get; set; }
 
     [Parameter]
-    public string Environment { get; set; }
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
@@ -77,26 +75,39 @@ else
     {
         Model = null;
         Model = await ApplicationInsightsService
-            .GetCountAsync(Context, HostEnvironment.EnvironmentName, Range)
+            .GetCountAsync(Context, Environment, Range)
             .ToArrayAsync();
 
         var model = Model.Select(x => new MeasurePoint
         {
             Action = x.Action,
+            Environment = x.Environment,
             TimeGenerated = x.TimeGenerated,
             Count = x.Count
-        });
+        }).ToArray();
 
-        Series = model
-            .GroupBy(x => x.Action)
-            .OrderBy(g => g.Key)
-            .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
-            .ToArray();
+        if (model.GroupBy(x => x.Environment).Count() == 1)
+        {
+            Series = model
+                .GroupBy(x => x.Action)
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
+        else
+        {
+            Series = model
+                .GroupBy(x => (x.Action, x.Environment))
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries($"{g.Key.Environment}.{g.Key.Action}", g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
     }
 
     private sealed class MeasurePoint
     {
         public string Action { get; set; }
+        public string Environment { get; set; }
         public DateTime TimeGenerated { get; set; }
         public int Count { get; set; }
     }

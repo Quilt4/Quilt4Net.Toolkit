@@ -1,7 +1,5 @@
-﻿@using Microsoft.Extensions.Hosting
-@using Quilt4Net.Toolkit.Features.ApplicationInsights
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
-@inject IHostEnvironment HostEnvironment
 
 <RadzenStack Style="margin-bottom: 6px;" Orientation="Orientation.Horizontal">
     <RadzenTextBox @bind-value="@_searchText" />
@@ -45,10 +43,10 @@ else if (Model != null)
     private LogItem[] Model { get; set; }
 
     [Parameter]
-    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+    public string Environment { get; set; }
 
     [Parameter]
-    public string Environment { get; set; }
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
@@ -59,7 +57,7 @@ else if (Model != null)
         StateHasChanged();
 
         var searchText = _searchText ?? string.Empty;
-        Model = await ApplicationInsightsService.SearchAsync(Context, HostEnvironment.EnvironmentName, searchText, Range).ToArrayAsync();
+        Model = await ApplicationInsightsService.SearchAsync(Context, Environment, searchText, Range).ToArrayAsync();
 
         _loading = false;
         StateHasChanged();

@@ -1,7 +1,5 @@
-﻿@using Microsoft.Extensions.Hosting
-@using Quilt4Net.Toolkit.Features.ApplicationInsights
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
-@inject IHostEnvironment HostEnvironment
 
 @if (Model == null)
 {
@@ -72,10 +70,10 @@ else
     private IReadOnlyList<ActionSeries> Series { get; set; } = Array.Empty<ActionSeries>();
 
     [Parameter]
-    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+    public string Environment { get; set; }
 
     [Parameter]
-    public string Environment { get; set; }
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
@@ -84,22 +82,34 @@ else
     {
         Model = null;
         Model = await ApplicationInsightsService
-            .GetMeasureAsync(Context, HostEnvironment.EnvironmentName, Range)
-            .Where(x => x.Elapsed < TimeSpan.FromHours(10)) //TODO: I made a misstake with a log entry, remove this when Neurolito log is clean. That would be about 2026-02-01
+            .GetMeasureAsync(Context, Environment, Range)
+            .Where(x => x.Elapsed < TimeSpan.FromHours(10)) //TODO: I made a misstake with a log entry, remove this when Neurolito log is clean. That would be about 2026-02-01.
             .ToArrayAsync();
 
         var model = Model.Select(x => new MeasurePoint
         {
             Action = x.Action,
+            Environment = x.Environment,
             TimeGenerated = x.TimeGenerated,
             ElapsedMs = x.Elapsed.TotalMilliseconds
-        });
+        }).ToArray();
 
-        Series = model
-            .GroupBy(x => x.Action)
-            .OrderBy(g => g.Key)
-            .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
-            .ToArray();
+        if (model.GroupBy(x => x.Environment).Count() == 1)
+        {
+            Series = model
+                .GroupBy(x => x.Action)
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
+        else
+        {
+            Series = model
+                .GroupBy(x => (x.Action, x.Environment))
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries($"{g.Key.Environment}.{g.Key.Action}", g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
     }
 
     private string FormatElapsed(object value)
@@ -128,6 +138,7 @@ else
     private sealed class MeasurePoint
     {
         public string Action { get; set; }
+        public string Environment { get; set; }
         public DateTime TimeGenerated { get; set; }
         public double ElapsedMs { get; set; }
     }

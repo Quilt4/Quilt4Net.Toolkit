@@ -356,14 +356,33 @@ AppRequests
         }
     }
 
-    private async IAsyncEnumerable<MeasureData> GetMeasureInternalAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    private async IAsyncEnumerable<MeasureData> GetMeasureInternalAsync(
+        IApplicationInsightsContext context,
+        string environment,
+        TimeSpan timeSpan)
     {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-        //var envFilter = environment ?? string.Empty;
+        static string EscapeKqlSingleQuoted(string value)
+        {
+            return value
+                .Replace("'", "''")
+                .Replace("\r", " ")
+                .Replace("\n", " ");
+        }
 
-        var query = @$"
+        var envValue = string.IsNullOrWhiteSpace(environment) ? null : environment.Trim();
+
+        // If env is provided:
+        //   include matching env OR rows with no env logged (empty).
+        // If env is not provided:
+        //   no filter (all envs).
+        var envFilter = envValue is null
+            ? string.Empty
+            : $"\n| where isempty(Environment) or Environment =~ '{EscapeKqlSingleQuoted(envValue)}'";
+
+        var query = $@"
 AppTraces
 | extend _p = todynamic(Properties)
 | extend
@@ -372,18 +391,21 @@ AppTraces
 | extend
     Action = tostring(_p[""Action""]),
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
-    OriginalFormat = tostring(_p[""OriginalFormat""]),
-    ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, Message)
+    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
+    OriginalFormat = trim(' ', tostring(_p[""OriginalFormat""])),
+    ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, tostring(Message))
+{envFilter}
+| extend
+    FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
 | extend
     Elapsed = totimespan(ElapsedRaw),
     Id = _ItemId,
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat)))
+    Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
 | project
     TimeGenerated,
     Id,
     Fingerprint,
-    Message,
+    Message = tostring(Message),
     Environment,
     ApplicationName,
     Action,
@@ -415,10 +437,10 @@ AppTraces
                     TimeGenerated = GetDateTime(row, timeIndex),
 
                     Message = row[messageIndex]?.ToString()!,
-                    Environment = row[environmentIndex]?.ToString()!,
-                    Application = row[applicationIndex]?.ToString()!,
+                    Environment = row[environmentIndex]?.ToString() ?? "",
+                    Application = row[applicationIndex]?.ToString() ?? "",
 
-                    Action = row[actionIndex]?.ToString()!,
+                    Action = row[actionIndex]?.ToString() ?? "",
                     Elapsed = GetTimeSpan(row, elapsedIndex)
                 };
             }
@@ -435,33 +457,58 @@ AppTraces
         }
     }
 
-    private async IAsyncEnumerable<CountData> GetCountInternalAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    private async IAsyncEnumerable<CountData> GetCountInternalAsync(
+        IApplicationInsightsContext context,
+        string environment,
+        TimeSpan timeSpan)
     {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-        var envFilter = environment ?? string.Empty;
+        static string EscapeKqlSingleQuoted(string value)
+        {
+            return value
+                .Replace("'", "''")
+                .Replace("\r", " ")
+                .Replace("\n", " ");
+        }
 
-        var query = @$"
+        var envValue = string.IsNullOrWhiteSpace(environment) ? null : environment.Trim();
+
+        // If env is provided:
+        //   include matching env OR rows with no env logged (empty).
+        // If env is not provided:
+        //   no filter (all envs).
+        var envFilter = envValue is null
+            ? string.Empty
+            : $"\n| where isempty(Environment) or Environment =~ '{EscapeKqlSingleQuoted(envValue)}'";
+
+        var query = $@"
 AppTraces
 | extend _p = todynamic(Properties)
 | extend
-    Method = tostring(parse_json(tostring(_p[""Details""]))[""Method""])
+    DetailsJson = parse_json(tostring(_p[""Details""]))
+| extend
+    Method = tostring(DetailsJson[""Method""])
 | where Method == ""Count""
 | extend
     Action = tostring(_p[""Action""]),
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
-    OriginalFormat = tostring(_p[""OriginalFormat""]),
-    Count = tostring(parse_json(tostring(_p[""Details""]))[""Count""])
+    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
+    OriginalFormat = trim(' ', tostring(_p[""OriginalFormat""])),
+    CountRaw = tostring(DetailsJson[""Count""])
+{envFilter}
+| extend
+    FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
 | extend
     Id = _ItemId,
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat)))
+    Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource))),
+    Count = toint(CountRaw)
 | project
     TimeGenerated,
     Id,
     Fingerprint,
-    Message,
+    Message = tostring(Message),
     Environment,
     ApplicationName,
     Action,
@@ -493,10 +540,10 @@ AppTraces
                     TimeGenerated = GetDateTime(row, timeIndex),
 
                     Message = row[messageIndex]?.ToString()!,
-                    Environment = row[environmentIndex]?.ToString()!,
-                    Application = row[applicationIndex]?.ToString()!,
+                    Environment = row[environmentIndex]?.ToString() ?? "",
+                    Application = row[applicationIndex]?.ToString() ?? "",
 
-                    Action = row[actionIndex]?.ToString()!,
+                    Action = row[actionIndex]?.ToString() ?? "",
                     Count = GetInt(row, countIndex)
                 };
             }
