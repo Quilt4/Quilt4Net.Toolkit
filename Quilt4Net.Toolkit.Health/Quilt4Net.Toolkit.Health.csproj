@@ -35,6 +35,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Health.Tests" />
+		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

@@ -4,21 +4,21 @@ namespace Quilt4Net.Toolkit.Api;
 
 public static class ApiRegistration
 {
-    [Obsolete($"Use {nameof(Health.HealthRegistration.AddQuilt4NetHealthApi)} instead.")]
+    [Obsolete($"Use AddQuilt4NetHealthApi in Quilt4Net.Toolkit.Health nuget package instead.")]
     public static void AddQuilt4NetApi(this WebApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> options = null)
     {
-        Health.HealthRegistration.AddQuilt4NetHealthApi(builder.Services, options);
+        throw new NotSupportedException("Use AddQuilt4NetHealthApi in Quilt4Net.Toolkit.Health nuget package instead.");
     }
 
-    [Obsolete($"Use {nameof(Health.HealthRegistration.AddQuilt4NetHealthApi)} instead.")]
+    [Obsolete($"Use AddQuilt4NetHealthApi in Quilt4Net.Toolkit.Health nuget package instead.")]
     public static void AddQuilt4NetApi(this IServiceCollection services, Action<Quilt4NetHealthApiOptions> options = null)
     {
-        Health.HealthRegistration.AddQuilt4NetHealthApi(services, options);
+        throw new NotSupportedException("Use AddQuilt4NetHealthApi in Quilt4Net.Toolkit.Health nuget package instead.");
     }
 
-    [Obsolete($"Use {nameof(Health.HealthRegistration.UseQuilt4NetHealthApi)} instead.")]
+    [Obsolete($"Use UseQuilt4NetHealthApi in Quilt4Net.Toolkit.Health nuget package instead.")]
     public static void UseQuilt4NetApi(this WebApplication app)
     {
-        Health.HealthRegistration.UseQuilt4NetHealthApi(app);
+        throw new NotSupportedException("Use UseQuilt4NetHealthApi in Quilt4Net.Toolkit.Health nuget package instead.");
     }
 }

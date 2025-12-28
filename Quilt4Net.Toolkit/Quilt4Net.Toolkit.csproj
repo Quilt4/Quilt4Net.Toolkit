@@ -33,6 +33,7 @@
     <InternalsVisibleTo Include="Quilt4Net.Toolkit.Health" />
     <InternalsVisibleTo Include="Quilt4Net.Toolkit.Tests" />
     <InternalsVisibleTo Include="Quilt4Net.Toolkit.Api.Tests" />
+    <InternalsVisibleTo Include="Quilt4Net.Toolkit.Health.Tests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
   <ItemGroup>
