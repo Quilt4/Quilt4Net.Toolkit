@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.ApplicationInsights;
 using Quilt4Net.Toolkit.Features.Health;
+using Tharga.Cache;
+using Tharga.Cache.Persist;
 
 namespace Quilt4Net.Toolkit;
 
@@ -24,5 +26,14 @@ public static class ApplicationInsightsRegistration
 
         services.AddTransient<IApplicationInsightsService, ApplicationInsightsService>();
         services.AddTransient<IHealthClient, HealthClient>();
+
+        //TODO: What if another cache is added after or before. What happens then?
+        services.AddCache(s =>
+        {
+            s.RegisterType<EnvironmentOption[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromHours(1);
+            });
+        });
     }
 }

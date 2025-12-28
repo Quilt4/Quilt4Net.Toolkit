@@ -1,6 +1,7 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
-@using Tharga.Toolkit.Timer
 @inject IApplicationInsightsService ApplicationInsightsService
+
+<p>E: @Environment</p>
 
 @if (Model == null)
 {
@@ -39,6 +40,9 @@ else
 
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+
+    [Parameter]
+    public string Environment { get; set; }
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }

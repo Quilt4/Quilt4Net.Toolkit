@@ -48,6 +48,9 @@ else if (Model != null)
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
     [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
     private async Task Search()

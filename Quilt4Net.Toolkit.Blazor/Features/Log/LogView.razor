@@ -1,9 +1,16 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
-<RadzenRow Style="margin-bottom: 6px;" Visible="ShowRangeSelector">
-    <RadzenColumn>
+
+<RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
+    <RadzenColumn Visible="@ShowRangeSelector">
         <RadzenStack Orientation="Orientation.Vertical" Gap="0">
             <RadzenText TextStyle="TextStyle.Caption" Text="Range"/>
-            <LogRangeView OnSelected="OnRangeSelected"/>
+            <LogRangeSelector OnSelected="OnRangeSelected" />
+        </RadzenStack>
+    </RadzenColumn>
+    <RadzenColumn Visible="@ShowEnvironmentSelector">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
+            <LogEnvironmentSelector OnSelected="OnEnvironmentSelected" Context="@Context" />
         </RadzenStack>
     </RadzenColumn>
 </RadzenRow>
@@ -11,16 +18,16 @@
 <RadzenTabs Change="StateHasChanged">
     <Tabs>
         <RadzenTabsItem Text="Search">
-            <LogSearchView Range="@RangeToUse" Context="Context" />
+            <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
         </RadzenTabsItem>
         <RadzenTabsItem Text="Summary">
-            <LogSummaryListView Range="@RangeToUse" Context="Context" />
+            <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse"  Context="Context" />
         </RadzenTabsItem>
         <RadzenTabsItem Text="Measure">
-            <LogMeasureView Range="@RangeToUse" Context="Context" />
+            <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
         </RadzenTabsItem>
         <RadzenTabsItem Text="Count">
-            <LogCountView Range="@RangeToUse" Context="Context" />
+            <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
         </RadzenTabsItem>
         <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
             <LogTriggerView Context="Context" />
@@ -29,7 +36,8 @@
 </RadzenTabs>
 
 @code {
-    private LogRangeView.TimeRangeOption _range;
+    private LogRangeSelector.TimeRangeOption _range;
+    private EnvironmentOption _environment;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
@@ -38,13 +46,30 @@
     public TimeSpan? Range { get; set; }
 
     [Parameter]
+    public bool ShowEnvironmentSelector { get; set; } = true;
+
+    [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
-    private TimeSpan RangeToUse => ShowRangeSelector ? _range : (Range ?? TimeSpan.Zero);
+    private TimeSpan RangeToUse => ShowRangeSelector
+        ? _range
+        : (Range ?? TimeSpan.Zero);
+    private string EnvironmentToUse => ShowEnvironmentSelector
+        ? _environment
+        : Environment;
 
-    private void OnRangeSelected(LogRangeView.TimeRangeOption range)
+    private void OnRangeSelected(LogRangeSelector.TimeRangeOption range)
     {
         _range = range;
+        StateHasChanged();
+    }
+
+    private void OnEnvironmentSelected(EnvironmentOption environment)
+    {
+        _environment = environment;
         StateHasChanged();
     }
 }

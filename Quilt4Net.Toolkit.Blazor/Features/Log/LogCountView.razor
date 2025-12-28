@@ -68,6 +68,9 @@ else
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
     [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
     protected override async Task OnParametersSetAsync()

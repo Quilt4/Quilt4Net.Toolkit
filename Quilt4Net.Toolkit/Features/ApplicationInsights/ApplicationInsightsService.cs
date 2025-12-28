@@ -1,17 +1,21 @@
-﻿using Azure.Identity;
+﻿using System.Diagnostics;
+using Azure.Identity;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using Tharga.Cache;
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 internal class ApplicationInsightsService : IApplicationInsightsService
 {
+    private readonly ITimeToLiveCache _timeToLiveCache;
     private readonly ApplicationInsightsOptions _options;
 
-    public ApplicationInsightsService(IOptions<ApplicationInsightsOptions> options)
+    public ApplicationInsightsService(ITimeToLiveCache timeToLiveCache, IOptions<ApplicationInsightsOptions> options)
     {
+        _timeToLiveCache = timeToLiveCache;
         _options = options.Value;
     }
 
@@ -28,6 +32,74 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    public async IAsyncEnumerable<EnvironmentOption> GetEnvironments(IApplicationInsightsContext context)
+    {
+        var items = await _timeToLiveCache.GetAsync(context.ToKey(), async () =>
+        {
+            var items = await GetEnvironmentsInternal(context)
+                .Select(x => new EnvironmentOption(x))
+                .ToArrayAsync();
+            return items;
+        });
+
+        foreach (var item in items)
+        {
+            yield return item;
+        }
+    }
+
+    private async IAsyncEnumerable<string> GetEnvironmentsInternal(IApplicationInsightsContext context)
+    {
+        var lookbackDays = Debugger.IsAttached ? 3 : 30;
+
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        yield return null; // Any environment
+
+        var from = DateTimeOffset.UtcNow.AddDays(-Math.Max(1, lookbackDays));
+        var to = DateTimeOffset.UtcNow;
+
+        var query = @"
+union
+(
+    AppTraces
+    | extend _p = todynamic(Properties)
+    | project Environment = tostring(_p[""AspNetCoreEnvironment""])
+),
+(
+    AppExceptions
+    | extend _p = todynamic(Properties)
+    | project Environment = tostring(_p[""AspNetCoreEnvironment""])
+),
+(
+    AppRequests
+    | extend _p = todynamic(Properties)
+    | project Environment = tostring(_p[""AspNetCoreEnvironment""])
+)
+| extend Environment = trim(' ', Environment)
+| where isnotempty(Environment)
+| summarize by Environment
+| order by Environment asc";
+
+        var response = await client.QueryWorkspaceAsync(
+            workspaceId,
+            query,
+            new QueryTimeRange(from, to));
+
+        var table = response.Value.Table;
+        var envIndex = GetColumnIndex(table, "Environment");
+
+        foreach (var row in table.Rows)
+        {
+            var env = row[envIndex]?.ToString();
+            if (!string.IsNullOrWhiteSpace(env))
+            {
+                yield return env;
+            }
         }
     }
 
@@ -750,6 +822,8 @@ AppRequests
 
     private LogsQueryClient GetClient(IApplicationInsightsContext context = null)
     {
+        if (context.IsCurrent()) context = null;
+
         var clientSecret = context?.ClientSecret ?? _options.ClientSecret;
         var tenantId = context?.TenantId ?? _options.TenantId;
         var clientId = context?.ClientId ?? _options.ClientId;
@@ -818,4 +892,18 @@ AppRequests
 
         return TimeSpan.Parse(value?.ToString() ?? "00:00:00");
     }
+}
+
+public record EnvironmentOption
+{
+    public string Label { get; set; }
+    public string Value { get; set; }
+
+    public EnvironmentOption(string value, string label = null)
+    {
+        Value = value;
+        Label = label ?? value ?? "Any";
+    }
+
+    public static implicit operator string(EnvironmentOption option) => option?.Value;
 }
