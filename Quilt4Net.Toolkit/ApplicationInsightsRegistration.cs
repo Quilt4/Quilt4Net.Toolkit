@@ -27,7 +27,6 @@ public static class ApplicationInsightsRegistration
         services.AddTransient<IApplicationInsightsService, ApplicationInsightsService>();
         services.AddTransient<IHealthClient, HealthClient>();
 
-        //TODO: What if another cache is added after or before. What happens then?
         services.AddCache(s =>
         {
             s.RegisterType<EnvironmentOption[], IMemory>(x =>

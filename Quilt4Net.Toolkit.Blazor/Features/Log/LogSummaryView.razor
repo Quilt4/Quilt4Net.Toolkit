@@ -78,25 +78,4 @@ else
 
         await base.OnParametersSetAsync();
     }
-
-    // protected override async Task OnParametersSetAsync()
-    // {
-    //     Model = null;
-    //     Model = await ApplicationInsightsService
-    //         .GetSummaryAsync(Context, HostEnvironment.EnvironmentName, Range)
-    //         .ToArrayAsync();
-    // }
-
-    // private static string GetPrettyJson(SummaryData summaryData)
-    // {
-    //     var decoded = Base64UrlHelper.DecodeFromBase64Url(summaryData.SummaryId);
-    //     var summary = JsonSerializer.Deserialize<SummaryDataIdentifier>(decoded);
-
-    //     var prettyJson = JsonSerializer.Serialize(summary, new JsonSerializerOptions
-    //     {
-    //         WriteIndented = true
-    //     });
-
-    //     return prettyJson;
-    // }
 }

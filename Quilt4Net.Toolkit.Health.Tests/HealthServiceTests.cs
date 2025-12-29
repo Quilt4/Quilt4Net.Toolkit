@@ -1,96 +1,15 @@
-﻿using FluentAssertions;
+﻿using System.Diagnostics;
+using Bogus;
+using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Probe;
-using Quilt4Net.Toolkit.Health.Framework.Endpoints;
-using System.Diagnostics;
-using Bogus;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Health.Tests;
-
-public class AccessHelperTests
-{
-    [Fact]
-    public void Decode()
-    {
-        //Arrange
-        var endpoints = "6666644";
-
-        //Act
-        var result = AccessHelper.Decode(endpoints);
-
-        //Assert
-        result.First().Value.Get.Should().BeTrue();
-        result.First().Value.Head.Should().BeTrue();
-        result.First().Value.Visible.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData(null)]
-    public void Empty(string endpoints)
-    {
-        //Arrange
-
-        //Act
-        var result = AccessHelper.Decode(endpoints);
-
-        //Assert
-        result.First().Value.Get.Should().BeFalse();
-        result.First().Value.Head.Should().BeFalse();
-        result.First().Value.Visible.Should().BeFalse();
-        result.Encode().Should().Be("0000000");
-    }
-
-    [Theory]
-    [InlineData("1")]
-    public void Short(string endpoints)
-    {
-        //Arrange
-
-        //Act
-        var result = AccessHelper.Decode(endpoints);
-
-        //Assert
-        result.First().Value.Get.Should().BeTrue();
-        result.First().Value.Head.Should().BeFalse();
-        result.First().Value.Visible.Should().BeFalse();
-        result.Encode().Should().Be("1000000");
-    }
-
-    [Theory]
-    [InlineData("111111111111111111")]
-    public void Long(string endpoints)
-    {
-        //Arrange
-
-        //Act
-        var result = AccessHelper.Decode(endpoints);
-
-        //Assert
-        result.First().Value.Get.Should().BeTrue();
-        result.First().Value.Head.Should().BeFalse();
-        result.First().Value.Visible.Should().BeFalse();
-        result.Encode().Should().Be("1111111");
-    }
-
-    [Theory]
-    [InlineData("7")]
-    [InlineData("x")]
-    public void Invalid(string endpoints)
-    {
-        //Arrange
-
-        //Act
-        Assert.Throws<ArgumentException>(() => AccessHelper.Decode(endpoints));
-
-        //Assert
-    }
-}
 
 public class HealthServiceTests
 {
@@ -486,62 +405,5 @@ public class HealthServiceTests
         //Assert
         result.Key.Should().Be("Fast");
         sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(1));
-    }
-}
-
-internal class OneComponentService : IComponentService
-{
-    private readonly string _name;
-    private readonly bool _success;
-    private readonly bool _essential;
-    private readonly string _message;
-
-    public OneComponentService(string name, bool success, bool essential, string message)
-    {
-        _name = name;
-        _success = success;
-        _essential = essential;
-        _message = message;
-    }
-
-    public IEnumerable<Component> GetComponents()
-    {
-        yield return new Component
-        {
-            Name = _name,
-            Essential = _essential,
-            CheckAsync = _ => Task.FromResult(new CheckResult { Success = _success, Message = _message }),
-        };
-    }
-}
-
-internal class ManyComponentService : IComponentService
-{
-    private readonly string _name;
-    private readonly int _count;
-    private readonly TimeSpan _elapsed;
-
-    public ManyComponentService(string name, int count, TimeSpan elapsed = default)
-    {
-        _name = name;
-        _count = count;
-        _elapsed = elapsed;
-    }
-
-    public IEnumerable<Component> GetComponents()
-    {
-        for (var i = 0; i < _count; i++)
-        {
-            yield return new Component
-            {
-                Name = _name,
-                Essential = true,
-                CheckAsync = async s =>
-                {
-                    await Task.Delay(_elapsed);
-                    return new CheckResult { Success = true, Message = "Something" };
-                },
-            };
-        }
     }
 }
