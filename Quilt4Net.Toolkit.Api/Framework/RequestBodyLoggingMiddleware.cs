@@ -192,7 +192,7 @@ public class RequestResponseLoggingMiddleware
             {
                 // Read into buffer and cut off if too big
                 using var memStream = new MemoryStream();
-                await context.Request.Body.CopyToAsync(memStream); //TODO: Change to use a pass-through-stream. This will make the call halt, until the buffer here is complete.
+                await context.Request.Body.CopyToAsync(memStream); //TODO: Performance: Change to use a pass-through-stream. This will make the call halt, until the buffer here is complete.
                 if (memStream.Length <= maxBodySize)
                 {
                     context.Request.Body.Position = 0;

@@ -105,7 +105,7 @@ union
 
     public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
     {
-        //TODO: Cache here...
+        //TODO: Refactor: Cache here...
         var items = await SearchInternalAsync(context, environment, text, timeSpan, minSeverityLevel).ToArrayAsync();
         foreach (var item in items.GroupBy(x => x.Id).Select(x => x.First()))
         {
@@ -348,7 +348,7 @@ AppRequests
 
     public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
-        //TODO: Cache here...
+        //TODO: Refactor: Cache here...
         var items = await GetMeasureInternalAsync(context, environment, timeSpan).ToArrayAsync();
         foreach (var item in items.GroupBy(x => x.Id).Select(x => x.First()))
         {
@@ -449,7 +449,7 @@ AppTraces
 
     public async IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
-        //TODO: Cache here...
+        //TODO: Refactor: Cache here...
         var items = await GetCountInternalAsync(context, environment, timeSpan).ToArrayAsync();
         foreach (var item in items.GroupBy(x => x.Id).Select(x => x.First()))
         {
@@ -663,7 +663,7 @@ AppRequests
 
     public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
     {
-        //TODO: Cache here...
+        //TODO: Refactor: Cache here...
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
@@ -754,7 +754,7 @@ AppRequests
 
     public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
-        //TODO: Cache here...
+        //TODO: Refactor: Cache here...
         var items = await GetSummariesInternal(context, environment, timeSpan).ToArrayAsync();
         foreach (var item in items.GroupBy(x => x.Fingerprint).Select(x => x.First()))
         {

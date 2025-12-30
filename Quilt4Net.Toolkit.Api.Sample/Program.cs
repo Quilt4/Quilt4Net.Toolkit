@@ -29,7 +29,7 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Description = "API Key needed to access the endpoints"
     });
-    //TODO: Fix
+    //TODO: Refactor: Fix
     //c.AddSecurityRequirement(new OpenApiSecurityRequirement
     //{
     //    {
