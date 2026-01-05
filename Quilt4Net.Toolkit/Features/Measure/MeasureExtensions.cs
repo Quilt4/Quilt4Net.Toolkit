@@ -183,9 +183,9 @@ public static class MeasureExtensions
         var data = logData ?? new LogData();
         data.AddField("Monitor", Constants.Monitor);
         data.AddField("Method", "Count");
-        data.AddData("Count", count);
+        //data.AddData("Count", count);
 
         var details = System.Text.Json.JsonSerializer.Serialize(data.GetData().ToUniqueDictionary());
-        logger.Log(logLevel, "Count {Action} in {Count} ms. {Details}", action, count, details);
+        logger.Log(logLevel, "Count {Action} as {Count}. {Details}", action, count, details);
     }
 }
