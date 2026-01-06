@@ -1,0 +1,38 @@
+﻿@using Quilt4Net.Toolkit.Framework
+@inject IConnectionService ConnectionService
+
+@if (_contnected == null)
+{
+    <Loading Size="ProgressBarCircularSize.Small" />
+}
+else if (_contnected == false)
+{
+    <RadzenText>Not connected to <RadzenLink Text="Quilt4Net" Path="@(_connectionInfo.Address.AbsoluteUri)" Target="Quilt4Net" />.</RadzenText>
+    <RadzenText>@_connectionInfo.Message</RadzenText>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    private bool? _contnected;
+    private (bool Success, string Message, Uri Address) _connectionInfo;
+
+    [Parameter]
+    public Service? Service { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Service.HasValue) throw new InvalidOperationException($"No {nameof(Service)} parameter provided to {nameof(ConnectionWrapper)} component.");
+
+        var response = await ConnectionService.CanConnectAsync(Service.Value);
+        _contnected = response.Success;
+        _connectionInfo = response;
+
+        await base.OnParametersSetAsync();
+    }
+}

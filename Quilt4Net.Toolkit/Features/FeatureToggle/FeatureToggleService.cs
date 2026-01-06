@@ -1,4 +1,6 @@
-﻿namespace Quilt4Net.Toolkit.Features.FeatureToggle;
+﻿using Quilt4Net.Toolkit.Framework;
+
+namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
 internal class FeatureToggleService : IFeatureToggleService
 {

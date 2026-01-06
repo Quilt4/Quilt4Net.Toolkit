@@ -3,38 +3,36 @@
 
 Quilt4Net Toolkit Blazor uses [Radzen](https://blazor.radzen.com/).
 
+[Quilt4Net.Toolkit](https://github.com/Quilt4/Quilt4Net.Toolkit/tree/master/Quilt4Net.Toolkit) is part of this package and can be used with this package as well.
+
 ## Get started
 
-### Install nuget package
-`Quilt4Net.Toolkit.Blazor`
+Install nuget package `Quilt4Net.Toolkit.Blazor`
 
-### Feature Toggle and Remote Configuration
-Register *AddQuilt4NetRemoteConfiguration* as a service and use it in the app.
-```
-var builder = WebApplication.CreateBuilder(args);
-...
-builder.Services.AddQuilt4NetRemoteConfiguration(o =>
-{
-    o.ApiKey = "[ApiKey]";
-});
-
-await builder.Build().RunAsync();
-```
-You have to get an API key from [Quilt4Net](https://quilt4net.com).
-The ApiKey can be placed in appsettings.json (or code for testing).
-
-### Content
 Register *AddQuilt4NetBlazorContent* as a service and use it in the app.
 ```
 var builder = WebApplication.CreateBuilder(args);
 ...
 builder.Services.AddQuilt4NetBlazorContent(o =>
 {
-    o.ApiKey = "[ApiKey]";
+    o.ApiKey = "YOUR_API_KEY_HERE"; //Just use code configuration for testing.
 });
 
 await builder.Build().RunAsync();
 ```
+
+You have to get an API key from [Quilt4Net](https://quilt4net.com).
+The ApiKey can be placed in appsettings.json, in User Secrets or in code for testing.
+
+```
+{
+  "Quilt4Net": {
+    "ApiKey": "YOUR_API_KEY_HERE"
+  }
+}
+```
+
+## Using the Content feature
 
 To output text and html use the controllers. *Key* is used to identify the text.
 It is possible to add a default entry, that will be inserted if no content exist.

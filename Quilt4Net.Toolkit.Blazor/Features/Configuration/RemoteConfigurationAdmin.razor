@@ -1,0 +1,114 @@
+﻿@using Quilt4Net.Toolkit.Blazor.Framework
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@using Quilt4Net.Toolkit.Framework
+@inject IRemoteConfigurationService RemoteConfigurationService
+@inject DialogService DialogService
+
+<ConnectionWrapper Service="Service.Configuration">
+    @if (_model == null)
+    {
+        <Loading Size="ProgressBarCircularSize.Small" />
+    }
+    else
+    {
+        <RadzenDataGrid Data="@_model" TItem="ConfigurationResponse">
+            <Columns>
+                <RadzenDataGridColumn Title="Key" Property="@nameof(ConfigurationResponse.Key)"/>
+                <RadzenDataGridColumn Title="Value" Property="@nameof(ConfigurationResponse.Value)">
+                    <Template>
+                        @{
+                            @switch (context.ValueType)
+                            {
+                                case "Boolean":
+                                    <BooleanToggle TItem="ConfigurationResponse" Model="@context" OnSave="@(x => SaveAsync(x.Model, x.NewValue))" />
+                                    break;
+                                case "Int32":
+                                    <IntegerToggle TItem="ConfigurationResponse" Model="@context" OnSave="@(x => SaveAsync(x.Model, x.NewValue))" />
+                                    break;
+                                case "String":
+                                    <StringToggle TItem="ConfigurationResponse" Model="@context" OnSave="@(x => SaveAsync(x.Model, x.NewValue))" />
+                                    break;
+                                default:
+                                    <span>@context.Value (@context.ValueType)</span>
+                                    break;
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Default" Property="@nameof(ConfigurationResponse.DefaultValue)">
+                    <Template>
+                        @if (context.Value == context.DefaultValue)
+                        {
+                            @context.DefaultValue
+                        }
+                        else
+                        {
+                            <span style="color: red;">@context.DefaultValue</span>
+                            <RadzenButton Icon="reset_settings" Click="@(_ => ResetAsync(context))" />
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Ttl" Property="@nameof(ConfigurationResponse.Ttl)">
+                    <Template>
+                        <TimeSpanView TimeSpan="@context.Ttl" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="LastUsed" Property="@nameof(ConfigurationResponse.LastUsed)">
+                    <Template>
+                        <DateTimeView Date="@context.LastUsed" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn>
+                    <Template>
+                        <ActionButton Icon="delete" Click="@(() => DeleteAsync(context))"/>
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+</ConnectionWrapper>
+
+    @code {
+    private ConfigurationResponse[] _model;
+
+    [Parameter]
+    public bool TogglesOnly { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadDataAsync();
+
+        await base.OnParametersSetAsync();
+    }
+
+    private async Task ReloadDataAsync()
+    {
+        var model = await RemoteConfigurationService.GetTogglesAsync();
+        _model = model.Where(x => !TogglesOnly || x.ValueType == "Boolean").ToArray();
+        StateHasChanged();
+    }
+
+    private async Task DeleteAsync(ConfigurationResponse context)
+    {
+        var response = await DialogService.Confirm($"Configuration {context.Key} will be deleted.", "Confirm delete.");
+        if (response != true) return;
+
+        await RemoteConfigurationService.DeleteAsync(context.Key, context.Application, context.Environment, context.Instance);
+        await ReloadDataAsync();
+    }
+
+    private async Task ResetAsync(ConfigurationResponse context)
+    {
+        var response = await DialogService.Confirm($"The toggle '{context.Key}' will be reset to default value '{context.DefaultValue}'.", "Confirm reset");
+        if (response != true) return;
+
+        await RemoteConfigurationService.SetValueAsync(context.Key, context.Application, context.Environment, context.Instance, context.DefaultValue);
+        await ReloadDataAsync();
+    }
+
+    private async Task SaveAsync(ConfigurationResponse model, string newValue)
+    {
+        await RemoteConfigurationService.SetValueAsync(model.Key, model.Application, model.Environment, model.Instance, newValue);
+        await ReloadDataAsync();
+    }
+}

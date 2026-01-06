@@ -1,11 +1,10 @@
-﻿@using Quilt4Net.Toolkit.Features.Content
+﻿@using Quilt4Net.Toolkit.Blazor.Framework
+@using Quilt4Net.Toolkit.Framework
 @inject ILanguageStateService LanguageStateService
-@inject IContentService ContentService
-@inject IEditContentService EditContentService
-@inject NavigationManager NavigationManager
 
-@if (LanguageStateService.Languages.Length > 1 @* || _isContentAdmin *@)
-{
+<ConnectionWrapper Service="Service.Content">
+    @if (LanguageStateService.Languages.Length > 1 @* || _isContentAdmin *@)
+    {
     <RadzenMenu>
         <RadzenMenuItem Icon="language" class="custom-menu-direction">
             @foreach (var item in LanguageStateService.Languages)
@@ -16,7 +15,7 @@
             @* <CascadingAuthenticationState>
                 <AuthorizeView Roles="@(Roles.ContentAdmin)">
                     <Authorized> *@
-                        @* @{
+            @* @{
                             <hr style="margin: 0;" />
                             <RadzenMenuItem Text="Reload Content" Icon="bolt" Click="@(_ => { LanguageStateService.ReloadAsync(); ContentService.ClearCache(); NavigationManager.NavigateTo(NavigationManager.Uri, true); })" />
                             var devModeIcon = LanguageStateService.DeveloperMode ? "check_box" : "check_box_outline_blank";
@@ -24,12 +23,14 @@
                             var editIcon = EditContentService.Enabled ? "check_box" : "check_box_outline_blank";
                             <RadzenMenuItem Text="Edit mode" Icon="@editIcon" Click="@(_ => EditContentService.Enabled = !EditContentService.Enabled)" />
                         } *@
-                    @* </Authorized>
+            @* </Authorized>
                 </AuthorizeView>
             </CascadingAuthenticationState> *@
         </RadzenMenuItem>
     </RadzenMenu>
-}
+    }
+</ConnectionWrapper>
+
 
 @code {
     // private bool _isContentAdmin;

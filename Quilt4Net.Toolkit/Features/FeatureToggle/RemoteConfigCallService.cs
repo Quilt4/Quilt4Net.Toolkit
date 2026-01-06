@@ -1,10 +1,10 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Text;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
@@ -55,13 +55,9 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
             if (needRefresh)
             {
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
-                client.BaseAddress = new Uri(_options.Quilt4NetAddress);
+                using var client = GetHttpClient();
                 var address = $"Api/Configuration/{complexKey}";
                 var response = await client.GetAsync(address);
-                //var address = $"Api/FeatureToggle/{key}/{request.Application}/{request.Environment}/{request.Instance ?? "-"}/{request.Version}";
-                //var response = await client.GetAsync(address);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -98,6 +94,57 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         }
     }
 
+    public async Task<ConfigurationResponse[]> GetAllAsync()
+    {
+        using var client = GetHttpClient();
+        var response = await client.GetAsync("Api/Configuration");
+        response.EnsureSuccessStatusCode();
+
+        var assemblyName = Assembly.GetEntryAssembly()?.GetName();
+        var application = assemblyName?.Name;
+        var environment = _environmentName.Name;
+
+        var data = await response.Content.ReadFromJsonAsync<ConfigurationResponse[]>();
+        return data.Where(x => x.Environment == environment && x.Application == application).ToArray();
+    }
+
+    public async Task DeleteAsync(string key, string application, string environment, string instance)
+    {
+        var requestBody = new
+        {
+            Key = key,
+            Application = application,
+            Environment = environment,
+            Instance = instance,
+        };
+
+        using var client = GetHttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "Api/Configuration");
+        request.Content = JsonContent.Create(requestBody);
+
+        var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task SetValueAsync(string key, string application, string environment, string instance, string value)
+    {
+        var requestBody = new
+        {
+            Key = key,
+            Application = application,
+            Environment = environment,
+            Instance = instance,
+            Value = value
+        };
+
+        using var client = GetHttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Put, "Api/Configuration");
+        request.Content = JsonContent.Create(requestBody);
+
+        var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+    }
+
     private static string BuildKey(FeatureToggleRequest request)
     {
         var json = System.Text.Json.JsonSerializer.Serialize(request);
@@ -105,5 +152,22 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         var base64 = Convert.ToBase64String(bytes);
         var payload = WebUtility.UrlEncode(base64);
         return payload;
+    }
+
+    private HttpClient GetHttpClient()
+    {
+        HttpClient client = null;
+        try
+        {
+            client = new HttpClient();
+            client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
+            client.BaseAddress = new Uri(_options.Quilt4NetAddress);
+            return client;
+        }
+        catch
+        {
+            client?.Dispose();
+            throw;
+        }
     }
 }

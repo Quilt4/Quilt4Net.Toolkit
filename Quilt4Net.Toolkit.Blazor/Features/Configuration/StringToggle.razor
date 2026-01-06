@@ -1,0 +1,43 @@
+﻿@inject DialogService DialogService
+@typeparam TItem where TItem : Quilt4Net.Toolkit.Features.FeatureToggle.IConfigValue
+
+<RadzenTextBox @bind-value="_val" />
+<RadzenButton Icon="check" Visible=@PendingChange Click=@(_ => SaveAsync()) />
+<RadzenButton Icon="cancel" Visible=@PendingChange Click=@(_ => _val = _initValue) />
+
+@code {
+    [Parameter]
+    public EventCallback<(TItem Model, string NewValue)> OnSave { get; set; }
+
+    [Parameter]
+    public TItem Model { get; set; }
+
+    private bool PendingChange => _initValue != _val;
+
+    private string _initValue { get; set; }
+    private string _val { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Populate(Model.Value);
+
+        await base.OnInitializedAsync();
+    }
+
+    private void Populate(string value)
+    {
+        _initValue = value;
+        _val = value;
+    }
+
+    private async Task SaveAsync()
+    {
+        var response = await DialogService.Confirm("The toggle will change and take effect in x time.", "Confirm change");
+        if (response != true) return;
+
+        await OnSave.InvokeAsync((Model, $"{_val}"));
+
+        Populate(Model.Value);
+    }
+
+}
