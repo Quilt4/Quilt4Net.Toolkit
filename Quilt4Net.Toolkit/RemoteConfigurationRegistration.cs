@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit;
 
@@ -45,5 +46,6 @@ public static class RemoteConfigurationRegistration
         });
         services.AddTransient<IFeatureToggleService, FeatureToggleService>();
         services.AddTransient<IRemoteConfigurationService, RemoteConfigurationService>();
+        services.AddTransient<IConnectionService, ConnectionService>();
     }
 }

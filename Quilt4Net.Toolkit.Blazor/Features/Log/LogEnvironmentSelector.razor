@@ -33,7 +33,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedContext != Context)
+        if (_environments == null || !Equals(_loadedContext, Context))
         {
             _loadedContext = Context;
 

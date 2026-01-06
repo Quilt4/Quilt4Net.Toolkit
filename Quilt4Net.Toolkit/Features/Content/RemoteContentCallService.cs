@@ -159,7 +159,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    public async Task ClearContentCache()
+    public async Task ClearContentCacheAsync()
     {
         _localCache.Clear();
     }

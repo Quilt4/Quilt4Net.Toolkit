@@ -46,8 +46,11 @@ internal class LanguageStateService : ILanguageStateService
         {
             if (_developerMode == value) return;
             _developerMode = value;
-            DeveloperModeEvent?.Invoke(this, new DeveloperModeEventArgs(value));
-            Task.Run(async () => await ReloadAsync(false));
+            Task.Run(async () =>
+            {
+                await ReloadAsync(false);
+                DeveloperModeEvent?.Invoke(this, new DeveloperModeEventArgs(value));
+            });
         }
     }
 

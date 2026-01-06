@@ -1,0 +1,53 @@
+﻿@using Quilt4Net.Toolkit.Blazor.Framework
+@using Quilt4Net.Toolkit.Framework
+@inject ILanguageStateService LanguageStateService
+
+<ConnectionWrapper Service="Service.Content">
+    @if (LanguageStateService.Languages.Length > 1 @* || _isContentAdmin *@)
+    {
+    <RadzenMenu>
+        <RadzenMenuItem Icon="language" class="custom-menu-direction">
+            @foreach (var item in LanguageStateService.Languages)
+            {
+                var icon = LanguageStateService.Selected.Name == item.Name ? "check_circle" : "circle";
+                <RadzenMenuItem Text="@item.Name" Click="@(_ => LanguageStateService.Selected = LanguageStateService.Languages.Single(y => y.Name == item.Name))" Icon="@icon"/>
+            }
+            @* <CascadingAuthenticationState>
+                <AuthorizeView Roles="@(Roles.ContentAdmin)">
+                    <Authorized> *@
+            @* @{
+                            <hr style="margin: 0;" />
+                            <RadzenMenuItem Text="Reload Content" Icon="bolt" Click="@(_ => { LanguageStateService.ReloadAsync(); ContentService.ClearCache(); NavigationManager.NavigateTo(NavigationManager.Uri, true); })" />
+                            var devModeIcon = LanguageStateService.DeveloperMode ? "check_box" : "check_box_outline_blank";
+                            <RadzenMenuItem Text="Debug mode" Icon="@devModeIcon" Click="@(_ => LanguageStateService.DeveloperMode = !LanguageStateService.DeveloperMode)" />
+                            var editIcon = EditContentService.Enabled ? "check_box" : "check_box_outline_blank";
+                            <RadzenMenuItem Text="Edit mode" Icon="@editIcon" Click="@(_ => EditContentService.Enabled = !EditContentService.Enabled)" />
+                        } *@
+            @* </Authorized>
+                </AuthorizeView>
+            </CascadingAuthenticationState> *@
+        </RadzenMenuItem>
+    </RadzenMenu>
+    }
+</ConnectionWrapper>
+
+
+@code {
+    // private bool _isContentAdmin;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        LanguageStateService.DeveloperModeEvent += (s, e) => { InvokeAsync(StateHasChanged); };
+
+        // UserStateService.UserChangedEvent += async (_, _) =>
+        // {
+        //     _isContentAdmin = await UserStateService.InRoleAsync(Roles.ContentAdmin);
+        //     await InvokeAsync(StateHasChanged);
+        // };
+
+        // _isContentAdmin = await UserStateService.InRoleAsync(Roles.ContentAdmin);
+
+        await base.OnParametersSetAsync();
+    }
+
+}

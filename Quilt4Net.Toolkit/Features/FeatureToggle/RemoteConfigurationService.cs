@@ -13,4 +13,19 @@ internal class RemoteConfigurationService : IRemoteConfigurationService
     {
         return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl);
     }
+
+    public Task<ConfigurationResponse[]> GetTogglesAsync()
+    {
+        return _remoteConfigCallService.GetAllAsync();
+    }
+
+    public Task DeleteAsync(string key, string application, string environment, string instance)
+    {
+        return _remoteConfigCallService.DeleteAsync(key, application, environment, instance);
+    }
+
+    public Task SetValueAsync(string key, string application, string environment, string instance, string value)
+    {
+        return _remoteConfigCallService.SetValueAsync(key, application, environment, instance, value);
+    }
 }

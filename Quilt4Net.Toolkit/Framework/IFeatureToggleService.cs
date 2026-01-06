@@ -1,4 +1,4 @@
-﻿namespace Quilt4Net.Toolkit.Features.FeatureToggle;
+﻿namespace Quilt4Net.Toolkit.Framework;
 
 public interface IFeatureToggleService
 {
