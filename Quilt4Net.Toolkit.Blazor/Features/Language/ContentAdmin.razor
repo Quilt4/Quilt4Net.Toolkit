@@ -1,0 +1,34 @@
+﻿@using Quilt4Net.Toolkit.Features.Content
+@inject ILanguageStateService LanguageStateService
+@inject IContentService ContentService
+@inject IEditContentService EditContentService
+@inject NavigationManager NavigationManager
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Edit mode" TextStyle="TextStyle.Caption" />
+            <div><RadzenSwitch @bind-value="EditContentService.Enabled" /></div>
+        </RadzenColumn>
+        <RadzenColumn title="Adds the language 'x' so that content not managed by Quilt4Net can be found.">
+            <RadzenText Text="Developer mode" TextStyle="TextStyle.Caption" />
+            <div><RadzenSwitch @bind-value="LanguageStateService.DeveloperMode" /></div>
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
+        <RadzenColumn>
+            <StandardButton Text="Reload Content" Icon="bolt" Click="ReloadContent" />
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenStack>
+
+@code {
+
+    private async Task ReloadContent()
+    {
+        await LanguageStateService.ReloadAsync();
+        await ContentService.ClearCache();
+        NavigationManager.NavigateTo(NavigationManager.Uri, true);
+    }
+
+}
