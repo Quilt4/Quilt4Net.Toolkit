@@ -9,11 +9,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.ApplicationInsights" Version="2.23.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Quilt4Net.Toolkit.Api\Quilt4Net.Toolkit.Api.csproj" />
+    <ProjectReference Include="..\Quilt4Net.Toolkit.Health\Quilt4Net.Toolkit.Health.csproj" />
     <ProjectReference Include="..\Quilt4Net.Toolkit.Sample\Quilt4Net.Toolkit.Sample.csproj" />
   </ItemGroup>
 

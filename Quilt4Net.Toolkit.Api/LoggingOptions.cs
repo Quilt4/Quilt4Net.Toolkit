@@ -3,7 +3,8 @@
 namespace Quilt4Net.Toolkit.Api;
 
 /// <summary>
-/// Configuration for logging.
+/// Configuration for API calls.
+/// This option can be configured by code or with appsettings.json on location "Quilt4Net/ApiLogging"
 /// </summary>
 public record LoggingOptions
 {
@@ -47,14 +48,16 @@ public record LoggingOptions
     /// <summary>
     /// Default configuration that specifies whether the request should be logged or not.
     /// Use the LoggingAttribute to override this behavior on individual endpoints.
+    /// By default, request body is logged.
     /// </summary>
     public bool LogRequestBodyByDefault { get; set; } = true;
 
     /// <summary>
     /// Default configuration that specifies whether the response should be logged or not.
     /// Use the LoggingAttribute to override this behavior on individual endpoints.
+    /// By default, response body is not logged.
     /// </summary>
-    public bool LogResponseBodyByDefault { get; set; } = true;
+    public bool LogResponseBodyByDefault { get; set; } = false;
 
     /// <summary>
     /// Create interceptor for the logger so that information can be modified.

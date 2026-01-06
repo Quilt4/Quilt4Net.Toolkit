@@ -6,11 +6,18 @@ namespace Quilt4Net.Toolkit.Blazor;
 
 public static class Quilt4ContentRegistration
 {
+    [Obsolete($"Use {nameof(AddQuilt4NetBlazorContent)} with {nameof(IServiceCollection)} instead.")]
     public static IServiceCollection AddQuilt4NetBlazorContent(this IHostApplicationBuilder builder, Action<ContentOptions> options = null)
     {
         return builder.Services.AddQuilt4NetBlazorContent(options);
     }
 
+    /// <summary>
+    /// Register blazor usages of content from Quilt4Net.
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="options"></param>
+    /// <returns></returns>
     public static IServiceCollection AddQuilt4NetBlazorContent(this IServiceCollection services, Action<ContentOptions> options = null)
     {
         services.AddScoped<IEditContentService, EditContentService>();

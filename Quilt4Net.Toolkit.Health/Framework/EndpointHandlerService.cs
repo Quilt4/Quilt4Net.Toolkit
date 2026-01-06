@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Options;
-using Quilt4Net.Toolkit.Api.Framework.Endpoints;
 using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Health.Dependency;
@@ -8,8 +7,9 @@ using Quilt4Net.Toolkit.Features.Health.Metrics;
 using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Framework;
+using Quilt4Net.Toolkit.Health.Framework.Endpoints;
 
-namespace Quilt4Net.Toolkit.Api.Framework;
+namespace Quilt4Net.Toolkit.Health.Framework;
 
 internal class EndpointHandlerService : IEndpointHandlerService
 {
@@ -20,9 +20,9 @@ internal class EndpointHandlerService : IEndpointHandlerService
     private readonly IMetricsService _metricsService;
     private readonly IVersionService _versionService;
     private readonly IHostEnvironment _hostEnvironment;
-    private static Quilt4NetApiOptions _options;
+    private static Quilt4NetHealthApiOptions _apiOptions;
 
-    public EndpointHandlerService(ILiveService liveService, IReadyService readyService, IHealthService healthService, IDependencyService dependencyService, IMetricsService metricsService, IVersionService versionService, IHostEnvironment hostEnvironment, IOptions<Quilt4NetApiOptions> options)
+    public EndpointHandlerService(ILiveService liveService, IReadyService readyService, IHealthService healthService, IDependencyService dependencyService, IMetricsService metricsService, IVersionService versionService, IHostEnvironment hostEnvironment, IOptions<Quilt4NetHealthApiOptions> options)
     {
         _liveService = liveService;
         _readyService = readyService;
@@ -31,7 +31,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
         _metricsService = metricsService;
         _versionService = versionService;
         _hostEnvironment = hostEnvironment;
-        _options = options.Value;
+        _apiOptions = options.Value;
     }
 
     public async Task<IResult> HandleCall(HealthEndpoint healthEndpoint, HttpContext ctx, CancellationToken cancellationToken)
@@ -70,7 +70,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
         var response = responses.ToReadyResponse();
         ctx.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
-        if (response.Status == ReadyStatus.Unready || response.Status == ReadyStatus.Degraded && _options.FailReadyWhenDegraded)
+        if (response.Status == ReadyStatus.Unready || response.Status == ReadyStatus.Degraded && _apiOptions.FailReadyWhenDegraded)
         {
             return ctx.Request.Method == HttpMethods.Head ? Results.StatusCode(503) : Results.Json(response, statusCode: 503);
         }
@@ -103,7 +103,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
         ctx.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
         var isAuthenticated = ctx.User.Identity?.Name != null;
-        switch (_options.AuthDetail ?? (_hostEnvironment.IsProduction() ? AuthDetailLevel.AuthenticatedOnly : AuthDetailLevel.EveryOne))
+        switch (_apiOptions.AuthDetail ?? (_hostEnvironment.IsProduction() ? AuthDetailLevel.AuthenticatedOnly : AuthDetailLevel.EveryOne))
         {
             case AuthDetailLevel.EveryOne:
                 break;
@@ -117,7 +117,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
                 response = ClearDetails(response);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(_options.AuthDetail), _options.AuthDetail, null);
+                throw new ArgumentOutOfRangeException(nameof(_apiOptions.AuthDetail), _apiOptions.AuthDetail, null);
         }
 
         if (response.Status == HealthStatus.Unhealthy)
@@ -165,9 +165,9 @@ internal class EndpointHandlerService : IEndpointHandlerService
 
     private static async Task<HealthComponent> GetCertificatehealth(HttpContext ctx)
     {
-        if (!(_options.Certificate?.SelfCheckEnabled ?? false)) return null;
+        if (!(_apiOptions.Certificate?.SelfCheckEnabled ?? false)) return null;
 
-        var address = _options.Certificate.SelfCheckUri.NullIfEmpty() ?? $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+        var address = _apiOptions.Certificate.SelfCheckUri.NullIfEmpty() ?? $"{ctx.Request.Scheme}://{ctx.Request.Host}";
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
         {
             return new HealthComponent
@@ -180,7 +180,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
             };
         }
 
-        var result = await Certificatehelper.GetCertificateHealthAsync(uri, _options?.Certificate);
+        var result = await Certificatehelper.GetCertificateHealthAsync(uri, _apiOptions?.Certificate);
         return result;
     }
 }

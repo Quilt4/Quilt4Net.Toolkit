@@ -2,21 +2,25 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Health;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit;
 
 public static class HealthRegistration
 {
-    public static void AddQuilt4NetHealthClient(this IServiceCollection services, Action<HealthOptions> options = null)
+    /// <summary>
+    /// Register client for reading data from the health API.
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="options"></param>
+    public static void AddQuilt4NetHealthClient(this IServiceCollection services, Action<HealthClientOptions> options = null)
     {
         var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
 
-        var address = configuration?.GetSection("Quilt4Net").GetSection("HealthAddress").Value;
-
-        var config = configuration?.GetSection("Quilt4Net:Health").Get<HealthOptions>();
-        var o = new HealthOptions
+        var config = configuration?.GetSection("Quilt4Net:HealthClient").Get<HealthClientOptions>();
+        var o = new HealthClientOptions
         {
-            HealthAddress = config?.HealthAddress ?? address
+            HealthAddress = config?.HealthAddress.NullIfEmpty() ?? throw new InvalidOperationException($"No address for {nameof(HealthClient)} has been configured.")
         };
 
         options?.Invoke(o);

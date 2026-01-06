@@ -1,6 +1,6 @@
 ﻿using Quilt4Net.Toolkit.Features.Health;
 
-namespace Quilt4Net.Toolkit.Api.Tests.Helper;
+namespace Quilt4Net.Toolkit.Health.Tests;
 
 internal class ManyComponentService : IComponentService
 {

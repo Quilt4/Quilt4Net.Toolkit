@@ -1,12 +1,12 @@
 ﻿namespace Quilt4Net.Toolkit;
 
 /// <summary>
-///
+/// This option can be configured by code or with appsettings.json on location "Quilt4Net/ApplicationInsights"
 /// </summary>
 public record ApplicationInsightsOptions
 {
     /// <summary>
-    /// This value can be found under 'Tennant properties' in Azure portal.
+    /// This value can be found under 'Tenant properties' in Azure portal.
     /// </summary>
     public string TenantId { get; set; }
 
@@ -17,7 +17,7 @@ public record ApplicationInsightsOptions
 
     /// <summary>
     /// Search for 'App registrations' in Azure portal or create a new App registration for Application Insights access. (Remember the app-name)
-    /// When creating a new app registration, assign the API permission 'Application Insights API' with 'Data.Read' access. (Add a permission / APIs my organization uses / Application Insights API) (Use Application, not Delegated)
+    /// When creating a new app registration, assign the API permission 'Application Insights API' with 'Data.Read' access. (Add a permission / APIs my organization uses / Application Insights API) (Use Application permission, not Delegated)
     /// Also create a Client secret that will be used for 'ClientSecret' below.
     /// Under workspace on your application insights, go to 'Access control (IAM)' and add role access 'Reader' to the app registration with app-name.
     /// </summary>

@@ -4,17 +4,24 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 public record SummaryData
 {
-    public required string SummaryId { get; init; }
-    public required string Application { get; init; }
-    public required string Environment { get; init; }
+    public required string Fingerprint { get; init; }
+
     public required string Message { get; init; }
+    public required string Environment { get; init; }
+    public required string Application { get; init; }
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required SeverityLevel SeverityLevel { get; init; }
 
-    public required DateTime? LastSeen { get; init; }
-    public required int IssueCount { get; init; }
-
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public required LogType Type { get; init; }
+    public required LogSource Source { get; init; }
+
+    public required Item[] Items { get; init; }
+
+    public record Item
+    {
+        public required string Id { get; init; }
+        public required DateTime TimeGenerated { get; init; }
+        public required string Message { get; init; }
+    }
 }

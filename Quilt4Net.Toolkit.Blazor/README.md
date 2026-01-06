@@ -4,12 +4,16 @@
 Quilt4Net Toolkit Blazor uses [Radzen](https://blazor.radzen.com/).
 
 ## Get started
-After having installed the nuget package.
-Register *AddQuilt4Net* as a service and use it in the app.
+
+### Install nuget package
+`Quilt4Net.Toolkit.Blazor`
+
+### Feature Toggle and Remote Configuration
+Register *AddQuilt4NetRemoteConfiguration* as a service and use it in the app.
 ```
 var builder = WebApplication.CreateBuilder(args);
 ...
-builder.Services.AddQuilt4Net(_ => builder.HostEnvironment.Environment, o =>
+builder.Services.AddQuilt4NetRemoteConfiguration(o =>
 {
     o.ApiKey = "[ApiKey]";
 });
@@ -17,12 +21,20 @@ builder.Services.AddQuilt4Net(_ => builder.HostEnvironment.Environment, o =>
 await builder.Build().RunAsync();
 ```
 You have to get an API key from [Quilt4Net](https://quilt4net.com).
+The ApiKey can be placed in appsettings.json (or code for testing).
 
-## Feature Toggle
+### Content
+Register *AddQuilt4NetBlazorContent* as a service and use it in the app.
+```
+var builder = WebApplication.CreateBuilder(args);
+...
+builder.Services.AddQuilt4NetBlazorContent(o =>
+{
+    o.ApiKey = "[ApiKey]";
+});
 
-## Remote Configuration
-
-## Content
+await builder.Build().RunAsync();
+```
 
 To output text and html use the controllers. *Key* is used to identify the text.
 It is possible to add a default entry, that will be inserted if no content exist.
@@ -37,7 +49,17 @@ If the text differs from underlaying environment, the updated can be promoted fr
 
 If a change is made to a higher version, like in *Test* or *Production* it will be automatically propagated to downstream environments.
 
-### Use as controller
+Texts can be translated manually or by AI.
+
+### Use as components
+
+Content can be loaded using specific controllers. Here are som examples.
+
+- Quilt4Content
+- Quilt4Text
+- Quilt4Span
+- Quilt4Raw
+- Quilt4Button
 
 Text field
 ```

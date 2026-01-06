@@ -1,34 +1,75 @@
-﻿<RadzenRow Style="margin-bottom: 6px;">
-    <RadzenColumn>
-        <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
-        <RadzenDropDown TValue="TimeSpan" Data="@_ranges" @bind-Value="_selectedRange" TextProperty="Label" ValueProperty="Value" />
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+
+<RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
+    <RadzenColumn Visible="@ShowRangeSelector">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Range"/>
+            <LogRangeSelector OnSelected="OnRangeSelected" />
+        </RadzenStack>
+    </RadzenColumn>
+    <RadzenColumn Visible="@ShowEnvironmentSelector">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
+            <LogEnvironmentSelector OnSelected="OnEnvironmentSelected" Context="@Context" />
+        </RadzenStack>
     </RadzenColumn>
 </RadzenRow>
 
 <RadzenTabs Change="StateHasChanged">
     <Tabs>
         <RadzenTabsItem Text="Search">
-            <LogSearch Range="@_selectedRange" />
+            <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
         </RadzenTabsItem>
         <RadzenTabsItem Text="Summary">
-            <LogSummary Range="@_selectedRange" />
+            <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse"  Context="Context" />
+        </RadzenTabsItem>
+        <RadzenTabsItem Text="Measure">
+            <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+        </RadzenTabsItem>
+        <RadzenTabsItem Text="Count">
+            <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+        </RadzenTabsItem>
+        <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
+            <LogTriggerView Context="Context" />
         </RadzenTabsItem>
     </Tabs>
 </RadzenTabs>
 
 @code {
-    private TimeSpan _selectedRange = TimeSpan.FromDays(1);
-    private readonly List<TimeRangeOption> _ranges = [ new("7 days", TimeSpan.FromDays(7)), new("3 days", TimeSpan.FromDays(3)), new("1 day", TimeSpan.FromDays(1)), new("1 hour", TimeSpan.FromHours(1)) ];
+    private LogRangeSelector.TimeRangeOption _range;
+    private EnvironmentOption _environment;
 
-    private record TimeRangeOption
+    [Parameter]
+    public bool ShowRangeSelector { get; set; } = true;
+
+    [Parameter]
+    public TimeSpan? Range { get; set; }
+
+    [Parameter]
+    public bool ShowEnvironmentSelector { get; set; } = true;
+
+    [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    private TimeSpan RangeToUse => ShowRangeSelector
+        ? _range
+        : (Range ?? TimeSpan.Zero);
+    private string EnvironmentToUse => ShowEnvironmentSelector
+        ? _environment
+        : Environment;
+
+    private void OnRangeSelected(LogRangeSelector.TimeRangeOption range)
     {
-        public string Label { get; set; }
-        public TimeSpan Value { get; set; }
+        _range = range;
+        StateHasChanged();
+    }
 
-        public TimeRangeOption(string label, TimeSpan value)
-        {
-            Label = label;
-            Value = value;
-        }
+    private void OnEnvironmentSelected(EnvironmentOption environment)
+    {
+        _environment = environment;
+        StateHasChanged();
     }
 }

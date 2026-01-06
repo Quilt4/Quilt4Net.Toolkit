@@ -12,15 +12,15 @@ internal class HealthService : IHealthService
     private readonly IHostEnvironment _hostEnvironment;
     private readonly IServiceProvider _serviceProvider;
     private readonly IHostedServiceProbeRegistry _hostedServiceProbeRegistry;
-    private readonly Quilt4NetApiOptions _option;
+    private readonly Quilt4NetHealthApiOptions _apiOption;
     private readonly ILogger<HealthService> _logger;
 
-    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, IHostedServiceProbeRegistry hostedServiceProbeRegistry, Quilt4NetApiOptions option, ILogger<HealthService> logger = null)
+    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, IHostedServiceProbeRegistry hostedServiceProbeRegistry, Quilt4NetHealthApiOptions apiOption, ILogger<HealthService> logger = null)
     {
         _hostEnvironment = hostEnvironment;
         _serviceProvider = serviceProvider;
         _hostedServiceProbeRegistry = hostedServiceProbeRegistry;
-        _option = option;
+        _apiOption = apiOption;
         _logger = logger;
     }
 
@@ -34,10 +34,10 @@ internal class HealthService : IHealthService
             }
         }
 
-        var tasksFromServices = _option.ComponentServices.SelectMany(x => ((IComponentService)_serviceProvider.GetService(x))?.GetComponents())
+        var tasksFromServices = _apiOption.ComponentServices.SelectMany(x => ((IComponentService)_serviceProvider.GetService(x))?.GetComponents())
             .Where(filter ?? (_ => true))
             .Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
-        var tasksFromAdd = _option.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
+        var tasksFromAdd = _apiOption.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
         var taskList = tasksFromServices.Union(tasksFromAdd).ToList();
 
         while (taskList.Count > 0)
@@ -67,7 +67,7 @@ internal class HealthService : IHealthService
         if (x.Result.Exception != null)
         {
             var correlationIdMessage = BuildCorrelationIdMessage(x.Result.CorrelationId);
-            var exceptionDataLevel = _option.ExceptionDetail ?? GetDefaultExceptionLevel();
+            var exceptionDataLevel = _apiOption.ExceptionDetail ?? GetDefaultExceptionLevel();
             switch (exceptionDataLevel)
             {
                 case ExceptionDetailLevel.Hidden:
@@ -81,7 +81,7 @@ internal class HealthService : IHealthService
                     result.Value.Details.TryAdd("exception.stacktrace", x.Result.Exception.StackTrace);
                     break;
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(_option.ExceptionDetail), _option.ExceptionDetail, null);
+                    throw new ArgumentOutOfRangeException(nameof(_apiOption.ExceptionDetail), _apiOption.ExceptionDetail, null);
             }
         }
 

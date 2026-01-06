@@ -17,9 +17,6 @@
 		<IsPackable>true</IsPackable>
 		<DebugType>portable</DebugType>
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
-	</PropertyGroup>
-
-	<PropertyGroup>
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
 		<IncludeSource>true</IncludeSource>

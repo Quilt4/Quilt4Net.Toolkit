@@ -1,0 +1,53 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+		<OutputType>Library</OutputType>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Version>1.0.0</Version>
+		<Authors>Thargelion AB</Authors>
+		<Company>Thargelion AB</Company>
+		<Product>Quilt4Net Toolkit Health</Product>
+		<Tag>health liveness readiness</Tag>
+		<Description>Features for health, liveness, readiness, startup, metrics, version and dependencies. Adds a health API.</Description>
+		<PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
+		<IsPackable>true</IsPackable>
+		<DebugType>portable</DebugType>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSource>true</IncludeSource>
+		<IncludeSymbols>true</IncludeSymbols>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<NoWarn>1701;1702;CS1591;CS0809</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="Quilt4Net.Toolkit.Health.Tests" />
+		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	  </PackageReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj" />
+	</ItemGroup>
+
+</Project>

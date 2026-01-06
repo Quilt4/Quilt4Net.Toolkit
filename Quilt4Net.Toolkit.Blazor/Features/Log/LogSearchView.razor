@@ -1,0 +1,65 @@
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+
+<RadzenStack Style="margin-bottom: 6px;" Orientation="Orientation.Horizontal">
+    <RadzenTextBox @bind-value="@_searchText" />
+    <RadzenButton Text="Search" Click="@(_ => Search())" />
+</RadzenStack>
+
+@if (_loading)
+{
+    <Loading />
+}
+else if (Model != null)
+{
+    <RadzenDataGrid TItem="LogItem" Data="@Model"
+                    AllowSorting="true"
+                    AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                    AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
+                    ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
+        <Columns>
+            <RadzenDataGridColumn Title="Id" Width="60px" Sortable="false">
+                <Template>
+                    <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Search&Environment={Environment}&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Time" Property="@nameof(LogItem.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">
+                <Template>
+                    <DateTimeView Date="@context.TimeGenerated" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Source" Property="@nameof(LogItem.Source)" />
+            <RadzenDataGridColumn Title="Level" Property="@nameof(LogItem.SeverityLevel)" />
+            <RadzenDataGridColumn Title="Message" Property="@nameof(LogItem.Message)" />
+            <RadzenDataGridColumn Title="Application" Property="@nameof(LogItem.Application)" />
+            <RadzenDataGridColumn Title="Environment" Property="@nameof(LogItem.Environment)" />
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private bool _loading;
+    private string _searchText;
+    private LogItem[] Model { get; set; }
+
+    [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    private async Task Search()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var searchText = _searchText ?? string.Empty;
+        Model = await ApplicationInsightsService.SearchAsync(Context, Environment, searchText, Range).ToArrayAsync();
+
+        _loading = false;
+        StateHasChanged();
+    }
+}

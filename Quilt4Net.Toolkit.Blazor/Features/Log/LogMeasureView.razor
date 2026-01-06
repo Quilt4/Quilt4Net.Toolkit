@@ -1,0 +1,147 @@
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+
+@if (Model == null)
+{
+    <Loading />
+}
+else
+{
+    <RadzenTabs>
+        <Tabs>
+            <RadzenTabsItem Text="Chart">
+                <RadzenChart>
+                    <RadzenCategoryAxis FormatString="{0:HH:mm}">
+                        <RadzenAxisTitle Text="Time" />
+                    </RadzenCategoryAxis>
+
+                    <RadzenValueAxis Formatter="@FormatElapsed">
+                        <RadzenAxisTitle Text="Elapsed" />
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+
+                    @foreach (var series in Series)
+                    {
+                        <RadzenLineSeries Data="@series.Points"
+                                          CategoryProperty="TimeGenerated"
+                                          ValueProperty="ElapsedMs"
+                                          Title="@series.Action">
+                            <RadzenMarkers Visible="@(series.Points.Length <= 3)"
+                                           MarkerType="MarkerType.Circle"
+                                           Size="3"/>
+                        </RadzenLineSeries>
+                    }
+                </RadzenChart>
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Table">
+                <RadzenDataGrid Data="Model" TItem="MeasureData"
+                                AllowSorting="true"
+                                AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
+                                ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
+                    <Columns>
+                        <RadzenDataGridColumn Title="Id" Width="60px" Sortable="false">
+                            <Template>
+                                <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Measure&Environment={Environment}&Range={Range.TotalMinutes}&Source={LogSource.Trace}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn Title="Time" Property="@nameof(MeasureData.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">
+                            <Template>
+                                <DateTimeView Date="@context.TimeGenerated" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn Title="Message" Property="@nameof(MeasureData.Message)" />
+                        <RadzenDataGridColumn Title="Application" Property="@nameof(MeasureData.Application)" />
+                        <RadzenDataGridColumn Title="Environment" Property="@nameof(MeasureData.Environment)" />
+                        <RadzenDataGridColumn Title="Elapsed" Property="@nameof(MeasureData.Elapsed)" Filterable="false">
+                            <Template>
+                                <TimeSpanView TimeSpan="@context.Elapsed" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
+}
+
+@code {
+    private MeasureData[] Model { get; set; }
+    private IReadOnlyList<ActionSeries> Series { get; set; } = Array.Empty<ActionSeries>();
+
+    [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Model = null;
+        Model = await ApplicationInsightsService
+            .GetMeasureAsync(Context, Environment, Range)
+            .Where(x => x.Elapsed < TimeSpan.FromHours(10)) //TODO: I made a misstake with a log entry, remove this when Neurolito log is clean. That would be about 2026-02-01.
+            .ToArrayAsync();
+
+        var model = Model.Select(x => new MeasurePoint
+        {
+            Action = x.Action,
+            Environment = x.Environment,
+            TimeGenerated = x.TimeGenerated,
+            ElapsedMs = x.Elapsed.TotalMilliseconds
+        }).ToArray();
+
+        if (model.GroupBy(x => x.Environment).Count() == 1)
+        {
+            Series = model
+                .GroupBy(x => x.Action)
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
+        else
+        {
+            Series = model
+                .GroupBy(x => (x.Action, x.Environment))
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries($"{g.Key.Environment}.{g.Key.Action}", g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
+    }
+
+    private string FormatElapsed(object value)
+    {
+        var ms = Convert.ToDouble(value);
+        var ts = TimeSpan.FromMilliseconds(ms);
+
+        if (ts.TotalHours >= 1)
+        {
+            return $"{ts.TotalHours:0.#} h";
+        }
+
+        if (ts.TotalMinutes >= 1)
+        {
+            return $"{ts.TotalMinutes:0.#} min";
+        }
+
+        if (ts.TotalSeconds >= 1)
+        {
+            return $"{ts.TotalSeconds:0.#} s";
+        }
+
+        return $"{ts.TotalMilliseconds:0} ms";
+    }
+
+    private sealed class MeasurePoint
+    {
+        public string Action { get; set; }
+        public string Environment { get; set; }
+        public DateTime TimeGenerated { get; set; }
+        public double ElapsedMs { get; set; }
+    }
+
+    private sealed record ActionSeries(string Action, MeasurePoint[] Points);
+}

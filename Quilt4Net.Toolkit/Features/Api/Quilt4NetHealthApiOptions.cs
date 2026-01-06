@@ -6,19 +6,13 @@ namespace Quilt4Net.Toolkit.Features.Api;
 
 /// <summary>
 /// Configuration options for Quilt4NetApi.
+/// This option can be configured by code or with appsettings.json on location "Quilt4Net/HealthApi"
 /// </summary>
-public record Quilt4NetApiOptions
+public record Quilt4NetHealthApiOptions
 {
     private readonly ConcurrentDictionary<string, Component> _components = new();
     private readonly ConcurrentDictionary<Type, Type> _componentServices = new();
     private readonly ConcurrentDictionary<string, Dependency> _dependencies = new();
-
-    ///// <summary>
-    ///// Visible in OpenApi definition.
-    ///// Default for Production environment is false.
-    ///// For all other environments default is true.
-    ///// </summary>
-    //public bool? ShowInOpenApi { get; set; }
 
     /// <summary>
     /// <para>This string value can be used to turn the GET, HEAD and visibility on or off for different endpoints.</para>
@@ -124,26 +118,15 @@ public record Quilt4NetApiOptions
     public AuthDetailLevel? AuthDetail { get; set; }
 
     /// <summary>
-    /// Address of check for ip address, like http://ipv4.icanhazip.com/.
+    /// HealthAddress of check for ip address, like http://ipv4.icanhazip.com/.
     /// Set this value to null, if you do not want to perform ip address check.
     /// </summary>
     public Uri IpAddressCheckUri { get; set; } = new("http://ipv4.icanhazip.com/");
-
-    ///// <summary>
-    ///// Configure logging for all requests.
-    ///// To make specific configuration on controller or method level use the LoggingAttribute.
-    ///// </summary>
-    //public LoggingOptions Logging { get; set; } = new() { LogHttpRequest = HttpRequestLogMode.ApplicationInsights, UseCorrelationId = true };
 
     /// <summary>
     /// Configure certificate check.
     /// </summary>
     public CertificateCheckOptions Certificate { get; set; } = new();
-
-    ///// <summary>
-    ///// Configure the feature toggle.
-    ///// </summary>
-    //public FeatureToggle FeatureToggle { get; set; } = new();
 
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;

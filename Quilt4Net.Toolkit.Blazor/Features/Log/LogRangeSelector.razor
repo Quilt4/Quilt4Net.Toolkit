@@ -1,0 +1,52 @@
+﻿@using Tharga.Toolkit
+<RadzenDropDown Data="@_ranges"
+                @bind-Value="_selectedRange"
+                TValue="TimeSpan"
+                TextProperty="Label"
+                ValueProperty="Value"
+                Change="OnChange" />
+
+@code {
+    private TimeSpan _selectedRange = TimeSpan.FromDays(1);
+    private readonly List<TimeRangeOption> _ranges =
+    [
+        new(TimeSpan.FromDays(100), "100 days"),
+        new(TimeSpan.FromDays(30), "30 days"),
+        new(TimeSpan.FromDays(7), "7 days"),
+        new(TimeSpan.FromDays(3), "3 days"),
+        new(TimeSpan.FromDays(1), "1 day"),
+        new(TimeSpan.FromHours(1), "1 hour")
+    ];
+
+    [Parameter]
+    public EventCallback<TimeRangeOption> OnSelected { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await OnChange(default);
+        await base.OnInitializedAsync();
+    }
+
+    private async Task OnChange(object _)
+    {
+        var item = _ranges.Single(x => x.Value == _selectedRange);
+        await OnSelected.InvokeAsync(item);
+    }
+
+    public record TimeRangeOption
+    {
+        public string Label { get; set; }
+        public TimeSpan Value { get; set; }
+
+        public TimeRangeOption(TimeSpan value, string label = default)
+        {
+            Value = value;
+            Label = label.NullIfEmpty() ?? $"{value.TotalHours} hours";
+        }
+
+        public static implicit operator TimeSpan(TimeRangeOption option)
+        {
+            return option.Value;
+        }
+    }
+}

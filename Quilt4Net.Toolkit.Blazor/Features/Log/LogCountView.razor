@@ -1,0 +1,116 @@
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+
+@if (Model == null)
+{
+    <Loading />
+}
+else
+{
+    <RadzenTabs>
+        <Tabs>
+            <RadzenTabsItem Text="Chart">
+                <RadzenChart>
+                    <RadzenCategoryAxis FormatString="{0:HH:mm}">
+                        <RadzenAxisTitle Text="Time" />
+                    </RadzenCategoryAxis>
+
+                    <RadzenValueAxis>
+                        <RadzenAxisTitle Text="Count" />
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+
+                    @foreach (var series in Series)
+                    {
+                        <RadzenColumnSeries Data="@series.Points"
+                                          CategoryProperty="TimeGenerated"
+                                          ValueProperty="Count"
+                                          Title="@series.Action">
+                        </RadzenColumnSeries>
+                    }
+                </RadzenChart>
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Table">
+                <RadzenDataGrid Data="Model" TItem="CountData"
+                                AllowSorting="true"
+                                AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
+                                ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
+                    <Columns>
+                        <RadzenDataGridColumn Title="Id" Width="60px" Sortable="false">
+                            <Template>
+                                <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Environment={Environment}&Range={Range.TotalMinutes}&Source={LogSource.Trace}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn Title="Time" Property="@nameof(CountData.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">
+                            <Template>
+                                <DateTimeView Date="@context.TimeGenerated" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn Title="Message" Property="@nameof(CountData.Message)" />
+                        <RadzenDataGridColumn Title="Application" Property="@nameof(CountData.Application)" />
+                        <RadzenDataGridColumn Title="Environment" Property="@nameof(CountData.Environment)" />
+                        <RadzenDataGridColumn Title="Count" Property="@nameof(CountData.Count)" Filterable="false" />
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
+}
+
+@code {
+    private CountData[] Model { get; set; }
+    private IReadOnlyList<ActionSeries> Series { get; set; } = Array.Empty<ActionSeries>();
+
+    [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Model = null;
+        Model = await ApplicationInsightsService
+            .GetCountAsync(Context, Environment, Range)
+            .ToArrayAsync();
+
+        var model = Model.Select(x => new MeasurePoint
+        {
+            Action = x.Action,
+            Environment = x.Environment,
+            TimeGenerated = x.TimeGenerated,
+            Count = x.Count
+        }).ToArray();
+
+        if (model.GroupBy(x => x.Environment).Count() == 1)
+        {
+            Series = model
+                .GroupBy(x => x.Action)
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
+        else
+        {
+            Series = model
+                .GroupBy(x => (x.Action, x.Environment))
+                .OrderBy(g => g.Key)
+                .Select(g => new ActionSeries($"{g.Key.Environment}.{g.Key.Action}", g.OrderBy(p => p.TimeGenerated).ToArray()))
+                .ToArray();
+        }
+    }
+
+    private sealed class MeasurePoint
+    {
+        public string Action { get; set; }
+        public string Environment { get; set; }
+        public DateTime TimeGenerated { get; set; }
+        public int Count { get; set; }
+    }
+
+    private sealed record ActionSeries(string Action, MeasurePoint[] Points);
+}

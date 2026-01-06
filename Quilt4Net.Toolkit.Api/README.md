@@ -1,15 +1,19 @@
 ﻿# Quilt4Net Toolkit Api
 [![GitHub repo](https://img.shields.io/github/repo-size/Quilt4/Quilt4Net.Toolkit?style=flat&logo=github&logoColor=red&label=Repo)](https://github.com/Quilt4/Quilt4Net.Toolkit)
 
-Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *Metrics* in .NET Web Applications.
+Add extra api logging with `AddQuilt4NetApiLogging`.
+
+---
+# Features moved
+Some features have moved to *Quilt4Net Toolkit Health*.
 
 ## Get started
 After having installed the nuget package.
-Register *AddQuilt4NetApi* as a service and use it in the app.
+Register *AddQuilt4NetHealthApi* as a service and use it in the app.
 ```
 var builder = WebApplication.CreateBuilder(args);
 ...
-builder.AddQuilt4NetApi();
+builder.AddQuilt4NetHealthApi();
 
 var app = builder.Build();
 ...
@@ -19,13 +23,13 @@ app.UseQuilt4NetApi();
 
 app.Run();
 ```
-You have to call `AddQuilt4NetApi` in any order on the *builder* (or *builder.Services*).
+You have to call `AddQuilt4NetHealthApi` in any order on the *builder* (or *builder.Services*).
 On the app you have to call `UseRouting` before `UseQuilt4NetApi`.
 
 ### Register service check
 This is a basic way of adding a service check. This check will be performed when calling *Health*, *Ready* or *Dependencies*.
 ```
-builder.AddQuilt4NetApi(o =>
+builder.AddQuilt4NetHealthApi(o =>
 {
     o.AddComponent(new Component
     {
@@ -42,7 +46,7 @@ builder.AddQuilt4NetApi(o =>
 
 For more complex scenarios, implement *IComponentService* and add the servcice here to separate the setup from the implementation.
 ```
-builder.AddQuilt4NetApi(o =>
+builder.AddQuilt4NetHealthApi(o =>
 {
     o.AddComponentService<MyComponentService>();
 });
@@ -50,7 +54,7 @@ builder.AddQuilt4NetApi(o =>
 
 To add dependency information to other services that uses *Quilt4Net API*. This will call the health check on the other service.
 ```
-builder.AddQuilt4NetApi(o =>
+builder.AddQuilt4NetHealthApi(o =>
 {
     o.AddDependency(new Dependency
     {
@@ -64,7 +68,7 @@ builder.AddQuilt4NetApi(o =>
 ### Configuration options
 Configuration can be configured by code. This will override any other configuration.
 ```
-builder.AddQuilt4NetApi(o =>
+builder.AddQuilt4NetHealthApi(o =>
 {
     o.ShowInSwagger = false;
     o.FailReadyWhenDegraded = true;

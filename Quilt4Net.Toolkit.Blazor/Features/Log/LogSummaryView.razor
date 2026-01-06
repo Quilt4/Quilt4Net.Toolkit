@@ -1,0 +1,81 @@
+﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+
+@if (Model == null)
+{
+    <Loading />
+}
+else
+{
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Fingerprint" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.SeverityLevel}")" />
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Environment" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Application" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Source" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.Source}")" />
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenDataGrid Data="@Model.Items" TItem="SummaryData.Item">
+        <Columns>
+            <RadzenDataGridColumn Title="Id" Width="60px">
+                <Template>
+                    <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Environment={Environment}&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Time" Property="@nameof(SummaryData.Item.TimeGenerated)">
+                <Template>
+                    <DateTimeView Date="@context.TimeGenerated" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Message" Property="@nameof(SummaryData.Item.Message)" />
+        </Columns>
+    </RadzenDataGrid>
+
+}
+
+@code {
+    private SummaryData Model { get; set; }
+
+    [Parameter]
+    public string Fingerprint { get; set; }
+
+    [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
+    public TimeSpan? Range { get; set; }
+
+    [Parameter]
+    public LogSource? Source { get; set; }
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Model = null;
+
+        if (!Source.HasValue || !Range.HasValue) return;
+
+        Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
+
+        await base.OnParametersSetAsync();
+    }
+}
