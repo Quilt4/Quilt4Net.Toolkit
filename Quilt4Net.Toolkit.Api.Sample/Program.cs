@@ -8,7 +8,6 @@ using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Health.Dependency;
 using Quilt4Net.Toolkit.Health;
-using Quilt4Net.Toolkit.Health.Framework.Endpoints;
 using Quilt4Net.Toolkit.Sample;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -66,23 +65,9 @@ builder.Services.AddQuilt4NetApiLogging(o =>
         return Task.FromResult((request, response, details));
     };
 });
-builder.Services.AddQuilt4NetHealthApi(o =>
+builder.AddQuilt4NetHealthApi(o =>
 {
-    //o.Certificate.SelfCheckEnabled = false;
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
-
-    var config = new Dictionary<HealthEndpoint, AccessFlags>
-    {
-        [HealthEndpoint.Default] = new(true, true, true),
-        [HealthEndpoint.Live] = new(true, false, true),
-        [HealthEndpoint.Ready] = new(true, false, true),
-        [HealthEndpoint.Health] = new(true, false, true),
-        [HealthEndpoint.Dependencies] = new(true, false, true),
-        [HealthEndpoint.Metrics] = new(true, false, true),
-        [HealthEndpoint.Version] = new(true, false, true)
-    };
-
-    o.Endpoints = AccessHelper.Encode(config);
 
     o.AddComponent(new Component
     {

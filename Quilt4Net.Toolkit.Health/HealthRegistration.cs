@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using Microsoft.AspNetCore.Mvc.Abstractions;
+﻿using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
@@ -10,26 +9,31 @@ using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Features.Probe;
 using Quilt4Net.Toolkit.Health.Framework;
-using Quilt4Net.Toolkit.Health.Framework.Endpoints;
+using System.Reflection;
+using System.Text;
 
 namespace Quilt4Net.Toolkit.Health;
 
 public static class HealthRegistration
 {
-    private static Quilt4NetHealthApiOptions _apiOptions;
+    public static IServiceCollection AddQuilt4NetHealthApi(this IHostApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> configure = null)
+    {
+        return AddQuilt4NetHealthApi(builder.Services, builder.Configuration, builder.Environment, configure);
+    }
 
     /// <summary>
     /// Add API with Health endpoints.
     /// </summary>
     /// <param name="services"></param>
-    /// <param name="options"></param>
-    public static void AddQuilt4NetHealthApi(this IServiceCollection services, Action<Quilt4NetHealthApiOptions> options = null)
+    /// <param name="configuration"></param>
+    /// <param name="environment"></param>
+    /// <param name="configure"></param>
+    public static IServiceCollection AddQuilt4NetHealthApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure = null)
     {
-        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
+        var apiOptions = BuildOptions(configuration, environment, configure);
 
-        _apiOptions = BuildOptions(configuration, options);
-        services.AddSingleton(_ => _apiOptions);
-        services.AddSingleton(Options.Create(_apiOptions));
+        services.AddSingleton(apiOptions);
+        services.AddSingleton(Options.Create(apiOptions));
 
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
@@ -49,47 +53,61 @@ public static class HealthRegistration
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
 
-        foreach (var componentServices in _apiOptions.ComponentServices)
+        foreach (var componentServiceType in apiOptions.ComponentServices)
         {
-            services.AddTransient(componentServices);
+            services.AddTransient(componentServiceType);
         }
 
-        if (_apiOptions.ComponentServices.Count() == 1)
+        if (apiOptions.ComponentServices.Count() == 1)
         {
-            services.AddTransient(s => (IComponentService)s.GetService(_apiOptions.ComponentServices.Single()));
+            services.AddTransient(s => (IComponentService)s.GetRequiredService(apiOptions.ComponentServices.Single()));
         }
+
+        return services;
     }
 
-    private static Quilt4NetHealthApiOptions BuildOptions(IConfiguration configuration, Action<Quilt4NetHealthApiOptions> options)
+    private static Quilt4NetHealthApiOptions BuildOptions(IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure)
     {
-        var o = configuration?.GetSection("Quilt4Net:HealthApi").Get<Quilt4NetHealthApiOptions>()
-                ?? configuration?.GetSection("Quilt4Net:Api").Get<Quilt4NetHealthApiOptions>()
-                ?? new Quilt4NetHealthApiOptions();
+        var o = new Quilt4NetHealthApiOptions();
 
-        //NOTE: Empty controller name is not allowed, automatically revert to default.
-        if (string.IsNullOrEmpty(o.ControllerName)) o.ControllerName = new Quilt4NetHealthApiOptions().ControllerName;
+        ApplyEnvironmentDefaults(o, environment);
 
-        options?.Invoke(o);
+        configuration.GetSection("Quilt4Net:HealthApi").Bind(o);
+        configure?.Invoke(o);
 
-        //NOTE: the pattern needs to start and end with '/'.
-        if (!o.Pattern.EndsWith('/')) o.Pattern = $"{o.Pattern}/";
-        if (!o.Pattern.StartsWith('/')) o.Pattern = $"/{o.Pattern}";
+        foreach (HealthEndpoint ep in Enum.GetValues<HealthEndpoint>())
+        {
+            o.Endpoints.TryAdd(ep, new HealthEndpointOptions());
+        }
+
+        EnforceCapabilities(o);
+
+        if (string.IsNullOrEmpty(o.ControllerName))
+        {
+            o.ControllerName = new Quilt4NetHealthApiOptions().ControllerName;
+        }
+
+        if (!string.IsNullOrEmpty(o.Pattern))
+        {
+            if (!o.Pattern.StartsWith('/')) o.Pattern = $"/{o.Pattern}";
+            if (!o.Pattern.EndsWith('/')) o.Pattern = $"{o.Pattern}/";
+        }
 
         return o;
     }
 
     /// <summary>
     /// Sets up routing to the Quilt4Net health checks.
+    /// Must be executed after UseAuthentication and UseAuthorization for authentication to work.
     /// </summary>
     /// <param name="app"></param>
     public static void UseQuilt4NetHealthApi(this WebApplication app)
     {
-        if (_apiOptions == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealthApi)} before {nameof(UseQuilt4NetHealthApi)}.");
-
-        //_apiOptions.ShowInOpenApi ??= !app.Services.GetService<IHostEnvironment>().IsProduction();
+        var o = app.Services.GetRequiredService<IOptions<Quilt4NetHealthApiOptions>>().Value;
+        if (o == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealthApi)} before {nameof(UseQuilt4NetHealthApi)}.");
 
         CreaetLogScope(app);
-        RegisterEndpoints(app, _apiOptions.Dependencies.Any());
+        RegisterEndpoints(o, app, o.DependencyRegistrations.Any());
     }
 
     private static void CreaetLogScope(WebApplication app)
@@ -114,65 +132,86 @@ public static class HealthRegistration
         }
     }
 
-    private static void RegisterEndpoints(WebApplication app, bool hasDependencies)
+    private static void RegisterEndpoints(Quilt4NetHealthApiOptions o, WebApplication app, bool hasDependencies)
     {
-        //app.MapGet("/openapi.json", async (IApiDescriptionGroupCollectionProvider provider, OpenApiDocumentGenerator generator) =>
-        //{
-        //    var apiDescriptions = provider.ApiDescriptionGroups;
-        //    var document = generator.CreateDocument(apiDescriptions);
-        //    return Results.Json(document);
-        //});
+        var basePath = $"{o.Pattern}{o.ControllerName}";
 
-        var basePath = $"{_apiOptions.Pattern}{_apiOptions.ControllerName}";
-        var accessMap = AccessHelper.Decode(_apiOptions.Endpoints ?? "");
-        foreach (var (endpoint, flags) in accessMap)
+        //NOTE: Map default route
+        if (Enum.TryParse<HealthEndpoint>(o.DefaultAction, true, out var defaultKey) && o.Endpoints.TryGetValue(defaultKey, out var defaultItem))
         {
-            var path = endpoint == HealthEndpoint.Default
-                ? basePath
-                : $"{basePath}/{endpoint}";
+            MapEndpointWithVerb(o, app, defaultKey, basePath, HttpMethods.Get, defaultItem.Get, true);
+            MapEndpointWithVerb(o, app, defaultKey, basePath, HttpMethods.Head, defaultItem.Head, true);
+        }
 
-            if (!flags.Get && !flags.Head) continue;
-            if (path.EndsWith("Dependencies") && !hasDependencies) continue; //If there are no dependencies, do not add that endpoint.
+        foreach (var item in o.Endpoints)
+        {
+            var path = $"{basePath}/{item.Key}";
 
-            var actionEndpoint = path.Replace(basePath, string.Empty).TrimStart('/');
-            var action = actionEndpoint == "" ? _apiOptions.DefaultAction : actionEndpoint;
-            if (!Enum.TryParse<HealthEndpoint>(action, true, out var healthEndpoint)) throw new InvalidOperationException($"Cannot parse {action} to {nameof(HealthEndpoint)}.");
+            //If there are no dependencies, do not add that endpoint.
+            if (path.EndsWith($"{HealthEndpoint.Dependencies}") && !hasDependencies) continue;
 
-            var documentation = GetDocumentation(healthEndpoint);
-            if (actionEndpoint == "")
+            MapEndpointWithVerb(o, app, item.Key, path, HttpMethods.Get, item.Value.Get);
+            MapEndpointWithVerb(o, app, item.Key, path, HttpMethods.Head, item.Value.Head);
+        }
+
+        //async Task<IResult> HandleCall(HealthEndpoint path, HttpContext ctx, CancellationToken cancellationToken)
+        //{
+        //    var service = app.Services.GetService<IEndpointHandlerService>();
+        //    return await service.HandleCall(path, ctx, cancellationToken);
+        //}
+    }
+
+    private static void MapEndpointWithVerb<T>(Quilt4NetHealthApiOptions o, WebApplication app, HealthEndpoint healthEndpoint, string path, string verb, T options, bool isDefault = false) where T : MethodOptions
+    {
+        if ((o.OverrideState ?? options.State) != EndpointState.Disabled)
+        {
+            //RouteHandlerBuilder route;
+            //if (healthEndpoint == HealthEndpoint.Health)
+            //{
+            //    //NOTE: This code hides the query parameters noDependencies and noCertSelfCheck. They are default false and should only be used by dependency calls. For that reason it makes sense to hide them here.
+            //    route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) =>
+            //    {
+            //        return await HandleCall(healthEndpoint, ctx, cancellationToken);
+            //    });
+
+            //    //NOTE: This code shows the query parameters noDependencies and noCertSelfCheck.
+            //    //route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+            //}
+            //else
+            //{
+            //route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) =>
+            //{
+            //    return await HandleCall(item.Key, ctx, cancellationToken);
+            //});
+            var route = app.MapMethods(path, [verb], async (HttpContext ctx, CancellationToken cancellationToken) =>
             {
-                documentation = documentation with { Description = $"This is the *{HealthEndpoint.Default}* endpoint. It can be configured with mapping to any check. Currently it uses the **{healthEndpoint}** endpoint.\n\n{documentation.Description}" };
-            }
+                return await HandleCall(healthEndpoint, ctx, cancellationToken);
+            });
 
-            var httpMethods = GetVerbs(flags);
-            RouteHandlerBuilder route;
-            if (healthEndpoint == HealthEndpoint.Health)
+            if ((o.OverrideState ?? options.State) != EndpointState.Visible)
             {
-                //NOTE: This code hides the query parameters noDependencies and noCertSelfCheck. They are default false and should only be used by dependency calls. For that reason it makes sense to hide them here.
-                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) => await HandleCall(healthEndpoint, ctx, cancellationToken));
-
-                //NOTE: This code shows the query parameters noDependencies and noCertSelfCheck.
-                //route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+                route.ExcludeFromDescription();
             }
             else
             {
-                route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) => await HandleCall(healthEndpoint, ctx, cancellationToken));
+                var documentation = GetDocumentation(o, healthEndpoint, verb);
+                if (isDefault)
+                {
+                    documentation = documentation with { Description = $"This is the *Default* endpoint. It can be configured with mapping to any check. Currently, it uses the **{healthEndpoint}** endpoint.\n\n{documentation.Description}" };
+                }
+
+                route.WithSummary(documentation.Summary)
+                    .WithDescription(documentation.Description)
+                    .WithTags(o.ControllerName);
+
+                foreach (var response in documentation.Responses)
+                {
+                    if (response.Item2 != null)
+                        route.Produces(response.StatusCode, response.Type, "application/json");
+                    else
+                        route.Produces(response.StatusCode);
+                }
             }
-
-            route.WithSummary(documentation.Summary)
-                .WithDescription(documentation.Description)
-                .WithTags(_apiOptions.ControllerName);
-
-            foreach (var response in documentation.Responses)
-            {
-                //TODO: Do not return examples until enums are serialized correctly.
-                //if (response.Item2 != null)
-                //    route.Produces(response.StatusCode, response.Type, "application/json");
-                //else
-                route.Produces(response.StatusCode);
-            }
-
-            if (!flags.Visible) route.ExcludeFromDescription();
         }
 
         async Task<IResult> HandleCall(HealthEndpoint path, HttpContext ctx, CancellationToken cancellationToken)
@@ -182,21 +221,49 @@ public static class HealthRegistration
         }
     }
 
-    private static (string Description, string Summary, (int StatusCode, Type Type)[] Responses) GetDocumentation(HealthEndpoint healthEndpoint)
+    private static (string Description, string Summary, (int StatusCode, Type Type)[] Responses) GetDocumentation(Quilt4NetHealthApiOptions o, HealthEndpoint healthEndpoint, string verb)
     {
         switch (healthEndpoint)
         {
-            case HealthEndpoint.Default:
-                throw new NotSupportedException($"This {nameof(healthEndpoint)} should already have been replaced with the actual {nameof(HealthEndpoint.Default)}.");
             case HealthEndpoint.Live:
-                return ($"{healthEndpoint} will always return the value *{LiveStatus.Alive}* if it is able to respond.", "Liveness", [(200, typeof(LiveResponse))]);
+                switch (verb)
+                {
+                    case "GET":
+                        return ($"{healthEndpoint} will always return the value *{LiveStatus.Alive}* if it is able to respond.", "Liveness", [(200, typeof(LiveResponse))]);
+                    case "HEAD":
+                        return ($"{healthEndpoint} will always return the value *{LiveStatus.Alive}* as header value *{nameof(LiveResponse.Status)}* if it is able to respond.", "Liveness", [(200, typeof(LiveResponse))]);
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(verb), verb, null);
+                }
+
             case HealthEndpoint.Ready:
-                //if (response.Status == ReadyStatus.Unready || response.Status == ReadyStatus.Degraded && _apiOptions.FailReadyWhenDegraded)
-                //return ($"{healthEndpoint} checks components that are *{nameof(Component.Essential)}* (or *{nameof(Component.NeededToBeReady)}*) to figure out if the service is ready or not.\n\nThe response will be ...\n\n- **200** when *{nameof(ReadyStatus.Ready)}*\n\n- **503** when *{nameof(ReadyStatus.Unready)}*\n\n- **200** when {nameof(ReadyStatus.Degraded)} and apiOption *{nameof(Quilt4NetApiOptions.FailReadyWhenDegraded)}* is false (Default)\n\n- **503** when {nameof(ReadyStatus.Degraded)} and apiOption *{nameof(Quilt4NetApiOptions.FailReadyWhenDegraded)}* is true", "Readyness", [(200, typeof(ReadyResponse)), (503, null)]);
-                return ($"{healthEndpoint} checks components that are *{nameof(Component.Essential)}* to figure out if the service is ready or not.\n\nThe response will be ...\n\n- **200** when *{nameof(ReadyStatus.Ready)}*\n\n- **503** when *{nameof(ReadyStatus.Unready)}*\n\n- **200** when {nameof(ReadyStatus.Degraded)} and apiOption *{nameof(Quilt4NetHealthApiOptions.FailReadyWhenDegraded)}* is false (Default)\n\n- **503** when {nameof(ReadyStatus.Degraded)} and apiOption *{nameof(Quilt4NetHealthApiOptions.FailReadyWhenDegraded)}* is true", "Readyness", [(200, typeof(ReadyResponse)), (503, null)]);
+                var sb = new StringBuilder();
+                if (o.FailReadyWhenDegraded)
+                {
+                    sb.Append($"{healthEndpoint} checks components that are *{nameof(Component.Essential)}* to figure out if the service is ready or not.\n\nThe response will be ...\n\n- **200** when *{nameof(ReadyStatus.Ready)}*\n\n- **503** when *{nameof(ReadyStatus.Unready)}*\n\n- **503** when {nameof(ReadyStatus.Degraded)}");
+                }
+                else
+                {
+                    sb.Append($"{healthEndpoint} checks components that are *{nameof(Component.Essential)}* to figure out if the service is ready or not.\n\nThe response will be ...\n\n- **200** when *{nameof(ReadyStatus.Ready)}*\n\n- **503** when *{nameof(ReadyStatus.Unready)}*\n\n- **200** when {nameof(ReadyStatus.Degraded)}");
+                }
+                return (sb.ToString(), "Readyness", [(200, typeof(ReadyResponse)), (503, null)]);
+
             case HealthEndpoint.Health:
-                //TODO: needs to add parameters so that the query-parameter noDependencies and noCertSelfCheck will also be documented.
-                return ($"{healthEndpoint} checks the status of the components. By default dependencies are also checked.\n\nDepending on the parameter *{nameof(Component.Essential)}* the response will be...\n\n- **{nameof(HealthStatus.Unhealthy)}** on failure when *{nameof(Component.Essential)}* is true.\n\n- **{nameof(HealthStatus.Degraded)}** on failure when *{nameof(Component.Essential)}* is false\n\n- **{nameof(HealthStatus.Healthy)}** on success", "Health", [(200, typeof(ReadyResponse)), (503, null)]);
+                var sbHealth = new StringBuilder();
+                sbHealth.Append($"{healthEndpoint} checks the status of the components. By default dependencies are also checked.\n\nDepending on the parameter *{nameof(Component.Essential)}* the response will be...\n\n- **{nameof(HealthStatus.Unhealthy)}** on failure when *{nameof(Component.Essential)}* is true.\n\n- **{nameof(HealthStatus.Degraded)}** on failure when *{nameof(Component.Essential)}* is false\n\n- **{nameof(HealthStatus.Healthy)}** on success");
+                switch (verb)
+                {
+                    case "GET":
+                        sbHealth.Append("\n\nThere will also be details for each registered component.");
+                        break;
+                    case "HEAD":
+                        sbHealth.Append($"\n\nThe header value *{nameof(LiveResponse.Status)}* will contain the result.");
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(verb), verb, null);
+                }
+                return (sbHealth.ToString(), "Health", [(200, typeof(ReadyResponse)), (503, null)]);
+
             case HealthEndpoint.Dependencies:
                 return ($"{healthEndpoint} checks the health dependent components. It does not check the dependencies of the dependent services to protect from circular dependencies.", null, [(200, typeof(ReadyResponse)), (503, null)]);
             case HealthEndpoint.Metrics:
@@ -208,9 +275,88 @@ public static class HealthRegistration
         }
     }
 
-    private static IEnumerable<string> GetVerbs(AccessFlags flags)
+    private static void ApplyEnvironmentDefaults(Quilt4NetHealthApiOptions o, IHostEnvironment env)
     {
-        if (flags.Get) yield return "GET";
-        if (flags.Head) yield return "HEAD";
+        // Ensure all endpoints exist so config can partially override
+        EnsureAllEndpointsExist(o);
+
+        // Baseline defaults (good to start with)
+        foreach (var ep in o.Endpoints.Values)
+        {
+            ep.Head.State = EndpointState.Visible;
+            ep.Head.Access.Level = AccessLevel.Everyone;
+
+            ep.Get.State = EndpointState.Visible;
+            ep.Get.Access.Level = AccessLevel.Everyone;
+            ep.Get.Details = DetailsLevel.NoOne;
+        }
+
+        if (env.IsDevelopment())
+        {
+            // Dev: convenient defaults (more visible)
+            o.Endpoints[HealthEndpoint.Health].Get.Details = DetailsLevel.Everyone;
+            o.Endpoints[HealthEndpoint.Dependencies].Get.Details = DetailsLevel.Everyone;
+        }
+        else if (string.Equals(env.EnvironmentName, "Test", StringComparison.OrdinalIgnoreCase))
+        {
+            // Test: similar to Prod but can be a touch looser
+            o.Endpoints[HealthEndpoint.Dependencies].Get.Details = DetailsLevel.AuthenticatedOnly;
+        }
+        else
+        {
+            // Production (and everything else): safer defaults
+            o.Endpoints[HealthEndpoint.Health].Get.Details = DetailsLevel.AuthenticatedOnly;
+            o.Endpoints[HealthEndpoint.Dependencies].Get.Details = DetailsLevel.AuthenticatedOnly;
+
+            o.Endpoints[HealthEndpoint.Dependencies].Get.Access.Level = AccessLevel.AuthenticatedOnly;
+
+            // Often useful: metrics/version not public in prod
+            o.Endpoints[HealthEndpoint.Metrics].Get.Access.Level = AccessLevel.AuthenticatedOnly;
+            o.Endpoints[HealthEndpoint.Version].Get.Access.Level = AccessLevel.AuthenticatedOnly;
+        }
+
+        // Capabilities
+        o.Endpoints[HealthEndpoint.Metrics].Head.State = EndpointState.Disabled;
+        o.Endpoints[HealthEndpoint.Version].Head.State = EndpointState.Disabled;
     }
+
+    private static void EnsureAllEndpointsExist(Quilt4NetHealthApiOptions o)
+    {
+        var keys = Enum.GetValues<HealthEndpoint>();
+        foreach (var k in keys)
+        {
+            o.Endpoints.TryAdd(k, new HealthEndpointOptions());
+        }
+    }
+
+    private static void EnforceCapabilities(Quilt4NetHealthApiOptions o)
+    {
+        // Metrics/Version do not support HEAD
+        o.Endpoints.TryAdd(HealthEndpoint.Metrics, new HealthEndpointOptions());
+        o.Endpoints.TryAdd(HealthEndpoint.Version, new HealthEndpointOptions());
+
+        o.Endpoints[HealthEndpoint.Metrics].Head.State = EndpointState.Disabled;
+        o.Endpoints[HealthEndpoint.Version].Head.State = EndpointState.Disabled;
+    }
+
+    //private static bool ValidateOptions(Quilt4NetHealthApiOptions o, out string? error)
+    //{
+    //    error = null;
+
+    //    if (!o.Endpoints.ContainsKey(HealthEndpoint.Live) || !o.Endpoints.ContainsKey(HealthEndpoint.Ready))
+    //    {
+    //        error = "Endpoints must include at least Live and Ready.";
+    //        return false;
+    //    }
+
+    //    // Optional: if you want to fail hard if someone tries to enable HEAD:
+    //    if (o.Endpoints.TryGetValue(HealthEndpoint.Metrics, out var metrics) &&
+    //        metrics.Head.State != EndpointState.Disabled)
+    //    {
+    //        error = "Metrics endpoint does not support HEAD. Set Metrics:Head:State to Disabled.";
+    //        return false;
+    //    }
+
+    //    return true;
+    //}
 }

@@ -7,7 +7,6 @@ using Quilt4Net.Toolkit.Features.Health.Metrics;
 using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Framework;
-using Quilt4Net.Toolkit.Health.Framework.Endpoints;
 
 namespace Quilt4Net.Toolkit.Health.Framework;
 
@@ -38,8 +37,6 @@ internal class EndpointHandlerService : IEndpointHandlerService
     {
         switch (healthEndpoint)
         {
-            case HealthEndpoint.Default:
-                throw new NotSupportedException($"This {nameof(healthEndpoint)} should already have been replaced with the actual {nameof(HealthEndpoint.Default)}.");
             case HealthEndpoint.Live:
                 return await LiveAsync(ctx);
             case HealthEndpoint.Ready:
@@ -102,7 +99,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
 
         ctx.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
-        var isAuthenticated = ctx.User.Identity?.Name != null;
+        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
         switch (_apiOptions.AuthDetail ?? (_hostEnvironment.IsProduction() ? AuthDetailLevel.AuthenticatedOnly : AuthDetailLevel.EveryOne))
         {
             case AuthDetailLevel.EveryOne:
@@ -120,6 +117,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
                 throw new ArgumentOutOfRangeException(nameof(_apiOptions.AuthDetail), _apiOptions.AuthDetail, null);
         }
 
+        //TODO: Option to fail when degraded
         if (response.Status == HealthStatus.Unhealthy)
         {
             return ctx.Request.Method == HttpMethods.Head ? Results.StatusCode(503) : Results.Json(response, statusCode: 503);
@@ -145,6 +143,20 @@ internal class EndpointHandlerService : IEndpointHandlerService
 
     private async Task<IResult> MetricsAsync(HttpContext ctx, CancellationToken cancellationToken)
     {
+        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
+        switch (_apiOptions.AuthDetail ?? (_hostEnvironment.IsProduction() ? AuthDetailLevel.AuthenticatedOnly : AuthDetailLevel.EveryOne))
+        {
+            case AuthDetailLevel.EveryOne:
+                break;
+            case AuthDetailLevel.AuthenticatedOnly:
+                break;
+            case AuthDetailLevel.NoOne:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(_apiOptions.AuthDetail), _apiOptions.AuthDetail, null);
+        }
+
+        //TODO: Protect this depending on environment or if the caller is authenticated (via jwt or apikey) and member of a configured group.
         var response = await _metricsService.GetMetricsAsync(cancellationToken);
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
     }
