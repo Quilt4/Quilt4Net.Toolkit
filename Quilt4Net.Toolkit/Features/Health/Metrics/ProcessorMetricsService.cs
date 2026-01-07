@@ -9,6 +9,10 @@ internal class ProcessorMetricsService : IProcessorMetricsService
 {
     private readonly ILogger<ProcessorMetricsService> _logger;
 
+    private static int? _cachedPhysicalCores;
+    private static double? _cachedMaxClockGhz;
+    private static double? _cachedL3CacheMb;
+
     public ProcessorMetricsService(ILogger<ProcessorMetricsService> logger)
     {
         _logger = logger;
@@ -17,74 +21,216 @@ internal class ProcessorMetricsService : IProcessorMetricsService
     public Processor GetProcessor(Process process)
     {
         var cpuTime = process.TotalProcessorTime;
-        var numberOfCores = Environment.ProcessorCount;
-        var processorSpeedGHz = GetProcessorSpeedGHz();
 
-        // Calculate Total GHz-Hours
-        var totalGHzHours = (cpuTime.TotalHours * processorSpeedGHz * numberOfCores);
+        var logicalCores = Environment.ProcessorCount;
+        var physicalCores = GetPhysicalCpuCores();
+        var maxClockGhz = GetMaxCpuSpeedGHz();
+        var currentClockGhz = GetCurrentCpuSpeedGHz();
+        var l3CacheMb = GetL3CacheMb();
+
+        var effectiveClock = maxClockGhz ?? currentClockGhz;
+        var totalGhzHours = cpuTime.TotalHours * effectiveClock * logicalCores;
 
         return new Processor
         {
             CpuTime = cpuTime,
-            TotalGHzHours = totalGHzHours,
-            NumberOfCores = numberOfCores,
-            ProcessorSpeedGHz = processorSpeedGHz,
+            TotalGHzHours = totalGhzHours,
+            NumberOfCores = logicalCores,
+            PhysicalCpuCores = physicalCores,
+            ProcessorSpeedGHz = effectiveClock,
+            CurrentCpuSpeedGHz = currentClockGhz,
+            L3CacheMb = l3CacheMb
         };
     }
 
-    private double GetProcessorSpeedGHz()
+    private int? GetPhysicalCpuCores()
+    {
+        if (_cachedPhysicalCores != null)
+        {
+            return _cachedPhysicalCores;
+        }
+
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                using var searcher =
+                    new ManagementObjectSearcher("SELECT NumberOfCores FROM Win32_Processor");
+
+                var cores = 0;
+                foreach (var obj in searcher.Get())
+                {
+                    cores += Convert.ToInt32(obj["NumberOfCores"]);
+                }
+
+                _cachedPhysicalCores = cores > 0 ? cores : null;
+                return _cachedPhysicalCores;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                var output = Execute("lscpu", "-p=core");
+                var cores = output
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(l => !l.StartsWith("#"))
+                    .Distinct()
+                    .Count();
+
+                _cachedPhysicalCores = cores > 0 ? cores : null;
+                return _cachedPhysicalCores;
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning(e, e.Message);
+        }
+
+        return null;
+    }
+
+    private double? GetMaxCpuSpeedGHz()
+    {
+        if (_cachedMaxClockGhz != null)
+        {
+            return _cachedMaxClockGhz;
+        }
+
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                using var searcher =
+                    new ManagementObjectSearcher("SELECT MaxClockSpeed FROM Win32_Processor");
+
+                foreach (var obj in searcher.Get())
+                {
+                    _cachedMaxClockGhz = Convert.ToDouble(obj["MaxClockSpeed"]) / 1000;
+                    return _cachedMaxClockGhz;
+                }
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                var output = Execute("lscpu", "");
+                foreach (var line in output.Split('\n'))
+                {
+                    if (line.StartsWith("CPU max MHz"))
+                    {
+                        _cachedMaxClockGhz = double.Parse(line.Split(':')[1].Trim()) / 1000;
+                        return _cachedMaxClockGhz;
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning(e, e.Message);
+        }
+
+        return null;
+    }
+
+    private double? GetCurrentCpuSpeedGHz()
     {
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                return GetProcessorSpeedWindows();
+                using var searcher =
+                    new ManagementObjectSearcher("SELECT CurrentClockSpeed FROM Win32_Processor");
+
+                foreach (var obj in searcher.Get())
+                {
+                    return Convert.ToDouble(obj["CurrentClockSpeed"]) / 1000;
+                }
             }
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                return GetProcessorSpeedLinux();
+                foreach (var line in File.ReadLines("/proc/cpuinfo"))
+                {
+                    if (line.StartsWith("cpu MHz"))
+                    {
+                        return double.Parse(line.Split(':')[1].Trim()) / 1000;
+                    }
+                }
             }
         }
         catch (Exception e)
         {
-            _logger?.LogWarning(e, e.Message);
+            _logger.LogWarning(e, e.Message);
         }
 
-        return 0;
+        return null;
     }
 
-    static double GetProcessorSpeedWindows()
+    private double? GetL3CacheMb()
     {
-        using var searcher = new ManagementObjectSearcher("SELECT MaxClockSpeed FROM Win32_Processor");
-        foreach (var obj in searcher.Get())
+        if (_cachedL3CacheMb != null)
         {
-            var clockSpeedMHz = Convert.ToDouble(obj["MaxClockSpeed"]); // MHz
-            return clockSpeedMHz / 1000; // Convert to GHz
-        }
-        throw new InvalidOperationException("Unable to determine processor speed on Windows.");
-    }
-
-    static double GetProcessorSpeedLinux()
-    {
-        const string cpuInfoPath = "/proc/cpuinfo";
-        if (!File.Exists(cpuInfoPath))
-        {
-            throw new InvalidOperationException("/proc/cpuinfo not found on Linux.");
+            return _cachedL3CacheMb;
         }
 
-        foreach (var line in File.ReadLines(cpuInfoPath))
+        try
         {
-            if (line.StartsWith("cpu MHz"))
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                var parts = line.Split(':');
-                if (parts.Length > 1 && double.TryParse(parts[1].Trim(), out var speedMHz))
+                using var searcher =
+                    new ManagementObjectSearcher("SELECT L3CacheSize FROM Win32_Processor");
+
+                foreach (var obj in searcher.Get())
                 {
-                    return speedMHz / 1000; // Convert to GHz
+                    var kb = Convert.ToDouble(obj["L3CacheSize"]);
+                    _cachedL3CacheMb = kb > 0 ? kb / 1024 : null;
+                    return _cachedL3CacheMb;
+                }
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                var path = "/sys/devices/system/cpu/cpu0/cache/index3/size";
+                if (File.Exists(path))
+                {
+                    var text = File.ReadAllText(path).Trim().ToUpperInvariant();
+                    if (text.EndsWith("K"))
+                    {
+                        _cachedL3CacheMb = double.Parse(text.TrimEnd('K')) / 1024;
+                        return _cachedL3CacheMb;
+                    }
+
+                    if (text.EndsWith("M"))
+                    {
+                        _cachedL3CacheMb = double.Parse(text.TrimEnd('M'));
+                        return _cachedL3CacheMb;
+                    }
                 }
             }
         }
+        catch (Exception e)
+        {
+            _logger.LogWarning(e, e.Message);
+        }
 
-        throw new InvalidOperationException("Unable to determine processor speed on Linux.");
+        return null;
+    }
+
+    private static string Execute(string fileName, string arguments)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            }
+        };
+
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+
+        return output;
     }
 }

@@ -42,6 +42,7 @@ public static class HealthRegistration
         services.AddTransient<IMetricsService, MetricsService>();
         services.AddTransient<IMemoryMetricsService, MemoryMetricsService>();
         services.AddTransient<IProcessorMetricsService, ProcessorMetricsService>();
+        services.AddTransient<IGpuMetricsService, GpuMetricsService>();
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));

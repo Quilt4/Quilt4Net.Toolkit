@@ -1,4 +1,6 @@
-﻿namespace Quilt4Net.Toolkit.Features.Health;
+﻿using System.Text.Json.Serialization;
+
+namespace Quilt4Net.Toolkit.Features.Health;
 
 /// <summary>
 /// Response for Metrics.
@@ -19,4 +21,10 @@ public record MetricsResponse
     /// Processor information.
     /// </summary>
     public required Processor Processor { get; init; }
+
+    /// <summary>
+    /// GPU information.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public Gpu Gpu { get; init; }
 }

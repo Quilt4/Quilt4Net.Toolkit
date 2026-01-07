@@ -9,6 +9,8 @@ internal class MemoryMetricsService : IMemoryMetricsService
 {
     private readonly ILogger<MemoryMetricsService> _logger;
 
+    private static double? _cachedTotalMemoryGb;
+
     public MemoryMetricsService(ILogger<MemoryMetricsService> logger)
     {
         _logger = logger;
@@ -16,93 +18,109 @@ internal class MemoryMetricsService : IMemoryMetricsService
 
     public Memory GetMemory(Process process)
     {
-        var applicationMemoryUsageMb = process.WorkingSet64 / (1024.0 * 1024.0);
+        var applicationMemoryUsageGb = process.WorkingSet64 / 1024.0 / 1024.0 / 1024.0;
 
-        var memory = GetMemory();
+        var (totalGb, freeGb) = GetMemory();
 
         return new Memory
         {
-            ApplicationMemoryUsageMb = applicationMemoryUsageMb,
-            AvailableFreeMemoryMb = memory.FreeMemoryMB,
-            TotalMemoryMb = memory.TotalMemoryMB
+            ApplicationMemoryUsageGb = applicationMemoryUsageGb,
+            TotalMemoryGb = totalGb,
+            AvailableFreeMemoryGb = freeGb
         };
     }
 
-    private (double TotalMemoryMB, double FreeMemoryMB) GetMemory()
+    private (double? totalGb, double? freeGb) GetMemory()
     {
-        double totalMemoryMb = 0;
-        double freeMemoryMb = 0;
-
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                (totalMemoryMb, freeMemoryMb) = GetWindowsMemory();
+                return GetWindowsMemory();
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                (totalMemoryMb, freeMemoryMb) = GetLinuxMemory();
-            }
-            else
-            {
-                throw new PlatformNotSupportedException("Only Windows and Linux are supported.");
+                return GetLinuxMemory();
             }
         }
         catch (Exception e)
         {
-            _logger?.LogWarning(e, e.Message);
+            _logger.LogWarning(e, e.Message);
         }
 
-        return (totalMemoryMb, freeMemoryMb);
+        return (null, null);
     }
 
-    private static (double TotalMemoryMB, double FreeMemoryMB) GetWindowsMemory()
+    private static (double? totalGb, double? freeGb) GetWindowsMemory()
     {
-        using var searcher = new ManagementObjectSearcher("SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem");
+        using var searcher = new ManagementObjectSearcher(
+            "SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem");
+
         foreach (var obj in searcher.Get())
         {
-            var totalMemoryKb = Convert.ToDouble(obj["TotalVisibleMemorySize"]);
-            var freeMemoryKb = Convert.ToDouble(obj["FreePhysicalMemory"]);
-            return (totalMemoryKb / 1024.0, freeMemoryKb / 1024.0); // Convert KB to MB
+            var totalKb = Convert.ToDouble(obj["TotalVisibleMemorySize"]);
+            var freeKb = Convert.ToDouble(obj["FreePhysicalMemory"]);
+
+            if (_cachedTotalMemoryGb == null)
+            {
+                _cachedTotalMemoryGb = totalKb / 1024.0 / 1024.0;
+            }
+
+            var freeGb = freeKb / 1024.0 / 1024.0;
+
+            return (_cachedTotalMemoryGb, freeGb);
         }
-        throw new InvalidOperationException("Unable to retrieve memory information on Windows.");
+
+        return (null, null);
     }
 
-    private static (double TotalMemoryMB, double FreeMemoryMB) GetLinuxMemory()
+    private static (double? totalGb, double? freeGb) GetLinuxMemory()
     {
-        const string memInfoPath = "/proc/meminfo";
-        if (!File.Exists(memInfoPath))
+        const string path = "/proc/meminfo";
+        if (!File.Exists(path))
         {
-            throw new InvalidOperationException("/proc/meminfo not found on Linux.");
+            return (null, null);
         }
 
-        double totalMemoryKb = 0;
-        double freeMemoryKb = 0;
+        double totalKb = 0;
+        double freeKb = 0;
 
-        foreach (var line in File.ReadLines(memInfoPath))
+        foreach (var line in File.ReadLines(path))
         {
             if (line.StartsWith("MemTotal:"))
             {
-                totalMemoryKb = ParseMemInfoLine(line);
+                totalKb = ParseKb(line);
             }
             else if (line.StartsWith("MemAvailable:"))
             {
-                freeMemoryKb = ParseMemInfoLine(line);
-                break; // We found the key lines we need
+                freeKb = ParseKb(line);
+            }
+
+            if (totalKb > 0 && freeKb > 0)
+            {
+                break;
             }
         }
 
-        if (totalMemoryKb == 0 || freeMemoryKb == 0)
+        if (totalKb == 0 || freeKb == 0)
         {
-            throw new InvalidOperationException("Unable to retrieve memory information from /proc/meminfo.");
+            return (null, null);
         }
 
-        return (totalMemoryKb / 1024.0, freeMemoryKb / 1024.0); // Convert KB to MB
+        if (_cachedTotalMemoryGb == null)
+        {
+            _cachedTotalMemoryGb = totalKb / 1024.0 / 1024.0;
+        }
+
+        var freeGb = freeKb / 1024.0 / 1024.0;
+
+        return (_cachedTotalMemoryGb, freeGb);
     }
 
-    private static double ParseMemInfoLine(string line)
+    private static double ParseKb(string line)
     {
-        var parts = line.Split([' '], StringSplitOptions.RemoveEmptyEntries);
-        return double.TryParse(parts[1], out var value) ? value : 0; // Extract value in KB
+        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return double.TryParse(parts[1], out var value) ? value : 0;
     }
 }
