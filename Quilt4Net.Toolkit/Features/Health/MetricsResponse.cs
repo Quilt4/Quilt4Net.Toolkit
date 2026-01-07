@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using Quilt4Net.Toolkit.Features.Health.Metrics;
 
 namespace Quilt4Net.Toolkit.Features.Health;
 
@@ -13,6 +14,12 @@ public record MetricsResponse
     public required TimeSpan ApplicationUptime { get; init; }
 
     /// <summary>
+    /// Information about the machine and OS.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public Machine Machine { get; set; }
+
+    /// <summary>
     /// Memory information.
     /// </summary>
     public required Memory Memory { get; init; }
@@ -22,9 +29,17 @@ public record MetricsResponse
     /// </summary>
     public required Processor Processor { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public Storage Storage { get; init; }
+
     /// <summary>
     /// GPU information.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public Gpu Gpu { get; init; }
+
+    /// <summary>
+    /// The time it took to get the information.
+    /// </summary>
+    public required TimeSpan Elapsed { get; init; }
 }

@@ -39,8 +39,10 @@ public static class HealthRegistration
         services.AddTransient<IHealthService, HealthService>();
         services.AddTransient<IDependencyService, DependencyService>();
         services.AddTransient<IVersionService, VersionService>();
+        services.AddTransient<IMachineMetricsService, MachineMetricsService>();
         services.AddTransient<IMetricsService, MetricsService>();
         services.AddTransient<IMemoryMetricsService, MemoryMetricsService>();
+        services.AddTransient<IStorageMetricsService, StorageMetricsService>();
         services.AddTransient<IProcessorMetricsService, ProcessorMetricsService>();
         services.AddTransient<IGpuMetricsService, GpuMetricsService>();
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
