@@ -363,24 +363,6 @@ public class HealthServiceTests
         sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
     }
 
-    //[Fact]
-    //public async Task ChecksShouldBeStreamed2()
-    //{
-    //    //Arrange
-    //    var sw = Stopwatch.StartNew();
-    //    var option = new Quilt4NetApiOptions();
-    //    option.AddComponent(new Component { Name = "Slow", CheckAsync = async _ => { await Task.Delay(TimeSpan.FromSeconds(3)); return new CheckResult { Success = true, Message = "Slow component." }; } });
-    //    option.AddComponent(new Component { Name = "Fast", CheckAsync = async _ => new CheckResult { Success = true, Message = "Fast component." } });
-    //    var sut = new HealthService(_hostEnvironment.Object, _serviceProvider.Object, option, _logger.Object);
-
-    //    //Act
-    //    var result = (await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync()).ToHealthResponse();
-
-    //    //Assert
-    //    result.Components.First().Key.Should().Be("Fast");
-    //    result.Components.Last().Key.Should().Be("Slow");
-    //}
-
     [Fact]
     public async Task ChecksShouldBeStreamed()
     {

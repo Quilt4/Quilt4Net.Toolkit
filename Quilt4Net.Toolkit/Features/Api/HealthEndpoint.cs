@@ -1,8 +1,7 @@
-﻿namespace Quilt4Net.Toolkit.Health.Framework.Endpoints;
+﻿namespace Quilt4Net.Toolkit.Features.Api;
 
 public enum HealthEndpoint
 {
-    Default,
     Live,
     Ready,
     Health,

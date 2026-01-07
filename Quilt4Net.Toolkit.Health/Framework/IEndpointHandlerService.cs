@@ -1,4 +1,4 @@
-﻿using Quilt4Net.Toolkit.Health.Framework.Endpoints;
+﻿using Quilt4Net.Toolkit.Features.Api;
 
 namespace Quilt4Net.Toolkit.Health.Framework;
 

@@ -4,6 +4,39 @@ using Quilt4Net.Toolkit.Features.Health.Dependency;
 
 namespace Quilt4Net.Toolkit.Features.Api;
 
+public enum EndpointState { Visible, Hidden, Disabled }
+public enum AccessLevel { Everyone, AuthenticatedOnly }
+public enum DetailsLevel { Everyone, AuthenticatedOnly, NoOne }
+
+public sealed class AccessOptions
+{
+    public AccessLevel Level { get; set; } = AccessLevel.Everyone;
+
+    /// <summary>
+    /// Optional: if provided, the caller must be in at least one of these roles.
+    /// Only meaningful when Level == AuthenticatedOnly.
+    /// </summary>
+    public string[] Roles { get; set; } = Array.Empty<string>();
+}
+
+public class MethodOptions
+{
+    public EndpointState State { get; set; } = EndpointState.Visible;
+    public AccessOptions Access { get; set; } = new();
+}
+
+public sealed class GetMethodOptions : MethodOptions
+{
+    public DetailsLevel Details { get; set; } = DetailsLevel.NoOne;
+}
+
+public sealed class HealthEndpointOptions
+{
+    // HEAD/GET can be configured independently
+    public MethodOptions Head { get; set; } = new();
+    public GetMethodOptions Get { get; set; } = new();
+}
+
 /// <summary>
 /// Configuration options for Quilt4NetApi.
 /// This option can be configured by code or with appsettings.json on location "Quilt4Net/HealthApi"
@@ -15,22 +48,11 @@ public record Quilt4NetHealthApiOptions
     private readonly ConcurrentDictionary<string, Dependency> _dependencies = new();
 
     /// <summary>
-    /// <para>This string value can be used to turn the GET, HEAD and visibility on or off for different endpoints.</para>
-    /// <para>The values are by position Default, Live, Ready, Health, Dependencies, Metrics and Version.</para>
-    /// <para></para>
-    /// <para>| Value | GET  | HEAD | Visible |</para>
-    /// <para>| ----- | ---- | ---- | ------- |</para>
-    /// <para>| 0     | No   | No   | No      |</para>
-    /// <para>| 1     | Yes  | No   | No      |</para>
-    /// <para>| 2     | No   | Yes  | No      |</para>
-    /// <para>| 3     | Yes  | Yes  | No      |</para>
-    /// <para>| 4     | Yes  | No   | Yes     |</para>
-    /// <para>| 5     | No   | Yes  | Yes     |</para>
-    /// <para>| 6     | Yes  | Yes  | Yes     |</para>
-    /// <para></para>
-    /// <para>Default is 6666644</para>
+    /// Override State wher all endpoints can be set at once.
+    /// If set, this value is used for all endpoints regardless of individual configuration.
+    /// By default, this value is not set. (The individual endpoint configuration is used)
     /// </summary>
-    public string Endpoints { get; set; } = "6666644";
+    public EndpointState? OverrideState { get; set; }
 
     /// <summary>
     /// Pattern to between the base address and the controller name. This value can be empty.
@@ -55,10 +77,16 @@ public record Quilt4NetHealthApiOptions
     public string DefaultAction { get; set; } = "Health";
 
     /// <summary>
+    /// Keys: Live, Ready, Health, Dependencies, Metrics, Version (case-insensitive).
+    /// </summary>
+    public Dictionary<HealthEndpoint, HealthEndpointOptions> Endpoints { get; set; } = new();
+
+    /// <summary>
     /// If set to true, Ready will return 503 when the system is degraded.
     /// If set to false Ready will return 200 when the system is degraded.
     /// Default is false.
     /// </summary>
+    //TODO: Try to move into specific configuration for this endpoint.
     public bool FailReadyWhenDegraded { get; set; }
 
     /// <summary>
@@ -108,6 +136,7 @@ public record Quilt4NetHealthApiOptions
     /// Default for Development environment is StackTrace.
     /// For all other environments default is Message.
     /// </summary>
+    [Obsolete("Set by method in Endpoints.")]
     public ExceptionDetailLevel? ExceptionDetail { get; set; }
 
     /// <summary>
@@ -115,6 +144,7 @@ public record Quilt4NetHealthApiOptions
     /// Default for production is AuthenticatedOnly.
     /// For all other environments default is EveryOne.
     /// </summary>
+    [Obsolete("Set by method in Endpoints.")]
     public AuthDetailLevel? AuthDetail { get; set; }
 
     /// <summary>
@@ -130,5 +160,5 @@ public record Quilt4NetHealthApiOptions
 
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
-    internal IEnumerable<Dependency> Dependencies => _dependencies.Values;
+    internal IEnumerable<Dependency> DependencyRegistrations => _dependencies.Values;
 }
