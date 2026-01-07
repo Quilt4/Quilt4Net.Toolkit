@@ -4,39 +4,6 @@ using Quilt4Net.Toolkit.Features.Health.Dependency;
 
 namespace Quilt4Net.Toolkit.Features.Api;
 
-public enum EndpointState { Visible, Hidden, Disabled }
-public enum AccessLevel { Everyone, AuthenticatedOnly }
-public enum DetailsLevel { Everyone, AuthenticatedOnly, NoOne }
-
-public sealed class AccessOptions
-{
-    public AccessLevel Level { get; set; } = AccessLevel.Everyone;
-
-    /// <summary>
-    /// Optional: if provided, the caller must be in at least one of these roles.
-    /// Only meaningful when Level == AuthenticatedOnly.
-    /// </summary>
-    public string[] Roles { get; set; } = Array.Empty<string>();
-}
-
-public class MethodOptions
-{
-    public EndpointState State { get; set; } = EndpointState.Visible;
-    public AccessOptions Access { get; set; } = new();
-}
-
-public sealed class GetMethodOptions : MethodOptions
-{
-    public DetailsLevel Details { get; set; } = DetailsLevel.NoOne;
-}
-
-public sealed class HealthEndpointOptions
-{
-    // HEAD/GET can be configured independently
-    public MethodOptions Head { get; set; } = new();
-    public GetMethodOptions Get { get; set; } = new();
-}
-
 /// <summary>
 /// Configuration options for Quilt4NetApi.
 /// This option can be configured by code or with appsettings.json on location "Quilt4Net/HealthApi"
@@ -138,14 +105,6 @@ public record Quilt4NetHealthApiOptions
     /// </summary>
     [Obsolete("Set by method in Endpoints.")]
     public ExceptionDetailLevel? ExceptionDetail { get; set; }
-
-    /// <summary>
-    /// Level of detailed returned for different types of users.
-    /// Default for production is AuthenticatedOnly.
-    /// For all other environments default is EveryOne.
-    /// </summary>
-    [Obsolete("Set by method in Endpoints.")]
-    public AuthDetailLevel? AuthDetail { get; set; }
 
     /// <summary>
     /// HealthAddress of check for ip address, like http://ipv4.icanhazip.com/.

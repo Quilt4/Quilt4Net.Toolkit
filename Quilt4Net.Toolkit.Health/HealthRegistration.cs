@@ -122,6 +122,7 @@ public static class HealthRegistration
                            .CreateLogger("Scope")
                            .BeginScope(new Dictionary<string, object>
                            {
+                               ["MachineName"] = Environment.MachineName,
                                ["ApplicationName"] = assemblyName.Name,
                                ["Version"] = assemblyName.Version
                            }))
@@ -153,12 +154,6 @@ public static class HealthRegistration
             MapEndpointWithVerb(o, app, item.Key, path, HttpMethods.Get, item.Value.Get);
             MapEndpointWithVerb(o, app, item.Key, path, HttpMethods.Head, item.Value.Head);
         }
-
-        //async Task<IResult> HandleCall(HealthEndpoint path, HttpContext ctx, CancellationToken cancellationToken)
-        //{
-        //    var service = app.Services.GetService<IEndpointHandlerService>();
-        //    return await service.HandleCall(path, ctx, cancellationToken);
-        //}
     }
 
     private static void MapEndpointWithVerb<T>(Quilt4NetHealthApiOptions o, WebApplication app, HealthEndpoint healthEndpoint, string path, string verb, T options, bool isDefault = false) where T : MethodOptions
@@ -185,7 +180,7 @@ public static class HealthRegistration
             //});
             var route = app.MapMethods(path, [verb], async (HttpContext ctx, CancellationToken cancellationToken) =>
             {
-                return await HandleCall(healthEndpoint, ctx, cancellationToken);
+                return await HandleCall(healthEndpoint, ctx, options, cancellationToken);
             });
 
             if ((o.OverrideState ?? options.State) != EndpointState.Visible)
@@ -206,7 +201,7 @@ public static class HealthRegistration
 
                 foreach (var response in documentation.Responses)
                 {
-                    if (response.Item2 != null)
+                    if (response.Item2 != null && verb == HttpMethods.Get)
                         route.Produces(response.StatusCode, response.Type, "application/json");
                     else
                         route.Produces(response.StatusCode);
@@ -214,10 +209,10 @@ public static class HealthRegistration
             }
         }
 
-        async Task<IResult> HandleCall(HealthEndpoint path, HttpContext ctx, CancellationToken cancellationToken)
+        async Task<IResult> HandleCall<T>(HealthEndpoint endpoint, HttpContext ctx, T options, CancellationToken cancellationToken) where T : MethodOptions
         {
             var service = app.Services.GetService<IEndpointHandlerService>();
-            return await service.HandleCall(path, ctx, cancellationToken);
+            return await service.HandleCall<T>(endpoint, ctx, options, cancellationToken);
         }
     }
 
@@ -231,7 +226,7 @@ public static class HealthRegistration
                     case "GET":
                         return ($"{healthEndpoint} will always return the value *{LiveStatus.Alive}* if it is able to respond.", "Liveness", [(200, typeof(LiveResponse))]);
                     case "HEAD":
-                        return ($"{healthEndpoint} will always return the value *{LiveStatus.Alive}* as header value *{nameof(LiveResponse.Status)}* if it is able to respond.", "Liveness", [(200, typeof(LiveResponse))]);
+                        return ($"{healthEndpoint} will always return the value *{LiveStatus.Alive}* as header value *{nameof(LiveResponse.Status)}* if it is able to respond.", "Liveness", [(200, null)]);
                     default:
                         throw new ArgumentOutOfRangeException(nameof(verb), verb, null);
                 }
@@ -262,14 +257,14 @@ public static class HealthRegistration
                     default:
                         throw new ArgumentOutOfRangeException(nameof(verb), verb, null);
                 }
-                return (sbHealth.ToString(), "Health", [(200, typeof(ReadyResponse)), (503, null)]);
+                return (sbHealth.ToString(), "Health", [(200, typeof(HealthResponse)), (503, null)]);
 
             case HealthEndpoint.Dependencies:
-                return ($"{healthEndpoint} checks the health dependent components. It does not check the dependencies of the dependent services to protect from circular dependencies.", null, [(200, typeof(ReadyResponse)), (503, null)]);
+                return ($"{healthEndpoint} checks the health dependent components. It does not check the dependencies of the dependent services to protect from circular dependencies.", null, [(200, typeof(DependencyResponse)), (503, null)]);
             case HealthEndpoint.Metrics:
-                return ($"{healthEndpoint} returns data about the service.", null, [(200, typeof(ReadyResponse))]);
+                return ($"{healthEndpoint} returns data about the service.", null, [(200, typeof(MetricsResponse))]);
             case HealthEndpoint.Version:
-                return ($"{healthEndpoint} returns metadata about the service like *version*, *environment*, *IpAddress* and more.", null, [(200, typeof(ReadyResponse))]);
+                return ($"{healthEndpoint} returns metadata about the service like *version*, *environment*, *IpAddress* and more.", null, [(200, typeof(VersionResponse))]);
             default:
                 throw new ArgumentOutOfRangeException(nameof(healthEndpoint), healthEndpoint, null);
         }
