@@ -1,74 +1,10 @@
 ﻿using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
-using System.Text;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
-namespace Quilt4Net.Toolkit.Features.Health.Metrics;
-
-public record Machine
-{
-    public required MachineIdentity Identity { get; init; }
-    public required OperatingSystemInfo OperatingSystem { get; init; }
-    public required RuntimeContext Runtime { get; init; }
-    public required MachineLifecycle Lifecycle { get; init; }
-}
-
-public record MachineIdentity
-{
-    public required string MachineName { get; init; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] 
-    public string Manufacturer { get; init; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public string Model { get; init; }
-
-    public required MachineEnvironmentType EnvironmentType { get; init; }
-}
-
-public record OperatingSystemInfo
-{
-    public required string Platform { get; init; }           // Windows / Linux
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public string Distribution { get; init; }                // Ubuntu, RHEL, etc.
-
-    public required string Version { get; init; }
-    public required int AddressSizeBits { get; init; }        // 32 / 64
-}
-
-public record RuntimeContext
-{
-    public required string CurrentUser { get; init; }
-    public required string ProcessArchitecture { get; init; } // x86 / x64 / arm64
-    public bool IsElevated { get; init; }
-}
-
-public record MachineLifecycle
-{
-    public required DateTime BootTime { get; init; }
-    public required TimeSpan Uptime { get; init; }
-}
-
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum MachineEnvironmentType
-{
-    Physical,
-    VirtualMachine,
-    Container
-}
-
-public interface IMachineMetricsService
-{
-    Machine GetMachine();
-}
+namespace Quilt4Net.Toolkit.Features.Health.Metrics.Machine;
 
 internal class MachineMetricsService : IMachineMetricsService
 {

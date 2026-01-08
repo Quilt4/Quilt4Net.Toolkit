@@ -11,13 +11,15 @@ public record VersionResponse
     /// Version number.
     /// </summary>
     /// <example>1.0.0.0</example>
-    public required string Version { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string Version { get; init; }
 
     /// <summary>
     /// Name of the machine where the application is running.
     /// </summary>
     /// <example>Jupiter</example>
-    public required string Machine { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string Machine { get; init; }
 
     /// <summary>
     /// Environment for the application.
@@ -30,7 +32,7 @@ public record VersionResponse
     /// </summary>
     /// <example>127.0.0.1</example>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public required string IpAddress { get; init; }
+    public string IpAddress { get; init; }
 
     /// <summary>
     /// The process runs with 64 bit.
