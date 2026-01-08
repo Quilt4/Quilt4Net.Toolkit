@@ -1,42 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Management;
 using System.Runtime.InteropServices;
-using System.Text.Json.Serialization;
 
-namespace Quilt4Net.Toolkit.Features.Health.Metrics;
-
-public record Storage
-{
-    public required IReadOnlyCollection<StorageDevice> Devices { get; init; }
-}
-
-public record StorageDevice
-{
-    public required string Name { get; init; }
-    public required string MountPoint { get; init; }
-    public required StorageDeviceType Type { get; init; }
-
-    public string? FileSystem { get; init; }
-
-    public required double TotalSizeGb { get; init; }
-    public required double AvailableSizeGb { get; init; }
-
-    public required bool IsReadOnly { get; init; }
-}
-
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum StorageDeviceType
-{
-    Local,
-    Network,
-    Removable,
-    Virtual
-}
-
-public interface IStorageMetricsService
-{
-    Storage GetStorage();
-}
+namespace Quilt4Net.Toolkit.Features.Health.Metrics.Storage;
 
 internal class StorageMetricsService : IStorageMetricsService
 {

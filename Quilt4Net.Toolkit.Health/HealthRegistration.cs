@@ -8,6 +8,7 @@ using Quilt4Net.Toolkit.Features.Health.Live;
 using Quilt4Net.Toolkit.Features.Health.Metrics;
 using Quilt4Net.Toolkit.Features.Health.Metrics.Machine;
 using Quilt4Net.Toolkit.Features.Health.Ready;
+using Quilt4Net.Toolkit.Features.Health.Metrics.Storage;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Features.Probe;
 using Quilt4Net.Toolkit.Health.Framework;
