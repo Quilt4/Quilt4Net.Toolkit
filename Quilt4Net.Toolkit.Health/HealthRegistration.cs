@@ -1,10 +1,12 @@
-﻿using Microsoft.AspNetCore.Mvc.Abstractions;
+﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Health.Dependency;
 using Quilt4Net.Toolkit.Features.Health.Live;
 using Quilt4Net.Toolkit.Features.Health.Metrics;
+using Quilt4Net.Toolkit.Features.Health.Metrics.Machine;
 using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Features.Probe;
@@ -160,26 +162,17 @@ public static class HealthRegistration
     {
         if ((o.OverrideState ?? options.State) != EndpointState.Disabled)
         {
-            //RouteHandlerBuilder route;
-            //if (healthEndpoint == HealthEndpoint.Health)
-            //{
-            //    //NOTE: This code hides the query parameters noDependencies and noCertSelfCheck. They are default false and should only be used by dependency calls. For that reason it makes sense to hide them here.
-            //    route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) =>
-            //    {
-            //        return await HandleCall(healthEndpoint, ctx, cancellationToken);
-            //    });
-
-            //    //NOTE: This code shows the query parameters noDependencies and noCertSelfCheck.
-            //    //route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken, bool noDependencies = false, bool noCertSelfCheck = false) => await HandleCall(healthEndpoint, ctx, cancellationToken));
-            //}
-            //else
-            //{
-            //route = app.MapMethods(path, httpMethods, async (HttpContext ctx, CancellationToken cancellationToken) =>
-            //{
-            //    return await HandleCall(item.Key, ctx, cancellationToken);
-            //});
             var route = app.MapMethods(path, [verb], async (HttpContext ctx, CancellationToken cancellationToken) =>
             {
+                if (!(ctx.User.Identity?.IsAuthenticated ?? false))
+                {
+                    var result = await ctx.AuthenticateAsync(o.AuthScheme);
+                    if (result.Succeeded && result.Principal != null)
+                    {
+                        ctx.User = result.Principal;
+                    }
+                }
+
                 return await HandleCall(healthEndpoint, ctx, options, cancellationToken);
             });
 
@@ -209,10 +202,25 @@ public static class HealthRegistration
             }
         }
 
-        async Task<IResult> HandleCall<T>(HealthEndpoint endpoint, HttpContext ctx, T options, CancellationToken cancellationToken) where T : MethodOptions
+        async Task<IResult> HandleCall<T>(HealthEndpoint endpoint, HttpContext ctx, T opt, CancellationToken cancellationToken) where T : MethodOptions
         {
+            var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
+            switch (options.Access.Level ?? (app.Environment.IsProduction() ? AccessLevel.AuthenticatedOnly : AccessLevel.Everyone))
+            {
+                case AccessLevel.Everyone:
+                    break;
+                case AccessLevel.AuthenticatedOnly:
+                    if (!isAuthenticated)
+                    {
+                        return Results.Unauthorized();
+                    }
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(options.Access.Level), options.Access.Level, null);
+            }
+
             var service = app.Services.GetService<IEndpointHandlerService>();
-            return await service.HandleCall<T>(endpoint, ctx, options, cancellationToken);
+            return await service.HandleCall(endpoint, ctx, opt, cancellationToken);
         }
     }
 
@@ -272,10 +280,8 @@ public static class HealthRegistration
 
     private static void ApplyEnvironmentDefaults(Quilt4NetHealthApiOptions o, IHostEnvironment env)
     {
-        // Ensure all endpoints exist so config can partially override
         EnsureAllEndpointsExist(o);
 
-        // Baseline defaults (good to start with)
         foreach (var ep in o.Endpoints.Values)
         {
             ep.Head.State = EndpointState.Visible;
@@ -283,31 +289,25 @@ public static class HealthRegistration
 
             ep.Get.State = EndpointState.Visible;
             ep.Get.Access.Level = AccessLevel.Everyone;
-            ep.Get.Details = DetailsLevel.NoOne;
+            ep.Get.Details = DetailsLevel.AuthenticatedOnly;
         }
+        o.Endpoints[HealthEndpoint.Metrics].Get.Access.Level = AccessLevel.AuthenticatedOnly;
 
         if (env.IsDevelopment())
         {
-            // Dev: convenient defaults (more visible)
-            o.Endpoints[HealthEndpoint.Health].Get.Details = DetailsLevel.Everyone;
-            o.Endpoints[HealthEndpoint.Dependencies].Get.Details = DetailsLevel.Everyone;
+            foreach (var ep in o.Endpoints.Values)
+            {
+                ep.Get.Access.Level = AccessLevel.Everyone;
+                ep.Get.Details = DetailsLevel.Everyone;
+            }
         }
-        else if (string.Equals(env.EnvironmentName, "Test", StringComparison.OrdinalIgnoreCase))
+        else if (env.IsProduction())
         {
-            // Test: similar to Prod but can be a touch looser
-            o.Endpoints[HealthEndpoint.Dependencies].Get.Details = DetailsLevel.AuthenticatedOnly;
-        }
-        else
-        {
-            // Production (and everything else): safer defaults
-            o.Endpoints[HealthEndpoint.Health].Get.Details = DetailsLevel.AuthenticatedOnly;
-            o.Endpoints[HealthEndpoint.Dependencies].Get.Details = DetailsLevel.AuthenticatedOnly;
-
-            o.Endpoints[HealthEndpoint.Dependencies].Get.Access.Level = AccessLevel.AuthenticatedOnly;
-
-            // Often useful: metrics/version not public in prod
-            o.Endpoints[HealthEndpoint.Metrics].Get.Access.Level = AccessLevel.AuthenticatedOnly;
-            o.Endpoints[HealthEndpoint.Version].Get.Access.Level = AccessLevel.AuthenticatedOnly;
+            foreach (var ep in o.Endpoints.Values)
+            {
+                ep.Head.State = EndpointState.Hidden;
+                ep.Get.State = EndpointState.Hidden;
+            }
         }
 
         // Capabilities

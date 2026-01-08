@@ -53,8 +53,13 @@ public record Quilt4NetHealthApiOptions
     /// If set to false Ready will return 200 when the system is degraded.
     /// Default is false.
     /// </summary>
-    //TODO: Try to move into specific configuration for this endpoint.
     public bool FailReadyWhenDegraded { get; set; }
+
+    /// <summary>
+    /// Alternative authentication schema used to authenticate caller.
+    /// By default, this value is 'ApiKeyScheme'.
+    /// </summary>
+    public string AuthScheme { get; set; } = "ApiKeyScheme";
 
     /// <summary>
     /// Add a component for perform system checks on.
@@ -103,7 +108,6 @@ public record Quilt4NetHealthApiOptions
     /// Default for Development environment is StackTrace.
     /// For all other environments default is Message.
     /// </summary>
-    [Obsolete("Set by method in Endpoints.")]
     public ExceptionDetailLevel? ExceptionDetail { get; set; }
 
     /// <summary>
