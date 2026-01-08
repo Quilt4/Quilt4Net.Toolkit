@@ -8,19 +8,19 @@ namespace Quilt4Net.Toolkit.Features.Health;
 public record Memory
 {
     /// <summary>
-    /// Memory usage of the application, in MB.
+    /// Memory usage of the application, in GB.
     /// </summary>
-    public required double ApplicationMemoryUsageMb { get; init; }
+    public required double ApplicationMemoryUsageGb { get; init; }
 
     /// <summary>
-    /// Available free memmory of the machine, in MB.
+    /// Total memory of the machine, in GB.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public required double AvailableFreeMemoryMb { get; init; }
+    public double? TotalMemoryGb { get; init; }
 
     /// <summary>
-    /// Total memory of the machine, in MB.
+    /// Available free memmory of the machine, in GB.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public required double TotalMemoryMb { get; init; }
+    public double? AvailableFreeMemoryGb { get; init; }
 }

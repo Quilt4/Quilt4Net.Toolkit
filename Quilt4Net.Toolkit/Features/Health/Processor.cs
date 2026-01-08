@@ -15,17 +15,26 @@ public record Processor
     /// <summary>
     /// GHz-hours for the process.
     /// </summary>
-    public required double TotalGHzHours { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double? TotalGHzHours { get; init; }
 
     /// <summary>
     /// Total number of cores on the machine.
     /// </summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public required int NumberOfCores { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int? PhysicalCpuCores { get; init; }
 
     /// <summary>
     /// Processor speed on the machine.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public required double ProcessorSpeedGHz { get; init; }
+    public double? ProcessorSpeedGHz { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double? CurrentCpuSpeedGHz { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double? L3CacheMb { get; init; }
 }
