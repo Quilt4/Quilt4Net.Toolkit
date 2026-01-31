@@ -3,12 +3,12 @@
 /// <summary>
 /// Level of information depending on if the user is authenticated or not.
 /// </summary>
-public enum AuthDetailLevel
+public enum DetailsLevel
 {
     /// <summary>
     /// Show details for everyone.
     /// </summary>
-    EveryOne,
+    Everyone,
 
     /// <summary>
     /// Show details for authenticated calls only.

@@ -7,7 +7,6 @@ using Quilt4Net.Toolkit.Features.Health.Metrics;
 using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Framework;
-using Quilt4Net.Toolkit.Health.Framework.Endpoints;
 
 namespace Quilt4Net.Toolkit.Health.Framework;
 
@@ -20,7 +19,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
     private readonly IMetricsService _metricsService;
     private readonly IVersionService _versionService;
     private readonly IHostEnvironment _hostEnvironment;
-    private static Quilt4NetHealthApiOptions _apiOptions;
+    private readonly Quilt4NetHealthApiOptions _apiOptions;
 
     public EndpointHandlerService(ILiveService liveService, IReadyService readyService, IHealthService healthService, IDependencyService dependencyService, IMetricsService metricsService, IVersionService versionService, IHostEnvironment hostEnvironment, IOptions<Quilt4NetHealthApiOptions> options)
     {
@@ -34,24 +33,22 @@ internal class EndpointHandlerService : IEndpointHandlerService
         _apiOptions = options.Value;
     }
 
-    public async Task<IResult> HandleCall(HealthEndpoint healthEndpoint, HttpContext ctx, CancellationToken cancellationToken)
+    public async Task<IResult> HandleCall<T>(HealthEndpoint healthEndpoint, HttpContext ctx, T options, CancellationToken cancellationToken) where T : MethodOptions
     {
         switch (healthEndpoint)
         {
-            case HealthEndpoint.Default:
-                throw new NotSupportedException($"This {nameof(healthEndpoint)} should already have been replaced with the actual {nameof(HealthEndpoint.Default)}.");
             case HealthEndpoint.Live:
                 return await LiveAsync(ctx);
             case HealthEndpoint.Ready:
                 return await ReadyAsync(ctx, cancellationToken);
             case HealthEndpoint.Health:
-                return await HealthAsync(ctx, cancellationToken);
+                return await HealthAsync(ctx, options as GetMethodOptions, cancellationToken);
             case HealthEndpoint.Dependencies:
-                return await DependencyAsync(ctx, cancellationToken);
+                return await DependencyAsync(ctx, options as GetMethodOptions, cancellationToken);
             case HealthEndpoint.Metrics:
-                return await MetricsAsync(ctx, cancellationToken);
+                return await MetricsAsync(ctx, options as GetMethodOptions, cancellationToken);
             case HealthEndpoint.Version:
-                return await VersionAsync(ctx, cancellationToken);
+                return await VersionAsync(ctx, options as GetMethodOptions, cancellationToken);
             default:
                 throw new ArgumentOutOfRangeException(nameof(healthEndpoint), $"Unknown {nameof(healthEndpoint)} {healthEndpoint}.");
         }
@@ -78,7 +75,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
     }
 
-    private async Task<IResult> HealthAsync(HttpContext ctx, CancellationToken cancellationToken)
+    private async Task<IResult> HealthAsync(HttpContext ctx, GetMethodOptions options, CancellationToken cancellationToken)
     {
         var responses = await _healthService.GetStatusAsync(null, true, cancellationToken).ToArrayAsync(cancellationToken);
 
@@ -102,22 +99,22 @@ internal class EndpointHandlerService : IEndpointHandlerService
 
         ctx.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
-        var isAuthenticated = ctx.User.Identity?.Name != null;
-        switch (_apiOptions.AuthDetail ?? (_hostEnvironment.IsProduction() ? AuthDetailLevel.AuthenticatedOnly : AuthDetailLevel.EveryOne))
+        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
+        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
         {
-            case AuthDetailLevel.EveryOne:
+            case DetailsLevel.Everyone:
                 break;
-            case AuthDetailLevel.AuthenticatedOnly:
+            case DetailsLevel.AuthenticatedOnly:
                 if (!isAuthenticated)
                 {
                     response = ClearDetails(response);
                 }
                 break;
-            case AuthDetailLevel.NoOne:
+            case DetailsLevel.NoOne:
                 response = ClearDetails(response);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(_apiOptions.AuthDetail), _apiOptions.AuthDetail, null);
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
         }
 
         if (response.Status == HealthStatus.Unhealthy)
@@ -128,13 +125,31 @@ internal class EndpointHandlerService : IEndpointHandlerService
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
     }
 
-    private async Task<IResult> DependencyAsync(HttpContext ctx, CancellationToken cancellationToken)
+    private async Task<IResult> DependencyAsync(HttpContext ctx, GetMethodOptions options, CancellationToken cancellationToken)
     {
         var responses = await _dependencyService.GetStatusAsync(cancellationToken).ToArrayAsync(cancellationToken);
         var response = responses.ToDependencyResponse();
 
         ctx.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
+        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
+        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
+        {
+            case DetailsLevel.Everyone:
+                break;
+            case DetailsLevel.AuthenticatedOnly:
+                if (!isAuthenticated)
+                {
+                    response = ClearDetails(response);
+                }
+                break;
+            case DetailsLevel.NoOne:
+                response = ClearDetails(response);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
+        }
+
         if (response.Status == HealthStatus.Unhealthy)
         {
             return ctx.Request.Method == HttpMethods.Head ? Results.StatusCode(503) : Results.Json(response, statusCode: 503);
@@ -143,15 +158,53 @@ internal class EndpointHandlerService : IEndpointHandlerService
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
     }
 
-    private async Task<IResult> MetricsAsync(HttpContext ctx, CancellationToken cancellationToken)
+    private async Task<IResult> MetricsAsync(HttpContext ctx, GetMethodOptions options, CancellationToken cancellationToken)
     {
         var response = await _metricsService.GetMetricsAsync(cancellationToken);
+
+        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
+        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
+        {
+            case DetailsLevel.Everyone:
+                break;
+            case DetailsLevel.AuthenticatedOnly:
+                if (!isAuthenticated)
+                {
+                    response = ClearDetails(response);
+                }
+                break;
+            case DetailsLevel.NoOne:
+                response = ClearDetails(response);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
+        }
+
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
     }
 
-    private async Task<IResult> VersionAsync(HttpContext ctx, CancellationToken cancellationToken)
+    private async Task<IResult> VersionAsync(HttpContext ctx, GetMethodOptions options, CancellationToken cancellationToken)
     {
         var response = await _versionService.GetVersionAsync(cancellationToken);
+
+        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
+        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
+        {
+            case DetailsLevel.Everyone:
+                break;
+            case DetailsLevel.AuthenticatedOnly:
+                if (!isAuthenticated)
+                {
+                    response = ClearDetails(response);
+                }
+                break;
+            case DetailsLevel.NoOne:
+                response = ClearDetails(response);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
+        }
+
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
     }
 
@@ -163,7 +216,48 @@ internal class EndpointHandlerService : IEndpointHandlerService
         };
     }
 
-    private static async Task<HealthComponent> GetCertificatehealth(HttpContext ctx)
+    private static DependencyResponse ClearDetails(DependencyResponse response)
+    {
+        return response with
+        {
+            Components = response.Components.ToDictionary(x => x.Key, x => x.Value with
+            {
+                DependencyComponents = x.Value.DependencyComponents.ToDictionary(y => y.Key, y => y.Value with { Details = null })
+            })
+        };
+    }
+
+    private static MetricsResponse ClearDetails(MetricsResponse response)
+    {
+        return response with
+        {
+            Machine = null,
+            Memory = new Memory
+            {
+                ApplicationMemoryUsageGb = response.Memory.ApplicationMemoryUsageGb
+            },
+            Processor = new Processor
+            {
+                CpuTime = response.Processor.CpuTime,
+                NumberOfCores = response.Processor.NumberOfCores,
+            },
+            Storage = null,
+            Gpu = null,
+        };
+    }
+
+    private static VersionResponse ClearDetails(VersionResponse response)
+    {
+        return response with
+        {
+            IpAddress = null,
+            Machine = null,
+            Version = null
+        };
+    }
+
+
+    private async Task<HealthComponent> GetCertificatehealth(HttpContext ctx)
     {
         if (!(_apiOptions.Certificate?.SelfCheckEnabled ?? false)) return null;
 

@@ -15,22 +15,11 @@ public record Quilt4NetHealthApiOptions
     private readonly ConcurrentDictionary<string, Dependency> _dependencies = new();
 
     /// <summary>
-    /// <para>This string value can be used to turn the GET, HEAD and visibility on or off for different endpoints.</para>
-    /// <para>The values are by position Default, Live, Ready, Health, Dependencies, Metrics and Version.</para>
-    /// <para></para>
-    /// <para>| Value | GET  | HEAD | Visible |</para>
-    /// <para>| ----- | ---- | ---- | ------- |</para>
-    /// <para>| 0     | No   | No   | No      |</para>
-    /// <para>| 1     | Yes  | No   | No      |</para>
-    /// <para>| 2     | No   | Yes  | No      |</para>
-    /// <para>| 3     | Yes  | Yes  | No      |</para>
-    /// <para>| 4     | Yes  | No   | Yes     |</para>
-    /// <para>| 5     | No   | Yes  | Yes     |</para>
-    /// <para>| 6     | Yes  | Yes  | Yes     |</para>
-    /// <para></para>
-    /// <para>Default is 6666644</para>
+    /// Override State wher all endpoints can be set at once.
+    /// If set, this value is used for all endpoints regardless of individual configuration.
+    /// By default, this value is not set. (The individual endpoint configuration is used)
     /// </summary>
-    public string Endpoints { get; set; } = "6666644";
+    public EndpointState? OverrideState { get; set; }
 
     /// <summary>
     /// Pattern to between the base address and the controller name. This value can be empty.
@@ -55,11 +44,22 @@ public record Quilt4NetHealthApiOptions
     public string DefaultAction { get; set; } = "Health";
 
     /// <summary>
+    /// Keys: Live, Ready, Health, Dependencies, Metrics, Version (case-insensitive).
+    /// </summary>
+    public Dictionary<HealthEndpoint, HealthEndpointOptions> Endpoints { get; set; } = new();
+
+    /// <summary>
     /// If set to true, Ready will return 503 when the system is degraded.
     /// If set to false Ready will return 200 when the system is degraded.
     /// Default is false.
     /// </summary>
     public bool FailReadyWhenDegraded { get; set; }
+
+    /// <summary>
+    /// Alternative authentication schema used to authenticate caller.
+    /// By default, this value is 'ApiKeyScheme'.
+    /// </summary>
+    public string AuthScheme { get; set; } = "ApiKeyScheme";
 
     /// <summary>
     /// Add a component for perform system checks on.
@@ -111,13 +111,6 @@ public record Quilt4NetHealthApiOptions
     public ExceptionDetailLevel? ExceptionDetail { get; set; }
 
     /// <summary>
-    /// Level of detailed returned for different types of users.
-    /// Default for production is AuthenticatedOnly.
-    /// For all other environments default is EveryOne.
-    /// </summary>
-    public AuthDetailLevel? AuthDetail { get; set; }
-
-    /// <summary>
     /// HealthAddress of check for ip address, like http://ipv4.icanhazip.com/.
     /// Set this value to null, if you do not want to perform ip address check.
     /// </summary>
@@ -130,5 +123,5 @@ public record Quilt4NetHealthApiOptions
 
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
-    internal IEnumerable<Dependency> Dependencies => _dependencies.Values;
+    internal IEnumerable<Dependency> DependencyRegistrations => _dependencies.Values;
 }

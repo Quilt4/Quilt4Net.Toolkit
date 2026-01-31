@@ -17,7 +17,7 @@ internal class DependencyService : IDependencyService
 
     public async IAsyncEnumerable<KeyValuePair<string, DependencyComponent>> GetStatusAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var tasks = _apiOptions.Dependencies.Select(x => Task.Run<(string Name, bool Essential, Dictionary<string, HealthComponent> Components, Uri Uri)>(async () =>
+        var tasks = _apiOptions.DependencyRegistrations.Select(x => Task.Run<(string Name, bool Essential, Dictionary<string, HealthComponent> Components, Uri Uri)>(async () =>
         {
             var handler = new HttpClientHandler();
 
