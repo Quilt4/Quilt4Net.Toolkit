@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authentication;
+﻿using System.Diagnostics;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Api;
@@ -167,10 +168,17 @@ public static class HealthRegistration
             {
                 if (!(ctx.User.Identity?.IsAuthenticated ?? false))
                 {
-                    var result = await ctx.AuthenticateAsync(o.AuthScheme);
-                    if (result.Succeeded && result.Principal != null)
+                    try
                     {
-                        ctx.User = result.Principal;
+                        var result = await ctx.AuthenticateAsync(o.AuthScheme);
+                        if (result.Succeeded && result.Principal != null)
+                        {
+                            ctx.User = result.Principal;
+                        }
+                    }
+                    catch (InvalidOperationException e)
+                    {
+                        Trace.TraceWarning(e.Message);
                     }
                 }
 
