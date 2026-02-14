@@ -102,6 +102,8 @@ public record Quilt4NetHealthApiOptions
         return _componentServices.TryAdd(typeof(TService), typeof(TService));
     }
 
+    public HeartbeatOptions Heartbeat { get; set; } = new();
+
     /// <summary>
     /// Level of detail returned when an exception occurs.
     /// Default for Production environment is Hidden.

@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Api;
@@ -8,11 +7,13 @@ using Quilt4Net.Toolkit.Features.Health.Dependency;
 using Quilt4Net.Toolkit.Features.Health.Live;
 using Quilt4Net.Toolkit.Features.Health.Metrics;
 using Quilt4Net.Toolkit.Features.Health.Metrics.Machine;
-using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Metrics.Storage;
+using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Features.Probe;
+using Quilt4Net.Toolkit.Health.Features.Heartbeat;
 using Quilt4Net.Toolkit.Health.Framework;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 
@@ -62,6 +63,7 @@ public static class HealthRegistration
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
+        services.AddTransient<IHeartbeatService, HeartbeatService>();
 
         foreach (var componentServiceType in apiOptions.ComponentServices)
         {

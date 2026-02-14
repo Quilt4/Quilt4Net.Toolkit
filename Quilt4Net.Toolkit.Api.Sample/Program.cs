@@ -92,9 +92,14 @@ builder.AddQuilt4NetHealthApi(o =>
         Essential = true,
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
+
+    o.Heartbeat.Enabled = true;
+    o.Heartbeat.Interval = TimeSpan.FromSeconds(30);
 });
 
 var app = builder.Build();
+
+app.UseQuilt4NetApiLogging();
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -109,6 +114,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.UseQuilt4NetHealthApi();
-app.UseQuilt4NetLogging();
 
 app.Run();
