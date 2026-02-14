@@ -49,8 +49,11 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddHostedService<MyBackgroundService>();
 builder.Services.AddHostedService<MyHostedService>();
 
-builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
-builder.Logging.AddApplicationInsights();
+var aiConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrEmpty(aiConnectionString))
+{
+    builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = aiConnectionString });
+}
 
 builder.Services.AddTransient<BackgroundHealthCheckService>();
 

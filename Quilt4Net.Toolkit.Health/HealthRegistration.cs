@@ -65,6 +65,13 @@ public static class HealthRegistration
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
         services.AddTransient<IHeartbeatService, HeartbeatService>();
 
+        if (apiOptions.Heartbeat.Enabled)
+        {
+            services.AddSingleton(apiOptions.Heartbeat);
+            services.AddSingleton<HeartbeatBackgroundService>();
+            services.AddHostedService(sp => sp.GetRequiredService<HeartbeatBackgroundService>());
+        }
+
         foreach (var componentServiceType in apiOptions.ComponentServices)
         {
             services.AddTransient(componentServiceType);
@@ -90,6 +97,9 @@ public static class HealthRegistration
 
         CreaetLogScope(app);
         RegisterEndpoints(o, app, o.DependencyRegistrations.Any());
+
+        var heartbeatBackgroundService = app.Services.GetService<HeartbeatBackgroundService>();
+        heartbeatBackgroundService?.Start();
     }
 
     private static Quilt4NetHealthApiOptions BuildOptions(IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure)

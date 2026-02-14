@@ -9,14 +9,14 @@ namespace Quilt4Net.Toolkit.Health.Features.Heartbeat;
 
 internal class HeartbeatService : IHeartbeatService
 {
-    private readonly TelemetryClient _telemetryClient;
+    private readonly TelemetryClient? _telemetryClient;
     private readonly IHealthService _healthService;
     private readonly IMetricsService _metricsService;
     private readonly IVersionService _versionService;
     private readonly string _name;
     private static string _version;
 
-    public HeartbeatService(TelemetryClient telemetryClient, IHealthService healthService, IMetricsService metricsService, IVersionService versionService)
+    public HeartbeatService(IHealthService healthService, IMetricsService metricsService, IVersionService versionService, TelemetryClient? telemetryClient = null)
     {
         _telemetryClient = telemetryClient;
         _healthService = healthService;
@@ -27,6 +27,8 @@ internal class HeartbeatService : IHeartbeatService
 
     public async Task ExecuteAsync(CancellationToken cancellationToken)
     {
+        if (_telemetryClient == null) return;
+
         var statuses = await _healthService.GetStatusAsync(cancellationToken: cancellationToken).ToArrayAsync(cancellationToken);
         var statusType = $"{statuses.Max(x => x.Value.Status)}".ToLower();
         var healthy = statuses.All(x => x.Value.Status != HealthStatus.Unhealthy);
