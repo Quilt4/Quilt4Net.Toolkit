@@ -4,6 +4,8 @@
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+TODO: Add brief info
+
 [Read more here](Quilt4Net.Toolkit/README.md)
 
 ## Quilt4Net Toolkit Health
@@ -11,13 +13,20 @@
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Health)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *Metrics* in .NET Web Applications.
-[Read more here](Quilt4Net.Toolkit.Blazor/README.md)
+TODO: Add brief info
+
+This package is dependent on `Quilt4Net.Toolkit`.
+
+[Read more here](Quilt4Net.Toolkit.Health/README.md)
 
 ## Quilt4Net Toolkit Api
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Api)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Api)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Api)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+TODO: Add brief info
+
+This package is dependent on `Quilt4Net.Toolkit`.
 
 [Read more here](Quilt4Net.Toolkit.Api/README.md)
 
@@ -25,5 +34,9 @@ Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *M
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Blazor)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Blazor)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Blazor)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+TODO: Add brief info
+
+This package is dependent on `Quilt4Net.Toolkit`.
 
 [Read more here](Quilt4Net.Toolkit.Blazor/README.md)
