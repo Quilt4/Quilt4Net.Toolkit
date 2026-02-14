@@ -21,15 +21,27 @@ namespace Quilt4Net.Toolkit.Health;
 
 public static class HealthRegistration
 {
+    [Obsolete($"Use {nameof(AddQuilt4NetHealth)} instead.")]
+    public static IServiceCollection AddQuilt4NetHealthApi(this IHostApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> configure = null)
+    {
+        return builder.AddQuilt4NetHealth(configure);
+    }
+
+    [Obsolete($"Use {nameof(AddQuilt4NetHealth)} instead.")]
+    public static IServiceCollection AddQuilt4NetHealthApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure = null)
+    {
+        return AddQuilt4NetHealth(services, configuration, environment, configure);
+    }
+
     /// <summary>
     /// Add API with Health endpoints.
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="configure"></param>
     /// <returns></returns>
-    public static IServiceCollection AddQuilt4NetHealthApi(this IHostApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> configure = null)
+    public static IServiceCollection AddQuilt4NetHealth(this IHostApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> configure = null)
     {
-        return AddQuilt4NetHealthApi(builder.Services, builder.Configuration, builder.Environment, configure);
+        return AddQuilt4NetHealth(builder.Services, builder.Configuration, builder.Environment, configure);
     }
 
     /// <summary>
@@ -39,7 +51,7 @@ public static class HealthRegistration
     /// <param name="configuration"></param>
     /// <param name="environment"></param>
     /// <param name="configure"></param>
-    public static IServiceCollection AddQuilt4NetHealthApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure = null)
+    public static IServiceCollection AddQuilt4NetHealth(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure = null)
     {
         var apiOptions = BuildOptions(configuration, environment, configure);
 
@@ -63,11 +75,11 @@ public static class HealthRegistration
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
+        services.AddSingleton(apiOptions.Heartbeat);
         services.AddTransient<IHeartbeatService, HeartbeatService>();
 
         if (apiOptions.Heartbeat.Enabled)
         {
-            services.AddSingleton(apiOptions.Heartbeat);
             services.AddSingleton<HeartbeatBackgroundService>();
             services.AddHostedService(sp => sp.GetRequiredService<HeartbeatBackgroundService>());
         }
@@ -85,15 +97,16 @@ public static class HealthRegistration
         return services;
     }
 
-    /// <summary>
-    /// Sets up routing to the Quilt4Net health checks.
-    /// Must be executed after UseAuthentication and UseAuthorization for authentication to work.
-    /// </summary>
-    /// <param name="app"></param>
+    [Obsolete($"Use {nameof(UseQuilt4NetHealth)} instead.")]
     public static void UseQuilt4NetHealthApi(this WebApplication app)
     {
+        app.UseQuilt4NetHealth();
+    }
+
+    public static void UseQuilt4NetHealth(this WebApplication app)
+    {
         var o = app.Services.GetRequiredService<IOptions<Quilt4NetHealthApiOptions>>().Value;
-        if (o == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealthApi)} before {nameof(UseQuilt4NetHealthApi)}.");
+        if (o == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealth)} before {nameof(UseQuilt4NetHealthApi)}.");
 
         CreaetLogScope(app);
         RegisterEndpoints(o, app, o.DependencyRegistrations.Any());
@@ -111,7 +124,7 @@ public static class HealthRegistration
         configuration.GetSection("Quilt4Net:HealthApi").Bind(o);
         configure?.Invoke(o);
 
-        foreach (HealthEndpoint ep in Enum.GetValues<HealthEndpoint>())
+        foreach (var ep in Enum.GetValues<HealthEndpoint>())
         {
             o.Endpoints.TryAdd(ep, new HealthEndpointOptions());
         }

@@ -28,21 +28,6 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Description = "API Key needed to access the endpoints"
     });
-    //TODO: Refactor: Fix
-    //c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    //{
-    //    {
-    //        new OpenApiSecurityScheme
-    //        {
-    //            Reference = new OpenApiReference
-    //            {
-    //                Type = ReferenceType.SecurityScheme,
-    //                Id = "ApiKey"
-    //            }
-    //        },
-    //        new List<string>()
-    //    }
-    //});
     c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "Quilt4Net.Toolkit.Api.Sample.xml"));
 });
 
@@ -68,7 +53,7 @@ builder.Services.AddQuilt4NetApiLogging(o =>
         return Task.FromResult((request, response, details));
     };
 });
-builder.AddQuilt4NetHealthApi(o =>
+builder.AddQuilt4NetHealth(o =>
 {
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
 
@@ -98,6 +83,7 @@ builder.AddQuilt4NetHealthApi(o =>
 
     o.Heartbeat.Enabled = true;
     o.Heartbeat.Interval = TimeSpan.FromSeconds(30);
+    o.Heartbeat.ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
 });
 
 var app = builder.Build();
@@ -116,6 +102,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.UseQuilt4NetHealthApi();
+app.UseQuilt4NetHealth();
 
 app.Run();
