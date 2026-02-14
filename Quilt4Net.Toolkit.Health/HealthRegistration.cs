@@ -20,6 +20,12 @@ namespace Quilt4Net.Toolkit.Health;
 
 public static class HealthRegistration
 {
+    /// <summary>
+    /// Add API with Health endpoints.
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="configure"></param>
+    /// <returns></returns>
     public static IServiceCollection AddQuilt4NetHealthApi(this IHostApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> configure = null)
     {
         return AddQuilt4NetHealthApi(builder.Services, builder.Configuration, builder.Environment, configure);
@@ -70,6 +76,20 @@ public static class HealthRegistration
         return services;
     }
 
+    /// <summary>
+    /// Sets up routing to the Quilt4Net health checks.
+    /// Must be executed after UseAuthentication and UseAuthorization for authentication to work.
+    /// </summary>
+    /// <param name="app"></param>
+    public static void UseQuilt4NetHealthApi(this WebApplication app)
+    {
+        var o = app.Services.GetRequiredService<IOptions<Quilt4NetHealthApiOptions>>().Value;
+        if (o == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealthApi)} before {nameof(UseQuilt4NetHealthApi)}.");
+
+        CreaetLogScope(app);
+        RegisterEndpoints(o, app, o.DependencyRegistrations.Any());
+    }
+
     private static Quilt4NetHealthApiOptions BuildOptions(IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure)
     {
         var o = new Quilt4NetHealthApiOptions();
@@ -98,20 +118,6 @@ public static class HealthRegistration
         }
 
         return o;
-    }
-
-    /// <summary>
-    /// Sets up routing to the Quilt4Net health checks.
-    /// Must be executed after UseAuthentication and UseAuthorization for authentication to work.
-    /// </summary>
-    /// <param name="app"></param>
-    public static void UseQuilt4NetHealthApi(this WebApplication app)
-    {
-        var o = app.Services.GetRequiredService<IOptions<Quilt4NetHealthApiOptions>>().Value;
-        if (o == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealthApi)} before {nameof(UseQuilt4NetHealthApi)}.");
-
-        CreaetLogScope(app);
-        RegisterEndpoints(o, app, o.DependencyRegistrations.Any());
     }
 
     private static void CreaetLogScope(WebApplication app)
@@ -211,7 +217,7 @@ public static class HealthRegistration
             }
         }
 
-        async Task<IResult> HandleCall<T>(HealthEndpoint endpoint, HttpContext ctx, T opt, CancellationToken cancellationToken) where T : MethodOptions
+        async Task<IResult> HandleCall(HealthEndpoint endpoint, HttpContext ctx, T opt, CancellationToken cancellationToken) //where T : MethodOptions
         {
             var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
             switch (options.Access.Level ?? (app.Environment.IsProduction() ? AccessLevel.AuthenticatedOnly : AccessLevel.Everyone))
@@ -342,25 +348,4 @@ public static class HealthRegistration
         o.Endpoints[HealthEndpoint.Metrics].Head.State = EndpointState.Disabled;
         o.Endpoints[HealthEndpoint.Version].Head.State = EndpointState.Disabled;
     }
-
-    //private static bool ValidateOptions(Quilt4NetHealthApiOptions o, out string? error)
-    //{
-    //    error = null;
-
-    //    if (!o.Endpoints.ContainsKey(HealthEndpoint.Live) || !o.Endpoints.ContainsKey(HealthEndpoint.Ready))
-    //    {
-    //        error = "Endpoints must include at least Live and Ready.";
-    //        return false;
-    //    }
-
-    //    // Optional: if you want to fail hard if someone tries to enable HEAD:
-    //    if (o.Endpoints.TryGetValue(HealthEndpoint.Metrics, out var metrics) &&
-    //        metrics.Head.State != EndpointState.Disabled)
-    //    {
-    //        error = "Metrics endpoint does not support HEAD. Set Metrics:Head:State to Disabled.";
-    //        return false;
-    //    }
-
-    //    return true;
-    //}
 }

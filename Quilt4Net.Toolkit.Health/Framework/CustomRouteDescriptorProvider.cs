@@ -12,7 +12,7 @@ internal class CustomRouteDescriptorProvider : IActionDescriptorProvider
         _apiOptions = apiOptions;
     }
 
-    public int Order => -1000; // Ensure it runs early
+    public int Order => -1000;
 
     public void OnProvidersExecuted(ActionDescriptorProviderContext context)
     {
