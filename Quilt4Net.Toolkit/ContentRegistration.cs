@@ -13,13 +13,22 @@ public static class ContentRegistration
     /// <summary>
     /// Register backend usages of content from Quilt4Net.
     /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="options"></param>
+    public static void AddQuilt4NetContent(this IHostApplicationBuilder builder, Action<ContentOptions> options = null)
+    {
+        builder.Services.AddQuilt4NetContent(builder.Configuration, options);
+    }
+
+    /// <summary>
+    /// Register backend usages of content from Quilt4Net.
+    /// </summary>
     /// <param name="services"></param>
+    /// <param name="configuration"></param>
     /// <param name="options"></param>
     /// <exception cref="InvalidOperationException"></exception>
-    public static void AddQuilt4NetContent(this IServiceCollection services, Action<ContentOptions> options = null)
+    public static void AddQuilt4NetContent(this IServiceCollection services, IConfiguration configuration, Action<ContentOptions> options = null)
     {
-        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
-
         var apiKey = configuration?.GetSection("Quilt4Net").GetSection("ApiKey").Value;
         var address = configuration?.GetSection("Quilt4Net").GetSection("Quilt4NetAddress").Value;
 

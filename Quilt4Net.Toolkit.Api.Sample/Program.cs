@@ -42,11 +42,11 @@ if (!string.IsNullOrEmpty(aiConnectionString))
 
 builder.Services.AddTransient<BackgroundHealthCheckService>();
 
-builder.Services.AddQuilt4NetApplicationInsightsClient();
-builder.Services.AddQuilt4NetHealthClient();
-builder.Services.AddQuilt4NetContent();
-builder.Services.AddQuilt4NetRemoteConfiguration();
-builder.Services.AddQuilt4NetApiLogging(o =>
+builder.AddQuilt4NetApplicationInsightsClient();
+builder.AddQuilt4NetHealthClient();
+builder.AddQuilt4NetContent();
+builder.AddQuilt4NetRemoteConfiguration();
+builder.AddQuilt4NetApiLogging(o =>
 {
     o.Interceptor = (request, response, details, _) =>
     {

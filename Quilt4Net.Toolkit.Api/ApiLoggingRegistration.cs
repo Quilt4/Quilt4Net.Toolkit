@@ -10,24 +10,33 @@ public static class ApiLoggingRegistration
     [Obsolete($"Use {nameof(AddQuilt4NetApiLogging)} instead.")]
     public static void AddQuilt4NetLogging(this WebApplicationBuilder builder, Action<LoggingOptions> options = null)
     {
-        AddQuilt4NetApiLogging(builder.Services, options);
+        AddQuilt4NetApiLogging(builder, options);
     }
 
     [Obsolete($"Use {nameof(AddQuilt4NetApiLogging)} instead.")]
-    public static void AddQuilt4NetLogging(this IServiceCollection services, Action<LoggingOptions> options = null)
+    public static void AddQuilt4NetLogging(this IServiceCollection services, IConfiguration configuration, Action<LoggingOptions> options = null)
     {
-        services.AddQuilt4NetApiLogging(options);
+        services.AddQuilt4NetApiLogging(configuration, options);
     }
 
     /// <summary>
-    /// Add logging for API calls.
+    /// Register backend usages of Api logging.
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="options"></param>
+    public static void AddQuilt4NetApiLogging(this IHostApplicationBuilder builder, Action<LoggingOptions> options = null)
+    {
+        builder.Services.AddQuilt4NetApiLogging(builder.Configuration, options);
+    }
+
+    /// <summary>
+    /// Register backend usages of Api logging.
     /// </summary>
     /// <param name="services"></param>
+    /// <param name="configuration"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4NetApiLogging(this IServiceCollection services, Action<LoggingOptions> options = null)
+    public static void AddQuilt4NetApiLogging(this IServiceCollection services, IConfiguration configuration, Action<LoggingOptions> options = null)
     {
-        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
-
         _options = configuration?.GetSection("Quilt4Net:ApiLogging").Get<LoggingOptions>()
                    ?? configuration?.GetSection("Quilt4Net:Logging").Get<LoggingOptions>()
                    ?? new LoggingOptions();

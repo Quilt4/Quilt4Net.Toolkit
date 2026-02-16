@@ -16,7 +16,7 @@ Feature toggles are boolean values of remote configuration.
 Install the NuGet package [Quilt4Net.Toolkit](https://www.nuget.org/packages/Quilt4Net.Toolkit) and register the service.
 
 ```csharp
-builder.Services.AddQuilt4NetRemoteConfiguration();
+builder.AddQuilt4NetRemoteConfiguration();
 ```
 
 Add your API key from [Quilt4Net Web](https://quilt4net.com) in `appsettings.json`.
@@ -76,7 +76,7 @@ Configuration path: `Quilt4Net:RemoteConfiguration`
 Manage multilingual content from [Quilt4Net Web](https://quilt4net.com).
 
 ```csharp
-builder.Services.AddQuilt4NetContent();
+builder.AddQuilt4NetContent();
 ```
 
 Inject `IContentService` to retrieve and manage content.
@@ -100,7 +100,7 @@ Configuration path: `Quilt4Net:Content`
 Client for consuming health endpoints from a remote service that uses Quilt4Net Health API.
 
 ```csharp
-builder.Services.AddQuilt4NetHealthClient(o =>
+builder.AddQuilt4NetHealthClient(o =>
 {
     o.HealthAddress = "https://my-service.example.com/api/Health/";
 });
@@ -127,7 +127,7 @@ Configuration path: `Quilt4Net:HealthClient`
 Client for querying Application Insights data (logs, metrics, exceptions).
 
 ```csharp
-builder.Services.AddQuilt4NetApplicationInsightsClient();
+builder.AddQuilt4NetApplicationInsightsClient();
 ```
 
 ### ApplicationInsightsOptions
