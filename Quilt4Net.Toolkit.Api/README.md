@@ -1,116 +1,169 @@
-﻿# Quilt4Net Toolkit Api
+# Quilt4Net.Toolkit.Api
 [![GitHub repo](https://img.shields.io/github/repo-size/Quilt4/Quilt4Net.Toolkit?style=flat&logo=github&logoColor=red&label=Repo)](https://github.com/Quilt4/Quilt4Net.Toolkit)
 
-Add extra api logging with `AddQuilt4NetApiLogging`.
+HTTP request/response logging and correlation tracking middleware for .NET Web Applications.
 
----
-# Features moved
-Some features have moved to *Quilt4Net Toolkit Health*.
+Captures method, path, headers, query parameters, request/response bodies, client IP, and execution time. Logs to Application Insights and/or standard `ILogger`.
 
 ## Get started
-After having installed the nuget package.
-Register *AddQuilt4NetHealthApi* as a service and use it in the app.
-```
+
+Install the NuGet package [Quilt4Net.Toolkit.Api](https://www.nuget.org/packages/Quilt4Net.Toolkit.Api) and register the service in `Program.cs`.
+
+```csharp
 var builder = WebApplication.CreateBuilder(args);
-...
-builder.AddQuilt4NetHealthApi();
+
+builder.AddQuilt4NetApiLogging();
 
 var app = builder.Build();
-...
-app.UseRouting();
-...
-app.UseQuilt4NetApi();
+
+app.UseQuilt4NetApiLogging();
 
 app.Run();
 ```
-You have to call `AddQuilt4NetHealthApi` in any order on the *builder* (or *builder.Services*).
-On the app you have to call `UseRouting` before `UseQuilt4NetApi`.
 
-### Register service check
-This is a basic way of adding a service check. This check will be performed when calling *Health*, *Ready* or *Dependencies*.
-```
-builder.AddQuilt4NetHealthApi(o =>
+By default, all requests to paths starting with `/Api` are logged.
+
+## Correlation ID
+
+When `UseCorrelationId` is enabled (default), the middleware reads the `X-Correlation-ID` header from incoming requests. If no header is present, a new GUID is generated. The correlation ID is stored in `HttpContext.Items` and returned in the response header, enabling distributed tracing across services.
+
+## Logging mode
+
+Control where logs are sent using `HttpRequestLogMode`.
+
+```csharp
+builder.AddQuilt4NetApiLogging(o =>
 {
-    o.AddComponent(new Component
+    o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights | HttpRequestLogMode.Logger;
+});
+```
+
+| Value | Description |
+|-------|-------------|
+| `None` | No logging. |
+| `ApplicationInsights` | Append request/response data to Application Insights request telemetry. |
+| `Logger` | Log via the standard `ILogger` pipeline. |
+
+Values can be combined with `|` to log to multiple destinations.
+
+## Path filtering
+
+By default, only paths matching `^/Api` (case-insensitive) are logged. Override with regex patterns.
+
+```csharp
+builder.AddQuilt4NetApiLogging(o =>
+{
+    o.IncludePaths = [".*"]; // Log all paths
+});
+```
+
+## Per-endpoint control
+
+Use `[Logging]` and `[LoggingStream]` attributes to override logging behavior on individual endpoints.
+
+```csharp
+[Logging(RequestBody = true, ResponseBody = false)]
+public async Task<IActionResult> StreamData() { ... }
+
+[Logging(Enabled = false)]
+public IActionResult InternalEndpoint() { ... }
+
+[LoggingStream] // Shorthand for ResponseBody = false
+public async Task<IActionResult> StreamEvents() { ... }
+```
+
+The `[Logging]` attribute can be applied to methods or classes.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Enabled` | `true` | Enable or disable all logging for the endpoint. |
+| `RequestBody` | `true` | Log the request body. |
+| `ResponseBody` | `true` | Log the response body. Set to `false` for streaming endpoints. |
+
+## Interceptor
+
+Use an interceptor to modify or filter logged data before it is written. This is useful for removing sensitive information such as passwords or API keys.
+
+```csharp
+builder.AddQuilt4NetApiLogging(o =>
+{
+    o.Interceptor = async (request, response, properties, serviceProvider) =>
     {
-        Name = "some-service",
-        Essential = true,
-        CheckAsync = async _ =>
-        {
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            return new CheckResult { Success = true };
-        }
-    });
+        // Remove sensitive headers
+        request.Headers.Remove("Authorization");
+        return (request, response, properties);
+    };
 });
 ```
 
-For more complex scenarios, implement *IComponentService* and add the servcice here to separate the setup from the implementation.
-```
-builder.AddQuilt4NetHealthApi(o =>
+## Configuration
+
+All options can be set via code or `appsettings.json`. Code takes priority over `appsettings.json`, which takes priority over defaults.
+
+### Code configuration
+
+```csharp
+builder.AddQuilt4NetApiLogging(o =>
 {
-    o.AddComponentService<MyComponentService>();
+    o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights;
+    o.UseCorrelationId = true;
+    o.MaxBodySize = 5_000_000;
+    o.IncludePaths = ["^/Api", "^/webhook"];
+    o.LogRequestBodyByDefault = true;
+    o.LogResponseBodyByDefault = false;
 });
 ```
 
-To add dependency information to other services that uses *Quilt4Net API*. This will call the health check on the other service.
-```
-builder.AddQuilt4NetHealthApi(o =>
-{
-    o.AddDependency(new Dependency
-    {
-        Name = "Dependency",
-        Essential = true,
-        Uri = new Uri("https://localhost:7119/api/Health/")
-    });
-});
-```
+### appsettings.json
 
-### Configuration options
-Configuration can be configured by code. This will override any other configuration.
-```
-builder.AddQuilt4NetHealthApi(o =>
-{
-    o.ShowInSwagger = false;
-    o.FailReadyWhenDegraded = true;
-});
-```
-Configuration in *appsettings.json*.
-```
+```json
 {
   "Quilt4Net": {
-    "ShowInSwagger": false,
-    "FailReadyWhenDegraded" : true,
+    "ApiLogging": {
+      "LogHttpRequest": 1,
+      "UseCorrelationId": true,
+      "MonitorName": "Quilt4Net",
+      "MaxBodySize": 1000000,
+      "IncludePaths": ["^/Api"],
+      "LogRequestBodyByDefault": true,
+      "LogResponseBodyByDefault": false
+    }
   }
 }
 ```
-For values without configuration default values are used.
 
-- ShowInSwagger: Turns on visibility in swagger.
-- FailReadyWhenDegraded: When calling *Ready* and the service is *Degraded* it sill by default return *200*. If this is set to *true*, the response will be *503* for degraded components.
+Configuration path: `Quilt4Net:ApiLogging`
 
-### Endpoints
-Use the endpoint in different scenarios.
+### LoggingOptions
 
-#### Health
-`~/api/Health/health`
+| Property | Default | Description |
+|----------|---------|-------------|
+| `LogHttpRequest` | `ApplicationInsights` | Logging destination. Combine with `\|` for multiple. |
+| `UseCorrelationId` | `true` | Enable `X-Correlation-ID` header tracking. |
+| `MonitorName` | `"Quilt4Net"` | Monitor name for tracking log items. Set to empty to omit. |
+| `MaxBodySize` | `1 MB` | Maximum body size to log. Set to `0` to disable body logging. |
+| `IncludePaths` | `["^/Api"]` | Regex patterns (case-insensitive) for paths to include. |
+| `LogRequestBodyByDefault` | `true` | Log request body by default. Override per endpoint with `[Logging]`. |
+| `LogResponseBodyByDefault` | `false` | Log response body by default. Override per endpoint with `[Logging]`. |
+| `Interceptor` | `null` | Callback to modify or filter logged data before writing. |
 
-Use this by ping-services to check that everything works as intended. It can also be used for smoke tests after release to assure that the service is working.
+## Logged data
 
-#### Liveness
-`~/api/Health/live`
+### Request
 
-Use this endpoint to check if a new instance sould be started. Commonly used in *kubernetes* or *Azure* to make sure the correct number of pods or machines are active.
+| Field | Description |
+|-------|-------------|
+| `Method` | HTTP method (GET, POST, etc.). |
+| `Path` | Request path. |
+| `Headers` | Request headers (cookies are automatically filtered). |
+| `Query` | Query string parameters. |
+| `Body` | Request body (respects `MaxBodySize` limit). |
+| `ClientIp` | Client IP address. |
 
-#### Readyness
-`~/api/Health/ready`
+### Response
 
-Use this endpoint to check if the instance is ready to perform work.
-
-## Service Probe
-TODO: Revisit
-
-## Troubleshooting
-Error at startup with the message:
-`Unhandled exception. System.InvalidOperationException: EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware and so must be added to the request execution pipeline before EndpointMiddleware. Please add EndpointRoutingMiddleware by calling 'IApplicationBuilder.UseRouting' inside the call to 'Configure(...)' in the application startup code.`
-
-The solution is to add `app.UseRouting();` before `app.UseQuilt4NetApi();` in *Program.cs*.
+| Field | Description |
+|-------|-------------|
+| `StatusCode` | HTTP status code. |
+| `Headers` | Response headers. |
+| `Body` | Response body (respects `MaxBodySize` limit). |

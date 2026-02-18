@@ -28,44 +28,32 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Description = "API Key needed to access the endpoints"
     });
-    //TODO: Refactor: Fix
-    //c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    //{
-    //    {
-    //        new OpenApiSecurityScheme
-    //        {
-    //            Reference = new OpenApiReference
-    //            {
-    //                Type = ReferenceType.SecurityScheme,
-    //                Id = "ApiKey"
-    //            }
-    //        },
-    //        new List<string>()
-    //    }
-    //});
     c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "Quilt4Net.Toolkit.Api.Sample.xml"));
 });
 
 builder.Services.AddHostedService<MyBackgroundService>();
 builder.Services.AddHostedService<MyHostedService>();
 
-builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"] });
-builder.Logging.AddApplicationInsights();
+var aiConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrEmpty(aiConnectionString))
+{
+    builder.Services.AddApplicationInsightsTelemetry(new ApplicationInsightsServiceOptions { ConnectionString = aiConnectionString });
+}
 
 builder.Services.AddTransient<BackgroundHealthCheckService>();
 
-builder.Services.AddQuilt4NetApplicationInsightsClient();
-builder.Services.AddQuilt4NetHealthClient();
-builder.Services.AddQuilt4NetContent();
-builder.Services.AddQuilt4NetRemoteConfiguration();
-builder.Services.AddQuilt4NetApiLogging(o =>
+builder.AddQuilt4NetApplicationInsightsClient();
+builder.AddQuilt4NetHealthClient();
+builder.AddQuilt4NetContent();
+builder.AddQuilt4NetRemoteConfiguration();
+builder.AddQuilt4NetApiLogging(o =>
 {
     o.Interceptor = (request, response, details, _) =>
     {
         return Task.FromResult((request, response, details));
     };
 });
-builder.AddQuilt4NetHealthApi(o =>
+builder.AddQuilt4NetHealth(o =>
 {
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
 
@@ -92,9 +80,15 @@ builder.AddQuilt4NetHealthApi(o =>
         Essential = true,
         Uri = new Uri("https://localhost:7119/api/Health/")
     });
+
+    o.Heartbeat.Enabled = true;
+    o.Heartbeat.Interval = TimeSpan.FromSeconds(30);
+    o.Heartbeat.ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
 });
 
 var app = builder.Build();
+
+app.UseQuilt4NetApiLogging();
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -108,7 +102,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.UseQuilt4NetHealthApi();
-app.UseQuilt4NetLogging();
+app.UseQuilt4NetHealth();
 
 app.Run();

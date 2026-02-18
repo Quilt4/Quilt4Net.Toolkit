@@ -1,125 +1,266 @@
-﻿# Quilt4Net Toolkit Api
+# Quilt4Net.Toolkit.Health
 [![GitHub repo](https://img.shields.io/github/repo-size/Quilt4/Quilt4Net.Toolkit?style=flat&logo=github&logoColor=red&label=Repo)](https://github.com/Quilt4/Quilt4Net.Toolkit)
 
-Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *Metrics* in .NET Web Applications.
+Add configurable health endpoints, heartbeat telemetry, and service monitoring to .NET Web Applications.
 
 ## Get started
-After having installed the nuget package.
-Register *AddQuilt4NetHealthApi* as a service and use it in the app.
-```
+
+Install the NuGet package [Quilt4Net.Toolkit.Health](https://www.nuget.org/packages/Quilt4Net.Toolkit.Health) and register the services in `Program.cs`.
+
+```csharp
 var builder = WebApplication.CreateBuilder(args);
-...
-builder.AddQuilt4NetHealthApi();
+
+builder.AddQuilt4NetHealth();
 
 var app = builder.Build();
-...
+
 app.UseRouting();
-...
-app.UseQuilt4NetApi();
+app.UseQuilt4NetHealth();
 
 app.Run();
 ```
-You have to call `AddQuilt4NetHealthApi` in any order on the *builder* (or *builder.Services*).
-On the app you have to call `UseRouting` before `UseQuilt4NetApi`.
 
-### Register service check
-This is a basic way of adding a service check. This check will be performed when calling *Health*, *Ready* or *Dependencies*.
-```
-builder.AddQuilt4NetHealthApi(o =>
+`UseRouting()` must be called before `UseQuilt4NetHealth()`.
+
+## Endpoints
+
+Six endpoints are available by default. The base path is `~/api/Health` (configurable via `Pattern` and `ControllerName`).
+
+| Endpoint | Path | Purpose |
+|----------|------|---------|
+| **Live** | `/api/Health/live` | Returns `Alive` if the process is running. Use for container orchestration (Kubernetes, Azure). |
+| **Ready** | `/api/Health/ready` | Checks essential components. Returns `Ready`, `Degraded`, or `Unready` (503). |
+| **Health** | `/api/Health/health` | Full system check including all components and dependencies. Returns `Healthy`, `Degraded`, or `Unhealthy` (503). |
+| **Dependencies** | `/api/Health/dependencies` | Checks external dependencies one level deep (no circular checks). |
+| **Metrics** | `/api/Health/metrics` | Returns system metrics: CPU, memory, storage, GPU, and uptime. GET only. |
+| **Version** | `/api/Health/version` | Returns application metadata: version, environment, IP address, machine name. GET only. |
+
+All endpoints support both GET (returns JSON body) and HEAD (returns status in header), except Metrics and Version which are GET only.
+
+## Components
+
+Components are services or resources that your application depends on. Add them to include in Health and Ready checks.
+
+### Inline check
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
 {
     o.AddComponent(new Component
     {
-        Name = "some-service",
+        Name = "database",
         Essential = true,
-        CheckAsync = async _ =>
+        CheckAsync = async sp =>
         {
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            return new CheckResult { Success = true };
+            // perform check
+            return new CheckResult { Success = true, Message = "Connected" };
         }
     });
 });
 ```
 
-For more complex scenarios, implement *IComponentService* and add the servcice here to separate the setup from the implementation.
-```
-builder.AddQuilt4NetHealthApi(o =>
+Set `Essential = true` for critical components (failure = `Unhealthy`/`Unready`).
+Set `Essential = false` for non-critical components (failure = `Degraded`).
+
+### Component service
+
+For complex checks, implement `IComponentService` to separate setup from logic.
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
 {
     o.AddComponentService<MyComponentService>();
 });
 ```
 
-To add dependency information to other services that uses *Quilt4Net API*. This will call the health check on the other service.
-```
-builder.AddQuilt4NetHealthApi(o =>
+## Dependencies
+
+Register external services that use Quilt4Net Health API. The dependency endpoint calls their health check.
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
 {
     o.AddDependency(new Dependency
     {
-        Name = "Dependency",
+        Name = "payment-service",
         Essential = true,
-        Uri = new Uri("https://localhost:7119/api/Health/")
+        Uri = new Uri("https://payment.example.com/api/Health/")
     });
 });
 ```
 
-### Configuration options
-Configuration can be configured by code. This will override any other configuration.
-```
-builder.AddQuilt4NetHealthApi(o =>
+## Heartbeat
+
+The heartbeat feature sends periodic availability telemetry to Application Insights.
+
+### Enable heartbeat
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
 {
-    o.ShowInSwagger = false;
-    o.FailReadyWhenDegraded = true;
+    o.Heartbeat.Enabled = true;
+    o.Heartbeat.Interval = TimeSpan.FromMinutes(5);
 });
 ```
-Configuration in *appsettings.json*.
+
+The heartbeat starts when `UseQuilt4NetHealth()` is called.
+
+### TelemetryClient resolution
+
+The heartbeat resolves a `TelemetryClient` in this order:
+
+1. **From DI** - If `AddApplicationInsightsTelemetry()` has been called, that client is used.
+2. **From HeartbeatOptions** - If `Heartbeat.ConnectionString` is set, a client is created from it.
+3. **None** - A warning is logged and heartbeat execution is skipped.
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
+{
+    o.Heartbeat.Enabled = true;
+    o.Heartbeat.ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+});
 ```
+
+### HeartbeatOptions
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Enabled` | `false` | Enable/disable the heartbeat background service. |
+| `Interval` | 5 minutes | Time between heartbeat executions. |
+| `ConnectionString` | `null` | Application Insights connection string. Used only if no `TelemetryClient` is registered via DI. |
+
+## Service probe
+
+Monitor the health of background services and hosted services through a pulse mechanism.
+
+Inject `IHostedServiceProbe<T>` into your hosted service and call `Pulse()` on each iteration.
+
+```csharp
+public class MyBackgroundService : BackgroundService
+{
+    private readonly IHostedServiceProbe _probe;
+
+    public MyBackgroundService(IHostedServiceProbe<MyBackgroundService> probe)
+    {
+        _probe = probe.Register(plannedInterval: TimeSpan.FromSeconds(30));
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            _probe.Pulse();
+
+            // do work...
+
+            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+        }
+    }
+}
+```
+
+The probe tracks pulse timing and reports status in Health responses:
+- **Healthy** - Pulse received within the expected interval.
+- **Degraded** - Pulse slightly delayed.
+- **Unhealthy** - Pulse significantly delayed or missing.
+
+## Certificate check
+
+Automatically checks SSL certificate expiry for your service and its dependencies.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Certificate.SelfCheckEnabled` | `true` | Check your own certificate. |
+| `Certificate.DependencyCheckEnabled` | `true` | Check dependency certificates. |
+| `Certificate.SelfCheckUri` | `null` | Explicit URI for self-check. Uses request host if not set. |
+| `Certificate.CertExpiryDegradedLimitDays` | `30` | Days remaining before reporting `Degraded`. |
+| `Certificate.CertExpiryUnhealthyLimitDays` | `3` | Days remaining before reporting `Unhealthy`. |
+
+## Configuration
+
+All options can be set via code, `appsettings.json`, or a combination of both. Priority order:
+
+1. **Code** - Highest priority, overrides everything.
+2. **appsettings.json** - Overrides defaults.
+3. **Defaults** - Used when nothing else is configured.
+
+### Code configuration
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
+{
+    o.Pattern = "api";
+    o.ControllerName = "Health";
+    o.FailReadyWhenDegraded = true;
+    o.Heartbeat.Enabled = true;
+});
+```
+
+### appsettings.json
+
+```json
 {
   "Quilt4Net": {
-    "ShowInSwagger": false,
-    "FailReadyWhenDegraded" : true,
+    "HealthApi": {
+      "Pattern": "api",
+      "ControllerName": "Health",
+      "FailReadyWhenDegraded": true,
+      "Heartbeat": {
+        "Enabled": true,
+        "Interval": "00:05:00",
+        "ConnectionString": "InstrumentationKey=..."
+      },
+      "Certificate": {
+        "CertExpiryDegradedLimitDays": 30,
+        "CertExpiryUnhealthyLimitDays": 3
+      }
+    }
   }
 }
 ```
-For values without configuration default values are used.
-
-- ShowInSwagger: Turns on visibility in swagger.
-- FailReadyWhenDegraded: When calling *Ready* and the service is *Degraded* it sill by default return *200*. If this is set to *true*, the response will be *503* for degraded components.
-
-### Endpoints
-Use the endpoint in different scenarios.
-
-#### Health
-`~/api/Health/health`
-
-Use this by ping-services to check that everything works as intended. It can also be used for smoke tests after release to assure that the service is working.
-
-#### Liveness
-`~/api/Health/live`
-
-Use this endpoint to check if a new instance sould be started. Commonly used in *kubernetes* or *Azure* to make sure the correct number of pods or machines are active.
-
-#### Readyness
-`~/api/Health/ready`
-
-Use this endpoint to check if the instance is ready to perform work.
-
-## Service Probe
-TODO: Revisit
-
-## Troubleshooting
-Error at startup with the message:
-`Unhandled exception. System.InvalidOperationException: EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware and so must be added to the request execution pipeline before EndpointMiddleware. Please add EndpointRoutingMiddleware by calling 'IApplicationBuilder.UseRouting' inside the call to 'Configure(...)' in the application startup code.`
-
-The solution is to add `app.UseRouting();` before `app.UseQuilt4NetApi();` in *Program.cs*.
-
-
-
-
-## AddQuilt4NetHealthApi
-Add API with Health endpoints.
 
 ### Quilt4NetHealthApiOptions
 
-## AddQuilt4NetApiLogging
-Logging for API calls.
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Pattern` | `"api"` | URL segment between base address and controller name. |
+| `ControllerName` | `"Health"` | Controller name in the URL path. |
+| `DefaultAction` | `"Health"` | Default endpoint when no action is specified. |
+| `FailReadyWhenDegraded` | `false` | Return 503 from Ready when the system is degraded. |
+| `OverrideState` | `null` | Override state (`Visible`, `Hidden`, `Disabled`) for all endpoints. |
+| `AuthScheme` | `"ApiKeyScheme"` | Authentication scheme used for endpoint access. |
+| `ExceptionDetail` | Environment-based | Level of exception detail: `Hidden`, `Message`, or `StackTrace`. |
+| `IpAddressCheckUri` | `http://ipv4.icanhazip.com/` | URI for IP address lookup. Set to `null` to disable. |
 
-### LoggingOptions
+### Endpoint access
+
+Each endpoint has configurable access control and visibility.
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
+{
+    o.Endpoints[HealthEndpoint.Metrics].Get.Access.Level = AccessLevel.AuthenticatedOnly;
+    o.Endpoints[HealthEndpoint.Health].Get.State = EndpointState.Hidden;
+});
+```
+
+**EndpointState**: `Visible` (shown in docs), `Hidden` (accessible but not in docs), `Disabled` (not accessible).
+
+**AccessLevel**: `Everyone`, `AuthenticatedOnly`.
+
+**DetailsLevel**: `Everyone`, `AuthenticatedOnly`, `NoOne` - controls response detail in GET requests.
+
+### Environment defaults
+
+| Setting | Development | Production | Other |
+|---------|------------|------------|-------|
+| Endpoint state | Visible | Hidden | Visible |
+| Access level | Everyone | AuthenticatedOnly | Everyone |
+| Details level | Everyone | AuthenticatedOnly | AuthenticatedOnly |
+| Exception detail | StackTrace | Hidden | Message |
+
+## Troubleshooting
+
+**Startup error:** `EndpointRoutingMiddleware matches endpoints setup by EndpointMiddleware...`
+
+Add `app.UseRouting()` before `app.UseQuilt4NetHealth()` in `Program.cs`.

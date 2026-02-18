@@ -99,22 +99,23 @@ internal class EndpointHandlerService : IEndpointHandlerService
 
         ctx.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
-        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
-        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
+        switch (options?.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
         {
             case DetailsLevel.Everyone:
                 break;
             case DetailsLevel.AuthenticatedOnly:
+                var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
                 if (!isAuthenticated)
                 {
                     response = ClearDetails(response);
                 }
+
                 break;
             case DetailsLevel.NoOne:
                 response = ClearDetails(response);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options?.Details, null);
         }
 
         if (response.Status == HealthStatus.Unhealthy)
@@ -132,22 +133,23 @@ internal class EndpointHandlerService : IEndpointHandlerService
 
         ctx.Response.Headers.TryAdd(nameof(response.Status), $"{response.Status}");
 
-        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
-        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
+        switch (options?.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
         {
             case DetailsLevel.Everyone:
                 break;
             case DetailsLevel.AuthenticatedOnly:
+                var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
                 if (!isAuthenticated)
                 {
                     response = ClearDetails(response);
                 }
+
                 break;
             case DetailsLevel.NoOne:
                 response = ClearDetails(response);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options?.Details, null);
         }
 
         if (response.Status == HealthStatus.Unhealthy)
@@ -162,22 +164,23 @@ internal class EndpointHandlerService : IEndpointHandlerService
     {
         var response = await _metricsService.GetMetricsAsync(cancellationToken);
 
-        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
-        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
+        switch (options?.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
         {
             case DetailsLevel.Everyone:
                 break;
             case DetailsLevel.AuthenticatedOnly:
+                var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
                 if (!isAuthenticated)
                 {
                     response = ClearDetails(response);
                 }
+
                 break;
             case DetailsLevel.NoOne:
                 response = ClearDetails(response);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options?.Details, null);
         }
 
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
@@ -187,22 +190,23 @@ internal class EndpointHandlerService : IEndpointHandlerService
     {
         var response = await _versionService.GetVersionAsync(cancellationToken);
 
-        var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
-        switch (options.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
+        switch (options?.Details ?? (_hostEnvironment.IsProduction() ? DetailsLevel.AuthenticatedOnly : DetailsLevel.Everyone))
         {
             case DetailsLevel.Everyone:
                 break;
             case DetailsLevel.AuthenticatedOnly:
+                var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
                 if (!isAuthenticated)
                 {
                     response = ClearDetails(response);
                 }
+
                 break;
             case DetailsLevel.NoOne:
                 response = ClearDetails(response);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(options.Details), options.Details, null);
+                throw new ArgumentOutOfRangeException(nameof(options.Details), options?.Details, null);
         }
 
         return ctx.Request.Method == HttpMethods.Head ? Results.Ok() : Results.Ok(response);
@@ -255,7 +259,6 @@ internal class EndpointHandlerService : IEndpointHandlerService
             Version = null
         };
     }
-
 
     private async Task<HealthComponent> GetCertificatehealth(HttpContext ctx)
     {

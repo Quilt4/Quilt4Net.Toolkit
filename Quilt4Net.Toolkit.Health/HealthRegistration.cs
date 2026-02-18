@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Api;
@@ -8,11 +7,13 @@ using Quilt4Net.Toolkit.Features.Health.Dependency;
 using Quilt4Net.Toolkit.Features.Health.Live;
 using Quilt4Net.Toolkit.Features.Health.Metrics;
 using Quilt4Net.Toolkit.Features.Health.Metrics.Machine;
-using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Metrics.Storage;
+using Quilt4Net.Toolkit.Features.Health.Ready;
 using Quilt4Net.Toolkit.Features.Health.Version;
 using Quilt4Net.Toolkit.Features.Probe;
+using Quilt4Net.Toolkit.Health.Features.Heartbeat;
 using Quilt4Net.Toolkit.Health.Framework;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 
@@ -20,9 +21,27 @@ namespace Quilt4Net.Toolkit.Health;
 
 public static class HealthRegistration
 {
+    [Obsolete($"Use {nameof(AddQuilt4NetHealth)} instead.")]
     public static IServiceCollection AddQuilt4NetHealthApi(this IHostApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> configure = null)
     {
-        return AddQuilt4NetHealthApi(builder.Services, builder.Configuration, builder.Environment, configure);
+        return builder.AddQuilt4NetHealth(configure);
+    }
+
+    [Obsolete($"Use {nameof(AddQuilt4NetHealth)} instead.")]
+    public static IServiceCollection AddQuilt4NetHealthApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure = null)
+    {
+        return AddQuilt4NetHealth(services, configuration, environment, configure);
+    }
+
+    /// <summary>
+    /// Add API with Health endpoints.
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="configure"></param>
+    /// <returns></returns>
+    public static IServiceCollection AddQuilt4NetHealth(this IHostApplicationBuilder builder, Action<Quilt4NetHealthApiOptions> configure = null)
+    {
+        return AddQuilt4NetHealth(builder.Services, builder.Configuration, builder.Environment, configure);
     }
 
     /// <summary>
@@ -32,7 +51,7 @@ public static class HealthRegistration
     /// <param name="configuration"></param>
     /// <param name="environment"></param>
     /// <param name="configure"></param>
-    public static IServiceCollection AddQuilt4NetHealthApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure = null)
+    public static IServiceCollection AddQuilt4NetHealth(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure = null)
     {
         var apiOptions = BuildOptions(configuration, environment, configure);
 
@@ -56,6 +75,14 @@ public static class HealthRegistration
         services.AddTransient<IHostedServiceProbe, HostedServiceProbe>();
         services.AddTransient<IEndpointHandlerService, EndpointHandlerService>();
         services.AddTransient(typeof(IHostedServiceProbe<>), typeof(HostedServiceProbe<>));
+        services.AddSingleton(apiOptions.Heartbeat);
+        services.AddTransient<IHeartbeatService, HeartbeatService>();
+
+        if (apiOptions.Heartbeat.Enabled)
+        {
+            services.AddSingleton<HeartbeatBackgroundService>();
+            services.AddHostedService(sp => sp.GetRequiredService<HeartbeatBackgroundService>());
+        }
 
         foreach (var componentServiceType in apiOptions.ComponentServices)
         {
@@ -70,6 +97,24 @@ public static class HealthRegistration
         return services;
     }
 
+    [Obsolete($"Use {nameof(UseQuilt4NetHealth)} instead.")]
+    public static void UseQuilt4NetHealthApi(this WebApplication app)
+    {
+        app.UseQuilt4NetHealth();
+    }
+
+    public static void UseQuilt4NetHealth(this WebApplication app)
+    {
+        var o = app.Services.GetRequiredService<IOptions<Quilt4NetHealthApiOptions>>().Value;
+        if (o == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealth)} before {nameof(UseQuilt4NetHealthApi)}.");
+
+        CreaetLogScope(app);
+        RegisterEndpoints(o, app, o.DependencyRegistrations.Any());
+
+        var heartbeatBackgroundService = app.Services.GetService<HeartbeatBackgroundService>();
+        heartbeatBackgroundService?.Start();
+    }
+
     private static Quilt4NetHealthApiOptions BuildOptions(IConfiguration configuration, IHostEnvironment environment, Action<Quilt4NetHealthApiOptions> configure)
     {
         var o = new Quilt4NetHealthApiOptions();
@@ -79,7 +124,7 @@ public static class HealthRegistration
         configuration.GetSection("Quilt4Net:HealthApi").Bind(o);
         configure?.Invoke(o);
 
-        foreach (HealthEndpoint ep in Enum.GetValues<HealthEndpoint>())
+        foreach (var ep in Enum.GetValues<HealthEndpoint>())
         {
             o.Endpoints.TryAdd(ep, new HealthEndpointOptions());
         }
@@ -98,20 +143,6 @@ public static class HealthRegistration
         }
 
         return o;
-    }
-
-    /// <summary>
-    /// Sets up routing to the Quilt4Net health checks.
-    /// Must be executed after UseAuthentication and UseAuthorization for authentication to work.
-    /// </summary>
-    /// <param name="app"></param>
-    public static void UseQuilt4NetHealthApi(this WebApplication app)
-    {
-        var o = app.Services.GetRequiredService<IOptions<Quilt4NetHealthApiOptions>>().Value;
-        if (o == null) throw new InvalidOperationException($"Call {nameof(AddQuilt4NetHealthApi)} before {nameof(UseQuilt4NetHealthApi)}.");
-
-        CreaetLogScope(app);
-        RegisterEndpoints(o, app, o.DependencyRegistrations.Any());
     }
 
     private static void CreaetLogScope(WebApplication app)
@@ -211,7 +242,7 @@ public static class HealthRegistration
             }
         }
 
-        async Task<IResult> HandleCall<T>(HealthEndpoint endpoint, HttpContext ctx, T opt, CancellationToken cancellationToken) where T : MethodOptions
+        async Task<IResult> HandleCall(HealthEndpoint endpoint, HttpContext ctx, T opt, CancellationToken cancellationToken) //where T : MethodOptions
         {
             var isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false;
             switch (options.Access.Level ?? (app.Environment.IsProduction() ? AccessLevel.AuthenticatedOnly : AccessLevel.Everyone))
@@ -342,25 +373,4 @@ public static class HealthRegistration
         o.Endpoints[HealthEndpoint.Metrics].Head.State = EndpointState.Disabled;
         o.Endpoints[HealthEndpoint.Version].Head.State = EndpointState.Disabled;
     }
-
-    //private static bool ValidateOptions(Quilt4NetHealthApiOptions o, out string? error)
-    //{
-    //    error = null;
-
-    //    if (!o.Endpoints.ContainsKey(HealthEndpoint.Live) || !o.Endpoints.ContainsKey(HealthEndpoint.Ready))
-    //    {
-    //        error = "Endpoints must include at least Live and Ready.";
-    //        return false;
-    //    }
-
-    //    // Optional: if you want to fail hard if someone tries to enable HEAD:
-    //    if (o.Endpoints.TryGetValue(HealthEndpoint.Metrics, out var metrics) &&
-    //        metrics.Head.State != EndpointState.Disabled)
-    //    {
-    //        error = "Metrics endpoint does not support HEAD. Set Metrics:Head:State to Disabled.";
-    //        return false;
-    //    }
-
-    //    return true;
-    //}
 }

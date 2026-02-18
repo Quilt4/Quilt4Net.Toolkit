@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Framework;
@@ -11,12 +12,21 @@ public static class HealthRegistration
     /// <summary>
     /// Register client for reading data from the health API.
     /// </summary>
-    /// <param name="services"></param>
+    /// <param name="builder"></param>
     /// <param name="options"></param>
-    public static void AddQuilt4NetHealthClient(this IServiceCollection services, Action<HealthClientOptions> options = null)
+    public static void AddQuilt4NetHealthClient(this IHostApplicationBuilder builder, Action<HealthClientOptions> options = null)
     {
-        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
+        builder.Services.AddQuilt4NetHealthClient(builder.Configuration, options);
+    }
 
+    /// <summary>
+    /// Register client for reading data from the health API.
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="configuration"></param>
+    /// <param name="options"></param>
+    public static void AddQuilt4NetHealthClient(this IServiceCollection services, IConfiguration configuration, Action<HealthClientOptions> options = null)
+    {
         var config = configuration?.GetSection("Quilt4Net:HealthClient").Get<HealthClientOptions>();
         var o = new HealthClientOptions
         {

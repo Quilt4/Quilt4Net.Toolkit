@@ -13,13 +13,22 @@ public static class RemoteConfigurationRegistration
     /// <summary>
     /// Register backend usages of remote configuration and feature toggles from Quilt4Net.
     /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="options"></param>
+    public static void AddQuilt4NetRemoteConfiguration(this IHostApplicationBuilder builder, Action<RemoteConfigurationOptions> options = null)
+    {
+        builder.Services.AddQuilt4NetRemoteConfiguration(builder.Configuration, options);
+    }
+
+    /// <summary>
+    /// Register backend usages of remote configuration and feature toggles from Quilt4Net.
+    /// </summary>
     /// <param name="services"></param>
+    /// <param name="configuration"></param>
     /// <param name="options"></param>
     /// <exception cref="InvalidOperationException"></exception>
-    public static void AddQuilt4NetRemoteConfiguration(this IServiceCollection services, Action<RemoteConfigurationOptions> options = null)
+    public static void AddQuilt4NetRemoteConfiguration(this IServiceCollection services, IConfiguration configuration, Action<RemoteConfigurationOptions> options = null)
     {
-        var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
-
         var apiKey = configuration?.GetSection("Quilt4Net").GetSection("ApiKey").Value;
         var address = configuration?.GetSection("Quilt4Net").GetSection("Quilt4NetAddress").Value;
 

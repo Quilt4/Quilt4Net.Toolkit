@@ -21,19 +21,19 @@ internal class MyComponentService : IComponentService
             }
         };
 
-        yield return new Component
-        {
-            Name = "some-failing-service",
-            Essential = true,
-            CheckAsync = async _ =>
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                return new CheckResult
-                {
-                    Success = false,
-                    Message = "Some fail message."
-                };
-            }
-        };
+        //yield return new Component
+        //{
+        //    Name = "some-failing-service",
+        //    Essential = true,
+        //    CheckAsync = async _ =>
+        //    {
+        //        await Task.Delay(TimeSpan.FromSeconds(1));
+        //        return new CheckResult
+        //        {
+        //            Success = false,
+        //            Message = "Some fail message."
+        //        };
+        //    }
+        //};
     }
 }

@@ -1,29 +1,86 @@
 # Quilt4Net Toolkit
 [![GitHub repo Issues](https://img.shields.io/github/issues/Quilt4/Quilt4Net.Toolkit?style=flat&logo=github&logoColor=red&label=Issues)](https://github.com/Quilt4/Quilt4Net.Toolkit/issues?q=is%3Aopen)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+A set of NuGet packages for building .NET applications with health checks, metrics, remote configuration, feature toggles, content management, API logging, and Application Insights integration. Features can be configured and monitored using [Quilt4Net Web](https://quilt4net.com).
+
+## Packages
+
+### Quilt4Net.Toolkit
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit)](https://www.nuget.org/packages/Quilt4Net.Toolkit)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Read more here](Quilt4Net.Toolkit/README.md)
+Core library providing feature toggles, remote configuration, content management, health check client, Application Insights client, and measure/count logging extensions. Used by all other packages in this repository.
 
-## Quilt4Net Toolkit Health
+[Read more](Quilt4Net.Toolkit/README.md)
+
+### Quilt4Net.Toolkit.Health
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Health)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Health)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Health)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Add configurable support for *Health*, *Liveness*, *Readyness*, *Version* and *Metrics* in .NET Web Applications.
-[Read more here](Quilt4Net.Toolkit.Blazor/README.md)
+Health endpoints (live, ready, health, dependencies, metrics, version), heartbeat telemetry, service probe monitoring, and certificate checks for .NET Web Applications. Depends on `Quilt4Net.Toolkit`.
 
-## Quilt4Net Toolkit Api
+[Read more](Quilt4Net.Toolkit.Health/README.md)
+
+### Quilt4Net.Toolkit.Api
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Api)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Api)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Api)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Read more here](Quilt4Net.Toolkit.Api/README.md)
+HTTP request/response logging and correlation ID tracking middleware. Logs to Application Insights and/or standard `ILogger` with path filtering and per-endpoint control via attributes. Depends on `Quilt4Net.Toolkit`.
 
-## Quilt4Net Toolkit Blazor
+[Read more](Quilt4Net.Toolkit.Api/README.md)
+
+### Quilt4Net.Toolkit.Blazor
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Blazor)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Blazor)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Blazor)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Read more here](Quilt4Net.Toolkit.Blazor/README.md)
+Blazor component library for content management, language selection, remote configuration admin, and Application Insights log viewing. Built on Radzen. Depends on `Quilt4Net.Toolkit`.
+
+[Read more](Quilt4Net.Toolkit.Blazor/README.md)
+
+## Package dependencies
+
+```
+Quilt4Net.Toolkit              (core, no dependencies on other packages)
+├── Quilt4Net.Toolkit.Health   (health endpoints, heartbeat, service probe)
+├── Quilt4Net.Toolkit.Api      (API logging middleware)
+└── Quilt4Net.Toolkit.Blazor   (Blazor components)
+```
+
+## Quick start
+
+Install the packages you need and register the services in `Program.cs`.
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Health endpoints
+builder.AddQuilt4NetHealth();
+
+// API logging
+builder.AddQuilt4NetApiLogging();
+
+// Feature toggles and remote configuration
+builder.AddQuilt4NetRemoteConfiguration();
+
+// Content management
+builder.AddQuilt4NetContent();
+
+var app = builder.Build();
+
+app.UseRouting();
+app.UseQuilt4NetHealth();
+app.UseQuilt4NetApiLogging();
+
+app.Run();
+```
+
+Add your API key in `appsettings.json`.
+
+```json
+{
+  "Quilt4Net": {
+    "ApiKey": "YOUR_API_KEY_HERE"
+  }
+}
+```
