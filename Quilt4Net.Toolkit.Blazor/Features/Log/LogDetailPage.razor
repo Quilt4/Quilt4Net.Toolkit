@@ -2,15 +2,18 @@
 
 @if (_params != null && _params.GetSource().HasValue && _params.GetRange() != TimeSpan.Zero)
 {
-    <LogDetailView Id="@Id"
-                   Environment="@_params.Environment"
-                   Range="@_params.GetRange()"
-                   Source="@_params.GetSource()"
-                   Context="@_params.GetContext()" />
+    <CascadingValue Value="_navOptions">
+        <LogDetailView Id="@Id"
+                       Environment="@_params.Environment"
+                       Range="@_params.GetRange()"
+                       Source="@_params.GetSource()"
+                       Context="@_params.GetContext()" />
+    </CascadingValue>
 }
 
 @code {
     private LogNavParams _params;
+    private LogNavigationOptions _navOptions;
 
     /// <summary>
     /// The ID of the log entry to display.
@@ -26,8 +29,27 @@
     [Parameter]
     public string Params { get; set; }
 
+    /// <summary>
+    /// Optional path for the log detail page, e.g. "/log/detail".
+    /// When null (default), clicking a detail link opens a dialog instead of navigating.
+    /// </summary>
+    [Parameter]
+    public string DetailPath { get; set; }
+
+    /// <summary>
+    /// Optional path for the log summary page, e.g. "/log/summary".
+    /// When null (default), clicking a summary link opens a dialog instead of navigating.
+    /// </summary>
+    [Parameter]
+    public string SummaryPath { get; set; }
+
     protected override void OnParametersSet()
     {
         _params = LogNavParams.Decode(Params);
+        _navOptions = new LogNavigationOptions
+        {
+            DetailPath = DetailPath,
+            SummaryPath = SummaryPath
+        };
     }
 }
