@@ -69,7 +69,9 @@ else
     public LogSource? Source { get; set; }
 
     [CascadingParameter]
-    public LogNavigationOptions NavOptions { get; set; }
+    private LogNavigationOptions _cascadedNavOptions { get; set; }
+
+    private LogNavigationOptions NavOptions => _cascadedNavOptions ?? new LogNavigationOptions();
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
