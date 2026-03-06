@@ -1,0 +1,33 @@
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+
+@if (_params != null && _params.GetSource().HasValue && _params.GetRange() != TimeSpan.Zero)
+{
+    <LogDetailView Id="@Id"
+                   Environment="@_params.Environment"
+                   Range="@_params.GetRange()"
+                   Source="@_params.GetSource()"
+                   Context="@_params.GetContext()" />
+}
+
+@code {
+    private LogNavParams _params;
+
+    /// <summary>
+    /// The ID of the log entry to display.
+    /// Typically bound from a route parameter: <c>@page "/log/detail/{Id}"</c>
+    /// </summary>
+    [Parameter]
+    public string Id { get; set; }
+
+    /// <summary>
+    /// URL-safe base64-encoded navigation parameters produced by <see cref="LogNavParams.Encode"/>.
+    /// Typically bound from a query parameter: <c>[Parameter, SupplyParameterFromQuery] public string P { get; set; }</c>
+    /// </summary>
+    [Parameter]
+    public string Params { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _params = LogNavParams.Decode(Params);
+    }
+}

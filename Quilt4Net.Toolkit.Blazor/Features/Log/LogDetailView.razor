@@ -2,6 +2,8 @@
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Tharga.Toolkit
 @inject IApplicationInsightsService ApplicationInsightsService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
 
 @if (Model == null)
 {
@@ -17,7 +19,9 @@ else
         <RadzenColumn>
             <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
             <div>
-                <RadzenLink Text="@Model.Fingerprint" Path="@($"/log/summary/{Model.Fingerprint}?Reference=Detail&Environment={Environment}&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" />
+                <RadzenButton Text="@Model.Fingerprint" ButtonStyle="ButtonStyle.Light"
+                              Style="text-decoration: underline; padding: 0;"
+                              Click="@(() => OpenSummaryAsync(Model.Fingerprint))" />
             </div>
         </RadzenColumn>
         <RadzenColumn>
@@ -87,6 +91,9 @@ else
     [Parameter]
     public LogSource? Source { get; set; }
 
+    [CascadingParameter]
+    public LogNavigationOptions NavOptions { get; set; }
+
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
@@ -99,6 +106,26 @@ else
         Model = await ApplicationInsightsService.GetDetail(Context, Id, Source.Value, Environment, Range.Value);
 
         await base.OnParametersSetAsync();
+    }
+
+    private async Task OpenSummaryAsync(string fingerprint)
+    {
+        var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Detail");
+        if (NavOptions?.SummaryPath != null)
+        {
+            NavigationManager.NavigateTo($"{NavOptions.SummaryPath}/{fingerprint}?p={p.Encode()}");
+        }
+        else
+        {
+            await DialogService.OpenAsync<LogSummaryView>("Log Summary", new Dictionary<string, object>
+            {
+                { nameof(LogSummaryView.Fingerprint), fingerprint },
+                { nameof(LogSummaryView.Environment), Environment },
+                { nameof(LogSummaryView.Range), Range },
+                { nameof(LogSummaryView.Source), Source },
+                { nameof(LogSummaryView.Context), Context }
+            });
+        }
     }
 
     private static string FormatJson(string json)

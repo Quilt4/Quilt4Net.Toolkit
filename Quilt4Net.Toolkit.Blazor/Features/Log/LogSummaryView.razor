@@ -1,5 +1,7 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
 
 @if (Model == null)
 {
@@ -36,7 +38,8 @@ else
         <Columns>
             <RadzenDataGridColumn Title="Id" Width="60px">
                 <Template>
-                    <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Count&Environment={Environment}&Range={Range?.TotalMinutes}&Source={Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                    <RadzenButton Icon="arrow_forward_ios" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  Click="@(() => OpenDetailAsync(context.Id))" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Time" Property="@nameof(SummaryData.Item.TimeGenerated)">
@@ -65,6 +68,9 @@ else
     [Parameter]
     public LogSource? Source { get; set; }
 
+    [CascadingParameter]
+    public LogNavigationOptions NavOptions { get; set; }
+
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
@@ -77,5 +83,25 @@ else
         Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
 
         await base.OnParametersSetAsync();
+    }
+
+    private async Task OpenDetailAsync(string id)
+    {
+        var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Count");
+        if (NavOptions?.DetailPath != null)
+        {
+            NavigationManager.NavigateTo($"{NavOptions.DetailPath}/{id}?p={p.Encode()}");
+        }
+        else
+        {
+            await DialogService.OpenAsync<LogDetailView>("Log Detail", new Dictionary<string, object>
+            {
+                { nameof(LogDetailView.Id), id },
+                { nameof(LogDetailView.Environment), Environment },
+                { nameof(LogDetailView.Range), Range },
+                { nameof(LogDetailView.Source), Source },
+                { nameof(LogDetailView.Context), Context }
+            });
+        }
     }
 }

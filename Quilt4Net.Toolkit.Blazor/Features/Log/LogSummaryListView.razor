@@ -1,5 +1,7 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
 
 @if (Model == null)
 {
@@ -15,7 +17,8 @@ else
         <Columns>
             <RadzenDataGridColumn Title="Fingerprint" Width="60px" Sortable="false">
                 <Template>
-                    <RadzenLink Path="@($"/log/summary/{context.Fingerprint}?Reference=Detail&Environment={Environment}&Range={Range.TotalMinutes}&Source={context.Source}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                    <RadzenButton Icon="arrow_forward_ios" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  Click="@(() => OpenSummaryAsync(context.Fingerprint, context.Source))" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)" Filterable="false">
@@ -36,6 +39,9 @@ else
 @code {
     private SummarySubset[] Model { get; set; }
 
+    [CascadingParameter]
+    public LogNavigationOptions NavOptions { get; set; }
+
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(1);
 
@@ -53,4 +59,23 @@ else
             .ToArrayAsync();
     }
 
+    private async Task OpenSummaryAsync(string fingerprint, LogSource source)
+    {
+        var p = LogNavParams.From(Environment, Range, source, Context, "Detail");
+        if (NavOptions?.SummaryPath != null)
+        {
+            NavigationManager.NavigateTo($"{NavOptions.SummaryPath}/{fingerprint}?p={p.Encode()}");
+        }
+        else
+        {
+            await DialogService.OpenAsync<LogSummaryView>("Log Summary", new Dictionary<string, object>
+            {
+                { nameof(LogSummaryView.Fingerprint), fingerprint },
+                { nameof(LogSummaryView.Environment), Environment },
+                { nameof(LogSummaryView.Range), (TimeSpan?)Range },
+                { nameof(LogSummaryView.Source), (LogSource?)source },
+                { nameof(LogSummaryView.Context), Context }
+            });
+        }
+    }
 }
