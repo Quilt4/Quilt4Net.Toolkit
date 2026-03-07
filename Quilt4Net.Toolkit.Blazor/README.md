@@ -228,13 +228,14 @@ When paths are set, clicking a row navigates to `{path}/{id}?p={encoded}` where 
 
 ### Page components
 
-Use `LogDetailPage` and `LogSummaryPage` to build your own dedicated pages that receive the encoded `p` parameter.
+Use `LogDetailView` and `LogSummaryView` to build your own dedicated pages that receive the encoded `p` parameter.
 
 ```razor
 @* MyDetailPage.razor *@
 @page "/log/detail/{Id}"
+@using Quilt4Net.Toolkit.Blazor.Features.Log
 
-<LogDetailPage Id="@Id" Params="@P" />
+<LogDetailView Id="@Id" Params="@P" SummaryPath="/log/summary" />
 
 @code {
     [Parameter] public string Id { get; set; }
@@ -245,14 +246,24 @@ Use `LogDetailPage` and `LogSummaryPage` to build your own dedicated pages that 
 ```razor
 @* MySummaryPage.razor *@
 @page "/log/summary/{Fingerprint}"
+@using Quilt4Net.Toolkit.Blazor.Features.Log
 
-<LogSummaryPage Fingerprint="@Fingerprint" Params="@P" />
+<LogSummaryView Fingerprint="@Fingerprint" Params="@P" DetailPath="/log/detail" />
 
 @code {
     [Parameter] public string Fingerprint { get; set; }
     [Parameter, SupplyParameterFromQuery] public string P { get; set; }
 }
 ```
+
+| Component | Parameter | Description |
+|-----------|-----------|-------------|
+| `LogDetailView` | `Id` | Log entry ID from the route. |
+| | `Params` | Encoded navigation params from the `p` query string. |
+| | `SummaryPath` | Path to navigate back to the summary page. When null, the fingerprint is shown as plain text. |
+| `LogSummaryView` | `Fingerprint` | Fingerprint from the route. |
+| | `Params` | Encoded navigation params from the `p` query string. |
+| | `DetailPath` | Path to navigate to a detail page. When null, clicking a row opens an inline detail view. |
 
 ## Configuration
 
