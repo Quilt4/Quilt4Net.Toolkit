@@ -201,6 +201,8 @@ View and search Application Insights logs with the `LogView` component. Requires
 | `ShowEnvironmentSelector` | `true` | Show environment dropdown. |
 | `Environment` | `null` | Override the environment. |
 | `Context` | `null` | Application Insights context. |
+| `DetailPath` | `null` | Path for the detail page (see below). |
+| `SummaryPath` | `null` | Path for the summary page (see below). |
 
 ### Tabs
 
@@ -211,6 +213,57 @@ View and search Application Insights logs with the `LogView` component. Requires
 | **Measure** | Performance measurements with line charts (elapsed time by action). |
 | **Count** | Log count statistics with column charts. |
 | **Trigger** | Development utility for manually triggering log entries. |
+
+### Navigation
+
+By default, clicking a row in the Search or Summary tabs opens a Radzen dialog inline. This works out of the box with no additional pages required.
+
+If you want to navigate to dedicated pages instead, set `DetailPath` and `SummaryPath` on `LogView`.
+
+```razor
+<LogView DetailPath="/log/detail" SummaryPath="/log/summary" />
+```
+
+When paths are set, clicking a row navigates to `{path}/{id}?p={encoded}` where `p` is a URL-safe base64 string containing all navigation parameters.
+
+### Page components
+
+Use `LogDetailView` and `LogSummaryView` to build your own dedicated pages that receive the encoded `p` parameter.
+
+```razor
+@* MyDetailPage.razor *@
+@page "/log/detail/{Id}"
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<LogDetailView Id="@Id" Params="@P" SummaryPath="/log/summary" />
+
+@code {
+    [Parameter] public string Id { get; set; }
+    [Parameter, SupplyParameterFromQuery] public string P { get; set; }
+}
+```
+
+```razor
+@* MySummaryPage.razor *@
+@page "/log/summary/{Fingerprint}"
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<LogSummaryView Fingerprint="@Fingerprint" Params="@P" DetailPath="/log/detail" />
+
+@code {
+    [Parameter] public string Fingerprint { get; set; }
+    [Parameter, SupplyParameterFromQuery] public string P { get; set; }
+}
+```
+
+| Component | Parameter | Description |
+|-----------|-----------|-------------|
+| `LogDetailView` | `Id` | Log entry ID from the route. |
+| | `Params` | Encoded navigation params from the `p` query string. |
+| | `SummaryPath` | Path to navigate back to the summary page. When null, the fingerprint is shown as plain text. |
+| `LogSummaryView` | `Fingerprint` | Fingerprint from the route. |
+| | `Params` | Encoded navigation params from the `p` query string. |
+| | `DetailPath` | Path to navigate to a detail page. When null, clicking a row opens an inline detail view. |
 
 ## Configuration
 

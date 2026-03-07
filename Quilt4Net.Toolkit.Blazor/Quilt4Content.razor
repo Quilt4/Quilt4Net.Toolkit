@@ -128,7 +128,7 @@ else
                 { "Key", Key },
                 { "Content", _content },
                 { "ContentFormat", ContentFormat.Html },
-            });
+            }, new DialogOptions { Resizable = true, Draggable = true });
         if (response != true) return;
 
         _response = await ContentService.GetContentAsync(Key, null, LanguageStateService.Selected?.Key ?? Guid.Empty, null);

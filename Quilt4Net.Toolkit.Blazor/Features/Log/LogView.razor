@@ -1,43 +1,46 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 
-<RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
-    <RadzenColumn Visible="@ShowRangeSelector">
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-            <RadzenText TextStyle="TextStyle.Caption" Text="Range"/>
-            <LogRangeSelector OnSelected="OnRangeSelected" />
-        </RadzenStack>
-    </RadzenColumn>
-    <RadzenColumn Visible="@ShowEnvironmentSelector">
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-            <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
-            <LogEnvironmentSelector OnSelected="OnEnvironmentSelected" Context="@Context" />
-        </RadzenStack>
-    </RadzenColumn>
-</RadzenRow>
+<CascadingValue Value="_navOptions">
+    <RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
+        <RadzenColumn Visible="@ShowRangeSelector">
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Range"/>
+                <LogRangeSelector OnSelected="OnRangeSelected" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Visible="@ShowEnvironmentSelector">
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
+                <LogEnvironmentSelector OnSelected="OnEnvironmentSelected" Context="@Context" />
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
 
-<RadzenTabs Change="StateHasChanged">
-    <Tabs>
-        <RadzenTabsItem Text="Search">
-            <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
-        </RadzenTabsItem>
-        <RadzenTabsItem Text="Summary">
-            <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse"  Context="Context" />
-        </RadzenTabsItem>
-        <RadzenTabsItem Text="Measure">
-            <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
-        </RadzenTabsItem>
-        <RadzenTabsItem Text="Count">
-            <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
-        </RadzenTabsItem>
-        <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
-            <LogTriggerView Context="Context" />
-        </RadzenTabsItem>
-    </Tabs>
-</RadzenTabs>
+    <RadzenTabs Change="StateHasChanged">
+        <Tabs>
+            <RadzenTabsItem Text="Search">
+                <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Summary">
+                <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Measure">
+                <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Count">
+                <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
+                <LogTriggerView Context="Context" />
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
+</CascadingValue>
 
 @code {
     private LogRangeSelector.TimeRangeOption _range;
     private EnvironmentOption _environment;
+    private LogNavigationOptions _navOptions;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
@@ -54,12 +57,35 @@
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
+    /// <summary>
+    /// Optional path for the log detail page, e.g. "/log/detail".
+    /// When null (default), clicking a detail link opens a dialog instead of navigating.
+    /// </summary>
+    [Parameter]
+    public string DetailPath { get; set; }
+
+    /// <summary>
+    /// Optional path for the log summary page, e.g. "/log/summary".
+    /// When null (default), clicking a summary link opens a dialog instead of navigating.
+    /// </summary>
+    [Parameter]
+    public string SummaryPath { get; set; }
+
     private TimeSpan RangeToUse => ShowRangeSelector
         ? _range
         : (Range ?? TimeSpan.Zero);
     private string EnvironmentToUse => ShowEnvironmentSelector
         ? _environment
         : Environment;
+
+    protected override void OnParametersSet()
+    {
+        _navOptions = new LogNavigationOptions
+        {
+            DetailPath = DetailPath,
+            SummaryPath = SummaryPath
+        };
+    }
 
     private void OnRangeSelected(LogRangeSelector.TimeRangeOption range)
     {
