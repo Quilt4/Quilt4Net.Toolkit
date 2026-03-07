@@ -19,9 +19,16 @@ else
         <RadzenColumn>
             <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
             <div>
-                <RadzenButton Text="@Model.Fingerprint" ButtonStyle="ButtonStyle.Light"
-                              Style="text-decoration: underline; padding: 0;"
-                              Click="@(() => OpenSummaryAsync(Model.Fingerprint))" />
+                @if (OnSummaryNavigation.HasDelegate || NavOptions.SummaryPath != null)
+                {
+                    <RadzenButton Text="@Model.Fingerprint" ButtonStyle="ButtonStyle.Light"
+                                  Style="text-decoration: underline; padding: 0;"
+                                  Click="@(() => OpenSummaryAsync(Model.Fingerprint))" />
+                }
+                else
+                {
+                    <RadzenText Text="@Model.Fingerprint" />
+                }
             </div>
         </RadzenColumn>
         <RadzenColumn>
@@ -99,6 +106,13 @@ else
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
+    /// <summary>
+    /// When set, clicking the fingerprint invokes this callback instead of opening a dialog.
+    /// Used when LogDetailView is embedded inline inside another component (e.g. LogSummaryView).
+    /// </summary>
+    [Parameter]
+    public EventCallback OnSummaryNavigation { get; set; }
+
     protected override async Task OnParametersSetAsync()
     {
         Model = null;
@@ -112,21 +126,16 @@ else
 
     private async Task OpenSummaryAsync(string fingerprint)
     {
+        if (OnSummaryNavigation.HasDelegate)
+        {
+            await OnSummaryNavigation.InvokeAsync();
+            return;
+        }
+
         var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Detail");
-        if (NavOptions?.SummaryPath != null)
+        if (NavOptions.SummaryPath != null)
         {
             NavigationManager.NavigateTo($"{NavOptions.SummaryPath}/{fingerprint}?p={p.Encode()}");
-        }
-        else
-        {
-            await DialogService.OpenAsync<LogSummaryView>("Log Summary", new Dictionary<string, object>
-            {
-                { nameof(LogSummaryView.Fingerprint), fingerprint },
-                { nameof(LogSummaryView.Environment), Environment },
-                { nameof(LogSummaryView.Range), Range },
-                { nameof(LogSummaryView.Source), Source },
-                { nameof(LogSummaryView.Context), Context }
-            });
         }
     }
 

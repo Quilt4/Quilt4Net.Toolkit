@@ -1,11 +1,22 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
-@inject DialogService DialogService
 @inject NavigationManager NavigationManager
 
 @if (Model == null)
 {
     <Loading />
+}
+else if (_selectedDetailId != null)
+{
+    <RadzenButton Icon="arrow_back" Text="Back" ButtonStyle="ButtonStyle.Light"
+                  Style="margin-bottom: 0.5rem;"
+                  Click="@(() => { _selectedDetailId = null; StateHasChanged(); })" />
+    <LogDetailView Id="@_selectedDetailId"
+                   Environment="@Environment"
+                   Range="@Range"
+                   Source="@Source"
+                   Context="@Context"
+                   OnSummaryNavigation="@(() => { _selectedDetailId = null; StateHasChanged(); })" />
 }
 else
 {
@@ -50,11 +61,11 @@ else
             <RadzenDataGridColumn Title="Message" Property="@nameof(SummaryData.Item.Message)" />
         </Columns>
     </RadzenDataGrid>
-
 }
 
 @code {
     private SummaryData Model { get; set; }
+    private string _selectedDetailId;
 
     [Parameter]
     public string Fingerprint { get; set; }
@@ -87,23 +98,16 @@ else
         await base.OnParametersSetAsync();
     }
 
-    private async Task OpenDetailAsync(string id)
+    private void OpenDetailAsync(string id)
     {
-        var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Count");
-        if (NavOptions?.DetailPath != null)
+        if (NavOptions.DetailPath != null)
         {
+            var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Count");
             NavigationManager.NavigateTo($"{NavOptions.DetailPath}/{id}?p={p.Encode()}");
         }
         else
         {
-            await DialogService.OpenAsync<LogDetailView>("Log Detail", new Dictionary<string, object>
-            {
-                { nameof(LogDetailView.Id), id },
-                { nameof(LogDetailView.Environment), Environment },
-                { nameof(LogDetailView.Range), Range },
-                { nameof(LogDetailView.Source), Source },
-                { nameof(LogDetailView.Context), Context }
-            });
+            _selectedDetailId = id;
         }
     }
 }
