@@ -77,7 +77,7 @@ else
                 { nameof(LogSummaryView.Range), (TimeSpan?)Range },
                 { nameof(LogSummaryView.Source), (LogSource?)source },
                 { nameof(LogSummaryView.Context), Context }
-            });
+            }, new DialogOptions { Resizable = true, Draggable = true, Width = "80vw", Height = "80vh" });
         }
     }
 }

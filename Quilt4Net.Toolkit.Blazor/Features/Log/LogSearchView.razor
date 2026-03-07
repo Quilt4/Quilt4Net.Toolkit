@@ -87,7 +87,7 @@ else if (Model != null)
                 { nameof(LogDetailView.Range), (TimeSpan?)Range },
                 { nameof(LogDetailView.Source), (LogSource?)source },
                 { nameof(LogDetailView.Context), Context }
-            });
+            }, new DialogOptions { Resizable = true, Draggable = true, Width = "80vw", Height = "80vh" });
         }
     }
 }
