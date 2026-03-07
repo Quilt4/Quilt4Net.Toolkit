@@ -1,113 +1,47 @@
-﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
-@inject IApplicationInsightsService ApplicationInsightsService
-@inject NavigationManager NavigationManager
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
 
-@if (Model == null)
+@if (_params != null && _params.GetSource().HasValue && _params.GetRange() != TimeSpan.Zero)
 {
-    <Loading />
-}
-else if (_selectedDetailId != null)
-{
-    <RadzenButton Icon="arrow_back" Text="Back" ButtonStyle="ButtonStyle.Light"
-                  Style="margin-bottom: 0.5rem;"
-                  Click="@(() => { _selectedDetailId = null; StateHasChanged(); })" />
-    <LogDetailView Id="@_selectedDetailId"
-                   Environment="@Environment"
-                   Range="@Range"
-                   Source="@Source"
-                   Context="@Context"
-                   OnSummaryNavigation="@(() => { _selectedDetailId = null; StateHasChanged(); })" />
-}
-else
-{
-    <RadzenRow>
-        <RadzenColumn>
-            <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@Model.Fingerprint" />
-        </RadzenColumn>
-        <RadzenColumn>
-            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@($"{Model.SeverityLevel}")" />
-        </RadzenColumn>
-    </RadzenRow>
-    <RadzenRow>
-        <RadzenColumn>
-            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@Model.Environment" />
-        </RadzenColumn>
-        <RadzenColumn>
-            <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@Model.Application" />
-        </RadzenColumn>
-        <RadzenColumn>
-            <RadzenText Text="Source" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@($"{Model.Source}")" />
-        </RadzenColumn>
-    </RadzenRow>
-
-    <RadzenDataGrid Data="@Model.Items" TItem="SummaryData.Item">
-        <Columns>
-            <RadzenDataGridColumn Title="Id" Width="60px">
-                <Template>
-                    <RadzenButton Icon="arrow_forward_ios" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                  Click="@(() => OpenDetailAsync(context.Id))" />
-                </Template>
-            </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Time" Property="@nameof(SummaryData.Item.TimeGenerated)">
-                <Template>
-                    <DateTimeView Date="@context.TimeGenerated" />
-                </Template>
-            </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Message" Property="@nameof(SummaryData.Item.Message)" />
-        </Columns>
-    </RadzenDataGrid>
+    <CascadingValue Value="_navOptions">
+        <LogSummaryContent Fingerprint="@Fingerprint"
+                           Environment="@_params.Environment"
+                           Range="@_params.GetRange()"
+                           Source="@_params.GetSource()"
+                           Context="@_params.GetContext()" />
+    </CascadingValue>
 }
 
 @code {
-    private SummaryData Model { get; set; }
-    private string _selectedDetailId;
+    private LogNavParams _params;
+    private LogNavigationOptions _navOptions;
 
+    /// <summary>
+    /// The fingerprint identifying the log summary group.
+    /// Typically bound from a route parameter: <c>@page "/log/summary/{Fingerprint}"</c>
+    /// </summary>
     [Parameter]
     public string Fingerprint { get; set; }
 
+    /// <summary>
+    /// URL-safe base64-encoded navigation parameters produced by <see cref="LogNavParams.Encode"/>.
+    /// Typically bound from a query parameter: <c>[Parameter, SupplyParameterFromQuery] public string P { get; set; }</c>
+    /// </summary>
     [Parameter]
-    public string Environment { get; set; }
+    public string Params { get; set; }
 
+    /// <summary>
+    /// Optional path for the log detail page, e.g. "/log/detail".
+    /// When null (default), clicking a detail link opens a dialog instead of navigating.
+    /// </summary>
     [Parameter]
-    public TimeSpan? Range { get; set; }
+    public string DetailPath { get; set; }
 
-    [Parameter]
-    public LogSource? Source { get; set; }
-
-    [CascadingParameter]
-    private LogNavigationOptions _cascadedNavOptions { get; set; }
-
-    private LogNavigationOptions NavOptions => _cascadedNavOptions ?? new LogNavigationOptions();
-
-    [Parameter]
-    public IApplicationInsightsContext Context { get; set; }
-
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
-        Model = null;
-
-        if (!Source.HasValue || !Range.HasValue) return;
-
-        Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
-
-        await base.OnParametersSetAsync();
-    }
-
-    private void OpenDetailAsync(string id)
-    {
-        if (NavOptions.DetailPath != null)
+        _params = LogNavParams.Decode(Params);
+        _navOptions = new LogNavigationOptions
         {
-            var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Count");
-            NavigationManager.NavigateTo($"{NavOptions.DetailPath}/{id}?p={p.Encode()}");
-        }
-        else
-        {
-            _selectedDetailId = id;
-        }
+            DetailPath = DetailPath
+        };
     }
 }

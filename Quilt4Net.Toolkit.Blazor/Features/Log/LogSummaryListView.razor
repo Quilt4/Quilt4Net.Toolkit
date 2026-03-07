@@ -70,13 +70,13 @@ else
         }
         else
         {
-            await DialogService.OpenAsync<LogSummaryView>("Log Summary", new Dictionary<string, object>
+            await DialogService.OpenAsync<LogSummaryContent>("Log Summary", new Dictionary<string, object>
             {
-                { nameof(LogSummaryView.Fingerprint), fingerprint },
-                { nameof(LogSummaryView.Environment), Environment },
-                { nameof(LogSummaryView.Range), (TimeSpan?)Range },
-                { nameof(LogSummaryView.Source), (LogSource?)source },
-                { nameof(LogSummaryView.Context), Context }
+                { nameof(LogSummaryContent.Fingerprint), fingerprint },
+                { nameof(LogSummaryContent.Environment), Environment },
+                { nameof(LogSummaryContent.Range), (TimeSpan?)Range },
+                { nameof(LogSummaryContent.Source), (LogSource?)source },
+                { nameof(LogSummaryContent.Context), Context }
             }, new DialogOptions { Resizable = true, Draggable = true, Width = "80vw", Height = "80vh" });
         }
     }

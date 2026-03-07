@@ -80,13 +80,13 @@ else if (Model != null)
         }
         else
         {
-            await DialogService.OpenAsync<LogDetailView>("Log Detail", new Dictionary<string, object>
+            await DialogService.OpenAsync<LogDetailContent>("Log Detail", new Dictionary<string, object>
             {
-                { nameof(LogDetailView.Id), id },
-                { nameof(LogDetailView.Environment), Environment },
-                { nameof(LogDetailView.Range), (TimeSpan?)Range },
-                { nameof(LogDetailView.Source), (LogSource?)source },
-                { nameof(LogDetailView.Context), Context }
+                { nameof(LogDetailContent.Id), id },
+                { nameof(LogDetailContent.Environment), Environment },
+                { nameof(LogDetailContent.Range), (TimeSpan?)Range },
+                { nameof(LogDetailContent.Source), (LogSource?)source },
+                { nameof(LogDetailContent.Context), Context }
             }, new DialogOptions { Resizable = true, Draggable = true, Width = "80vw", Height = "80vh" });
         }
     }
