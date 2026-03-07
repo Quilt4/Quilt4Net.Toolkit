@@ -15,6 +15,7 @@ public record LogNavParams
     public string Source { get; init; }
     public string Context { get; init; }
     public string Reference { get; init; }
+    public string Fingerprint { get; init; }
 
     /// <summary>
     /// Encodes this instance to a URL-safe base64 string.
@@ -53,7 +54,7 @@ public record LogNavParams
     /// <summary>
     /// Creates a <see cref="LogNavParams"/> from the individual parameters used throughout the log components.
     /// </summary>
-    public static LogNavParams From(string environment, TimeSpan range, LogSource? source, IApplicationInsightsContext context, string reference)
+    public static LogNavParams From(string environment, TimeSpan range, LogSource? source, IApplicationInsightsContext context, string reference, string fingerprint = null)
     {
         return new LogNavParams
         {
@@ -61,7 +62,8 @@ public record LogNavParams
             RangeMinutes = range.TotalMinutes,
             Source = source?.ToString(),
             Context = context?.ToKey(),
-            Reference = reference
+            Reference = reference,
+            Fingerprint = fingerprint
         };
     }
 
