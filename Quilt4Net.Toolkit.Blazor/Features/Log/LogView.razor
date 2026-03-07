@@ -1,4 +1,8 @@
-﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Microsoft.Extensions.DependencyInjection
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Tharga.Blazor.Features.BreadCrumbs
+@inject NavigationManager NavigationManager
+@inject IServiceProvider ServiceProvider
 
 <CascadingValue Value="_navOptions">
     <RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
@@ -16,7 +20,7 @@
         </RadzenColumn>
     </RadzenRow>
 
-    <RadzenTabs Change="StateHasChanged">
+    <RadzenTabs SelectedIndex="@_tabIndex" Change="@OnTabChange">
         <Tabs>
             <RadzenTabsItem Text="Search">
                 <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
@@ -38,9 +42,12 @@
 </CascadingValue>
 
 @code {
+    private static readonly string[] TabNames = ["search", "summary", "measure", "count", "trigger"];
+
     private LogRangeSelector.TimeRangeOption _range;
     private EnvironmentOption _environment;
     private LogNavigationOptions _navOptions;
+    private int _tabIndex;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
@@ -71,6 +78,19 @@
     [Parameter]
     public string SummaryPath { get; set; }
 
+    /// <summary>
+    /// The initially selected tab name (e.g. "summary"). Case-insensitive.
+    /// Typically bound from a query parameter: <c>[Parameter, SupplyParameterFromQuery] public string Tab { get; set; }</c>
+    /// </summary>
+    [Parameter]
+    public string Tab { get; set; }
+
+    /// <summary>
+    /// Fires when the user switches tabs, passing the new tab name (lowercase).
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnTabChanged { get; set; }
+
     private TimeSpan RangeToUse => ShowRangeSelector
         ? _range
         : (Range ?? TimeSpan.Zero);
@@ -85,6 +105,28 @@
             DetailPath = DetailPath,
             SummaryPath = SummaryPath
         };
+
+        var idx = Array.IndexOf(TabNames, Tab?.ToLower() ?? string.Empty);
+        _tabIndex = idx >= 0 ? idx : 0;
+
+        var breadCrumbService = ServiceProvider.GetService<BreadCrumbService>();
+        var tabName = TabNames[_tabIndex];
+        breadCrumbService?.AddVirtualSegment(tabName);
+    }
+
+    private async Task OnTabChange(int index)
+    {
+        _tabIndex = index;
+        var tabName = index < TabNames.Length ? TabNames[index] : TabNames[0];
+
+        var breadCrumbService = ServiceProvider.GetService<BreadCrumbService>();
+        breadCrumbService?.AddVirtualSegment(tabName);
+
+        var uri = NavigationManager.GetUriWithQueryParameter("tab", tabName);
+        NavigationManager.NavigateTo(uri, replace: true);
+
+        if (OnTabChanged.HasDelegate)
+            await OnTabChanged.InvokeAsync(tabName);
     }
 
     private void OnRangeSelected(LogRangeSelector.TimeRangeOption range)
