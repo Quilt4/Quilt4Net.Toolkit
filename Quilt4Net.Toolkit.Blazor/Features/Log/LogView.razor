@@ -111,6 +111,7 @@
 
         var breadCrumbService = ServiceProvider.GetService<BreadCrumbService>();
         var tabName = TabNames[_tabIndex];
+        breadCrumbService?.RemoveVirtualSegments();
         breadCrumbService?.AddVirtualSegment(tabName);
     }
 
@@ -120,6 +121,7 @@
         var tabName = index < TabNames.Length ? TabNames[index] : TabNames[0];
 
         var breadCrumbService = ServiceProvider.GetService<BreadCrumbService>();
+        breadCrumbService?.RemoveVirtualSegments();
         breadCrumbService?.AddVirtualSegment(tabName);
 
         var uri = NavigationManager.GetUriWithQueryParameter("tab", tabName);
