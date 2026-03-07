@@ -30,13 +30,6 @@
     public string Params { get; set; }
 
     /// <summary>
-    /// Optional path for the log detail page, e.g. "/log/detail".
-    /// When null (default), clicking a detail link opens a dialog instead of navigating.
-    /// </summary>
-    [Parameter]
-    public string DetailPath { get; set; }
-
-    /// <summary>
     /// Optional path for the log summary page, e.g. "/log/summary".
     /// When null (default), clicking a summary link opens a dialog instead of navigating.
     /// </summary>
@@ -48,7 +41,6 @@
         _params = LogNavParams.Decode(Params);
         _navOptions = new LogNavigationOptions
         {
-            DetailPath = DetailPath,
             SummaryPath = SummaryPath
         };
     }
