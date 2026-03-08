@@ -54,7 +54,7 @@ public static class ContentRegistration
         {
             var env = s.GetService<IHostEnvironment>();
             var co = s.GetService<IOptions<ContentOptions>>();
-            var environmentName = new Features.FeatureToggle.EnvironmentName { Name = env.EnvironmentName };
+            var environmentName = new Features.FeatureToggle.EnvironmentName { Name = env?.EnvironmentName ?? "Production" };
             var logger = s.GetService<ILogger<RemoteContentCallService>>();
             return new RemoteContentCallService(environmentName, co, logger);
         });
