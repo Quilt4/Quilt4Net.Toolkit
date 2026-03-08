@@ -102,7 +102,7 @@ else
     {
         if (NavOptions.DetailPath != null)
         {
-            var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Count", Fingerprint);
+            var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Summary", Fingerprint);
             NavigationManager.NavigateTo($"{NavOptions.DetailPath}/{id}?p={p.Encode()}");
         }
         else

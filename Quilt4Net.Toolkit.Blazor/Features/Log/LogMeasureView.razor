@@ -1,5 +1,7 @@
-﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IApplicationInsightsService ApplicationInsightsService
+@inject NavigationManager NavigationManager
+@inject DialogService DialogService
 
 @if (Model == null)
 {
@@ -42,7 +44,8 @@ else
                     <Columns>
                         <RadzenDataGridColumn Title="Id" Width="60px" Sortable="false">
                             <Template>
-                                <RadzenLink Path="@($"/log/detail/{context.Id}?Reference=Measure&Environment={Environment}&Range={Range.TotalMinutes}&Source={LogSource.Trace}&Context={Context.ToKey()}")" Icon="arrow_forward_ios" />
+                                <RadzenButton Icon="arrow_forward_ios" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                              Click="@(() => OpenDetailAsync(context.Id))" />
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="Time" Property="@nameof(MeasureData.TimeGenerated)" SortOrder="SortOrder.Descending" Filterable="false">
@@ -78,6 +81,11 @@ else
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
+    [CascadingParameter]
+    private LogNavigationOptions _cascadedNavOptions { get; set; }
+
+    private LogNavigationOptions NavOptions => _cascadedNavOptions ?? new LogNavigationOptions();
+
     protected override async Task OnParametersSetAsync()
     {
         Model = null;
@@ -109,6 +117,26 @@ else
                 .OrderBy(g => g.Key)
                 .Select(g => new ActionSeries($"{g.Key.Environment}.{g.Key.Action}", g.OrderBy(p => p.TimeGenerated).ToArray()))
                 .ToArray();
+        }
+    }
+
+    private async Task OpenDetailAsync(string id)
+    {
+        var p = LogNavParams.From(Environment, Range, LogSource.Trace, Context, "Measure");
+        if (NavOptions.DetailPath != null)
+        {
+            NavigationManager.NavigateTo($"{NavOptions.DetailPath}/{id}?p={p.Encode()}");
+        }
+        else
+        {
+            await DialogService.OpenAsync<LogDetailContent>("Log Detail", new Dictionary<string, object>
+            {
+                { nameof(LogDetailContent.Id), id },
+                { nameof(LogDetailContent.Environment), Environment },
+                { nameof(LogDetailContent.Range), (TimeSpan?)Range },
+                { nameof(LogDetailContent.Source), (LogSource?)LogSource.Trace },
+                { nameof(LogDetailContent.Context), Context }
+            }, new DialogOptions { Resizable = true, Draggable = true, Width = "80vw", Height = "80vh" });
         }
     }
 
