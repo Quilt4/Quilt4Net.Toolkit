@@ -10,18 +10,15 @@
 @inject ILanguageStateService LanguageStateService
 @inject DialogService DialogService
 
-@if (!string.IsNullOrEmpty(_content))
-{
-    <span style="@_edit" @onclick="OpenDialog" role="button" tabindex="0" @onkeydown="OnKeyDown">
-        @((MarkupString)_content)
-    </span>
-}
-else
-{
-    <div style="display:none" @ref="_holder">
+<span style="@(string.IsNullOrEmpty(_content) ? "display:none" : _edit)" @onclick="OpenDialog" role="button" tabindex="0" @onkeydown="OnKeyDown">
+    @((MarkupString)(_content ?? ""))
+</span>
+<div style="display:none" @ref="_holder">
+    @if (string.IsNullOrEmpty(_content))
+    {
         @ChildContent
-    </div>
-}
+    }
+</div>
 
 @code {
     private const string EditStyle = "display: inline-block; padding: 0px; outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
