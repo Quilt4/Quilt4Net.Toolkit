@@ -49,11 +49,9 @@
     </PackageReference>
     <PackageReference Include="System.Management" Version="10.0.3" />
     <PackageReference Include="System.Linq.Async" Version="7.0.0" />
+    <PackageReference Include="Tharga.Cache" Version="0.3.5" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Features\Heartbeat\" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\Toolkit\Cache\Tharga.Cache\Tharga.Cache.csproj" />
   </ItemGroup>
 </Project>
