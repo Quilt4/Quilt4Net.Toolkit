@@ -201,6 +201,10 @@ View and search Application Insights logs with the `LogView` component. Requires
 | `ShowEnvironmentSelector` | `true` | Show environment dropdown. |
 | `Environment` | `null` | Override the environment. |
 | `Context` | `null` | Application Insights context. |
+| `DetailPath` | `null` | Path for the detail page (see below). |
+| `SummaryPath` | `null` | Path for the summary page (see below). |
+| `Tab` | `null` | Initially selected tab name (e.g. `"summary"`). Typically bound from a `?tab=` query parameter. |
+| `OnTabChanged` | — | Fires with the new tab name (lowercase) when the user switches tabs. |
 
 ### Tabs
 
@@ -211,6 +215,151 @@ View and search Application Insights logs with the `LogView` component. Requires
 | **Measure** | Performance measurements with line charts (elapsed time by action). |
 | **Count** | Log count statistics with column charts. |
 | **Trigger** | Development utility for manually triggering log entries. |
+
+### Navigation
+
+By default, clicking a row in the Search, Summary, Measure, or Count tabs opens a Radzen dialog inline. This works out of the box with no additional pages required.
+
+If you want to navigate to dedicated pages instead, set `DetailPath` and `SummaryPath` on `LogView`.
+
+```razor
+<LogView DetailPath="/log/detail" SummaryPath="/log/summary" />
+```
+
+When paths are set, clicking a row navigates to `{path}/{id}?p={encoded}` where `p` is a URL-safe base64 string containing all navigation parameters.
+
+### Tab deep linking
+
+`LogView` automatically syncs the active tab to the URL as a `?tab=` query parameter and reads it back on load. This enables deep linking and browser back/forward navigation without requiring extra `@page` route declarations.
+
+Bind the `Tab` parameter from a query string on your hosting page:
+
+```razor
+@* MyLogPage.razor *@
+@page "/log"
+
+<LogView Tab="@Tab" DetailPath="/log/detail" SummaryPath="/log/summary" />
+
+@code {
+    [Parameter, SupplyParameterFromQuery]
+    public string Tab { get; set; }
+}
+```
+
+Navigating to `/log?tab=summary` will open the Summary tab directly. Switching tabs updates the URL to `/log?tab=<name>` using `replace: true` so no extra browser history entries are added.
+
+### Page components
+
+Use `LogDetailView` and `LogSummaryView` to build your own dedicated pages that receive the encoded `p` parameter.
+
+```razor
+@* MyDetailPage.razor *@
+@page "/log/detail/{Id}"
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<LogDetailView Id="@Id" Params="@P" SummaryPath="/log/summary" />
+
+@code {
+    [Parameter] public string Id { get; set; }
+    [Parameter, SupplyParameterFromQuery] public string P { get; set; }
+}
+```
+
+```razor
+@* MySummaryPage.razor *@
+@page "/log/summary/{Fingerprint}"
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<LogSummaryView Fingerprint="@Fingerprint" Params="@P" DetailPath="/log/detail" />
+
+@code {
+    [Parameter] public string Fingerprint { get; set; }
+    [Parameter, SupplyParameterFromQuery] public string P { get; set; }
+}
+```
+
+| Component | Parameter | Description |
+|-----------|-----------|-------------|
+| `LogDetailView` | `Id` | Log entry ID from the route. |
+| | `Params` | Encoded navigation params from the `p` query string. |
+| | `SummaryPath` | Path to navigate back to the summary page. When null, the fingerprint is shown as plain text. |
+| `LogSummaryView` | `Fingerprint` | Fingerprint from the route. |
+| | `Params` | Encoded navigation params from the `p` query string. |
+| | `DetailPath` | Path to navigate to a detail page. When null, clicking a row opens an inline detail view. |
+
+### Breadcrumb integration
+
+`LogView` integrates with `BreadCrumbService` from Tharga.Blazor automatically — it registers the `tab` query parameter as a virtual breadcrumb segment, so the active tab name always appears at the end of the breadcrumb trail without any extra code.
+
+On hosting pages and sub-pages, use `BreadCrumbService` to control which segments are clickable:
+
+```razor
+@* Log.razor — hosting page *@
+@inject BreadCrumbService BreadCrumbService
+
+protected override Task OnInitializedAsync()
+{
+    // Remove the link from ancestor segments
+    BreadCrumbService.UnlinkSegment("log");
+    return base.OnInitializedAsync();
+}
+```
+
+On sub-pages (summary and detail), relink segments so the breadcrumb points back to the correct tab:
+
+```razor
+@* MySummaryPage.razor *@
+protected override Task OnInitializedAsync()
+{
+    BreadCrumbService.UnlinkSegment("log");
+    BreadCrumbService.RelinkSegment("summary", "/log?tab=summary");
+    return base.OnInitializedAsync();
+}
+```
+
+On detail pages, remove the URL-path segments for `detail` and the `{Id}` and add virtual breadcrumb segments that reflect the navigation source. The encoded `p` parameter carries a `Reference` value identifying where the user came from:
+
+| Reference | Breadcrumb appended |
+|-----------|---------------------|
+| `"Search"` | `> Search > {id}` |
+| `"Summary"` | `> Summary > {fingerprint} > {id}` |
+| `"Measure"` | `> Measure > {id}` |
+| `"Count"` | `> Count > {id}` |
+
+```razor
+@* MyDetailPage.razor *@
+protected override async Task OnInitializedAsync()
+{
+    BreadCrumbService.UnlinkSegment("log");
+    BreadCrumbService.RemoveSegment("detail");
+    BreadCrumbService.RemoveSegment(Id);
+
+    var navParams = LogNavParams.Decode(P);
+    if (navParams.Reference == "Search")
+    {
+        BreadCrumbService.AddVirtualSegment("search", "/log?tab=search");
+        BreadCrumbService.AddVirtualSegment(Id);
+    }
+    else if (navParams.Reference == "Summary" && !string.IsNullOrEmpty(navParams.Fingerprint))
+    {
+        BreadCrumbService.AddVirtualSegment("summary", "/log?tab=summary");
+        BreadCrumbService.AddVirtualSegment(navParams.Fingerprint, $"/log/summary/{navParams.Fingerprint}?p={P}");
+        BreadCrumbService.AddVirtualSegment(Id);
+    }
+    else if (navParams.Reference == "Measure")
+    {
+        BreadCrumbService.AddVirtualSegment("measure", "/log?tab=measure");
+        BreadCrumbService.AddVirtualSegment(Id);
+    }
+    else if (navParams.Reference == "Count")
+    {
+        BreadCrumbService.AddVirtualSegment("count", "/log?tab=count");
+        BreadCrumbService.AddVirtualSegment(Id);
+    }
+
+    await base.OnInitializedAsync();
+}
+```
 
 ## Configuration
 

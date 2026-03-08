@@ -1,0 +1,113 @@
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsService ApplicationInsightsService
+@inject NavigationManager NavigationManager
+
+@if (Model == null)
+{
+    <Loading />
+}
+else if (_selectedDetailId != null)
+{
+    <RadzenButton Icon="arrow_back" Text="Back" ButtonStyle="ButtonStyle.Light"
+                  Style="margin-bottom: 0.5rem;"
+                  Click="@(() => { _selectedDetailId = null; StateHasChanged(); })" />
+    <LogDetailContent Id="@_selectedDetailId"
+                   Environment="@Environment"
+                   Range="@Range"
+                   Source="@Source"
+                   Context="@Context"
+                   OnSummaryNavigation="@(() => { _selectedDetailId = null; StateHasChanged(); })" />
+}
+else
+{
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Fingerprint" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.SeverityLevel}")" />
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
+        <RadzenColumn>
+            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Environment" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Application" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Source" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.Source}")" />
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenDataGrid Data="@Model.Items" TItem="SummaryData.Item">
+        <Columns>
+            <RadzenDataGridColumn Title="Id" Width="60px">
+                <Template>
+                    <RadzenButton Icon="arrow_forward_ios" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  Click="@(() => OpenDetailAsync(context.Id))" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Time" Property="@nameof(SummaryData.Item.TimeGenerated)">
+                <Template>
+                    <DateTimeView Date="@context.TimeGenerated" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Message" Property="@nameof(SummaryData.Item.Message)" />
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private SummaryData Model { get; set; }
+    private string _selectedDetailId;
+
+    [Parameter]
+    public string Fingerprint { get; set; }
+
+    [Parameter]
+    public string Environment { get; set; }
+
+    [Parameter]
+    public TimeSpan? Range { get; set; }
+
+    [Parameter]
+    public LogSource? Source { get; set; }
+
+    [CascadingParameter]
+    private LogNavigationOptions _cascadedNavOptions { get; set; }
+
+    private LogNavigationOptions NavOptions => _cascadedNavOptions ?? new LogNavigationOptions();
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Model = null;
+
+        if (!Source.HasValue || !Range.HasValue) return;
+
+        Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
+
+        await base.OnParametersSetAsync();
+    }
+
+    private void OpenDetailAsync(string id)
+    {
+        if (NavOptions.DetailPath != null)
+        {
+            var p = LogNavParams.From(Environment, Range ?? TimeSpan.Zero, Source, Context, "Summary", Fingerprint);
+            NavigationManager.NavigateTo($"{NavOptions.DetailPath}/{id}?p={p.Encode()}");
+        }
+        else
+        {
+            _selectedDetailId = id;
+        }
+    }
+}
