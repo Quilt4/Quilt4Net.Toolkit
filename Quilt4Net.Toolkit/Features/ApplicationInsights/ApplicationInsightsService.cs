@@ -574,15 +574,16 @@ AppExceptions
 AppTraces
 | where _ItemId == ""{id}""
 | extend _p = todynamic(Properties)
-| extend OriginalFormat = tostring(_p[""OriginalFormat""])
 | extend
+    OriginalFormat = tostring(_p[""OriginalFormat""]),
     CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(Message),
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat))),
     SeverityLevel = toint(SeverityLevel),
     Raw = pack_all()
+| extend
+    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat)))
 | project TimeGenerated, Message, Environment, Application, Fingerprint, SeverityLevel, CorrelationId, Raw
 | take 1",
 
@@ -685,11 +686,14 @@ AppTraces
 | extend _p = todynamic(Properties)
 | extend
     OriginalFormat = tostring(_p[""OriginalFormat""]),
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat))),
     Message = tostring(Message),
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Id = _ItemId
+| extend
+    FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
+| extend
+    Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
 | order by TimeGenerated desc",
