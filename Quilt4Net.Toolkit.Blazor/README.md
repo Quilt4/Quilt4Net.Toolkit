@@ -95,7 +95,15 @@ Renders a Radzen button with managed text.
 
 ## Content from code
 
-Inject `IContentService` to retrieve content programmatically.
+Inject `IQuilt4ContentService` to retrieve content programmatically. It automatically uses the currently selected language.
+
+```csharp
+@inject IQuilt4ContentService ContentService
+
+var text = await ContentService.GetAsync("welcome-message", "Hello!");
+```
+
+For advanced scenarios (specific language, HTML format), inject `IContentService` directly:
 
 ```csharp
 var (value, success) = await _contentService.GetContentAsync("welcome-message", "Hello!", languageKey, ContentFormat.String);
