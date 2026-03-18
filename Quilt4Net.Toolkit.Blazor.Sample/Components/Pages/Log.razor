@@ -1,0 +1,23 @@
+@page "/log"
+@rendermode InteractiveServer
+
+<PageTitle>Log</PageTitle>
+
+<h1>Log viewer</h1>
+
+<p>
+    View and search Application Insights logs. The <code>Tab</code> parameter enables deep linking via
+    the <code>?tab=</code> query parameter.
+</p>
+
+<LogView Tab="@Tab" OnTabChanged="@OnTabChanged" />
+
+@code {
+    [SupplyParameterFromQuery]
+    public string Tab { get; set; }
+
+    private void OnTabChanged(string tab)
+    {
+        Tab = tab;
+    }
+}
