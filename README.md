@@ -84,3 +84,13 @@ Add your API key in `appsettings.json`.
   }
 }
 ```
+
+## Samples
+
+Three sample projects demonstrate different platforms and features with no overlap.
+
+| Sample | Type | Features |
+|--------|------|----------|
+| [Quilt4Net.Toolkit.Api.Sample](Quilt4Net.Toolkit.Api.Sample/) | ASP.NET Core Web API | Health endpoints, API logging, authentication, feature toggles, remote configuration, measurements, Application Insights, hosted services |
+| [Quilt4Net.Toolkit.Blazor.Sample](Quilt4Net.Toolkit.Blazor.Sample/) | Blazor Server | Content components, language selector, edit mode, remote configuration admin, log viewer with tab deep linking |
+| [Quilt4Net.Toolkit.Console.Sample](Quilt4Net.Toolkit.Console.Sample/) | Console | Feature toggles, remote configuration, health client |
