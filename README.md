@@ -12,7 +12,7 @@ A set of NuGet packages for building .NET applications with health checks, metri
 
 Core library providing feature toggles, remote configuration, content management, health check client, Application Insights client, and measure/count logging extensions. Used by all other packages in this repository.
 
-[Read more](Quilt4Net.Toolkit/README.md)
+[Read more](Quilt4Net.Toolkit/README.md) | [Console sample](Quilt4Net.Toolkit.Console.Sample/)
 
 ### Quilt4Net.Toolkit.Health
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Health)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Health)
@@ -20,7 +20,7 @@ Core library providing feature toggles, remote configuration, content management
 
 Health endpoints (live, ready, health, dependencies, metrics, version), heartbeat telemetry, service probe monitoring, and certificate checks for .NET Web Applications. Depends on `Quilt4Net.Toolkit`.
 
-[Read more](Quilt4Net.Toolkit.Health/README.md)
+[Read more](Quilt4Net.Toolkit.Health/README.md) | [API sample](Quilt4Net.Toolkit.Api.Sample/)
 
 ### Quilt4Net.Toolkit.Api
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Api)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Api)
@@ -28,7 +28,7 @@ Health endpoints (live, ready, health, dependencies, metrics, version), heartbea
 
 HTTP request/response logging and correlation ID tracking middleware. Logs to Application Insights and/or standard `ILogger` with path filtering and per-endpoint control via attributes. Depends on `Quilt4Net.Toolkit`.
 
-[Read more](Quilt4Net.Toolkit.Api/README.md)
+[Read more](Quilt4Net.Toolkit.Api/README.md) | [API sample](Quilt4Net.Toolkit.Api.Sample/)
 
 ### Quilt4Net.Toolkit.Blazor
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Blazor)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Blazor)
@@ -36,7 +36,7 @@ HTTP request/response logging and correlation ID tracking middleware. Logs to Ap
 
 Blazor component library for content management, language selection, remote configuration admin, and Application Insights log viewing. Built on Radzen. Depends on `Quilt4Net.Toolkit`.
 
-[Read more](Quilt4Net.Toolkit.Blazor/README.md)
+[Read more](Quilt4Net.Toolkit.Blazor/README.md) | [Blazor sample](Quilt4Net.Toolkit.Blazor.Sample/)
 
 ## Package dependencies
 
@@ -84,3 +84,13 @@ Add your API key in `appsettings.json`.
   }
 }
 ```
+
+## Samples
+
+Three sample projects demonstrate different platforms and features with no overlap.
+
+| Sample | Type | Features |
+|--------|------|----------|
+| [Quilt4Net.Toolkit.Api.Sample](Quilt4Net.Toolkit.Api.Sample/) | ASP.NET Core Web API | Health endpoints, API logging, authentication, feature toggles, remote configuration, measurements, Application Insights, hosted services |
+| [Quilt4Net.Toolkit.Blazor.Sample](Quilt4Net.Toolkit.Blazor.Sample/) | Blazor Server | Content components, language selector, edit mode, remote configuration admin, log viewer with tab deep linking |
+| [Quilt4Net.Toolkit.Console.Sample](Quilt4Net.Toolkit.Console.Sample/) | Console | Feature toggles, remote configuration, health client |

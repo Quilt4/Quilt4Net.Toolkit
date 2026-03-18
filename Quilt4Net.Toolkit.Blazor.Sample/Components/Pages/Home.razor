@@ -1,0 +1,33 @@
+@page "/"
+
+<PageTitle>Quilt4Net Blazor Sample</PageTitle>
+
+<Quilt4Text Key="welcome-title" Default="Welcome to Quilt4Net" TextStyle="TextStyle.H1" />
+
+<Quilt4Content Key="welcome-body">
+    <p>This sample demonstrates the Blazor components from <strong>Quilt4Net.Toolkit.Blazor</strong>.</p>
+    <p>Use the navigation menu to explore the available features.</p>
+</Quilt4Content>
+
+<h3>Components demonstrated</h3>
+
+<RadzenCard>
+    <h4>Content management</h4>
+    <p>
+        <Quilt4Span Key="sample-label" Default="Status:" />
+        <Quilt4Raw Key="sample-value" Default="OK" />
+    </p>
+    <Quilt4Button TextKey="sample-button" DefaultText="Click me" Icon="send" Click="@OnButtonClick" />
+    <p style="margin-top: 8px; color: gray;">@_buttonMessage</p>
+</RadzenCard>
+
+@code {
+    private string _buttonMessage = "";
+
+    private Task OnButtonClick()
+    {
+        _buttonMessage = $"Button clicked at {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+}

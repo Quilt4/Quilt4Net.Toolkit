@@ -1,0 +1,17 @@
+@page "/configuration"
+@rendermode InteractiveServer
+
+<PageTitle>Configuration</PageTitle>
+
+<h1>Remote configuration</h1>
+
+<p>
+    The <code>RemoteConfigurationAdmin</code> component displays a data grid of feature toggles
+    and configuration values. Changes are saved to <a href="https://quilt4net.com">Quilt4Net Web</a>.
+</p>
+
+<h3>Full configuration view</h3>
+<RemoteConfigurationAdmin />
+
+<h3>Toggles only</h3>
+<RemoteConfigurationAdmin TogglesOnly="true" />

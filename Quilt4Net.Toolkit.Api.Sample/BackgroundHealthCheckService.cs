@@ -1,8 +1,8 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Health.Metrics;
 
-namespace Quilt4Net.Toolkit.Sample;
+namespace Quilt4Net.Toolkit.Api.Sample;
 
 public class BackgroundHealthCheckService
 {
