@@ -8,7 +8,6 @@ using Quilt4Net.Toolkit.Api.Sample.Controllers;
 using Quilt4Net.Toolkit.Features.Health;
 using Quilt4Net.Toolkit.Features.Health.Dependency;
 using Quilt4Net.Toolkit.Health;
-using Quilt4Net.Toolkit.Sample;
 
 var builder = WebApplication.CreateBuilder(args);
 

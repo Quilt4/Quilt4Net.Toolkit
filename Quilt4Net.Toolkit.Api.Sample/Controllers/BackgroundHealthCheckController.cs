@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Quilt4Net.Toolkit.Sample;
 
 namespace Quilt4Net.Toolkit.Api.Sample.Controllers;
 

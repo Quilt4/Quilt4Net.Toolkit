@@ -25,8 +25,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Quilt4Net.Toolkit.Api.Sampl
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Blazor", "Quilt4Net.Toolkit.Blazor\Quilt4Net.Toolkit.Blazor.csproj", "{0423DA83-4A62-5DF3-7FC5-08A89F995291}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Sample", "Quilt4Net.Toolkit.Sample\Quilt4Net.Toolkit.Sample.csproj", "{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Health", "Quilt4Net.Toolkit.Health\Quilt4Net.Toolkit.Health.csproj", "{9CF1E871-4D33-7CA2-DBC7-2D3406DE26F9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Quilt4Net.Toolkit.Health.Tests", "Quilt4Net.Toolkit.Health.Tests\Quilt4Net.Toolkit.Health.Tests.csproj", "{4F7F856B-EFCF-48E6-83B9-782E67A5C2D2}"
@@ -119,18 +117,6 @@ Global
 		{0423DA83-4A62-5DF3-7FC5-08A89F995291}.Release|x64.Build.0 = Release|Any CPU
 		{0423DA83-4A62-5DF3-7FC5-08A89F995291}.Release|x86.ActiveCfg = Release|Any CPU
 		{0423DA83-4A62-5DF3-7FC5-08A89F995291}.Release|x86.Build.0 = Release|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Debug|x64.Build.0 = Debug|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Debug|x86.Build.0 = Debug|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Release|Any CPU.Build.0 = Release|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Release|x64.ActiveCfg = Release|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Release|x64.Build.0 = Release|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Release|x86.ActiveCfg = Release|Any CPU
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E}.Release|x86.Build.0 = Release|Any CPU
 		{9CF1E871-4D33-7CA2-DBC7-2D3406DE26F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{9CF1E871-4D33-7CA2-DBC7-2D3406DE26F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9CF1E871-4D33-7CA2-DBC7-2D3406DE26F9}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -197,7 +183,6 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{0D4E18BF-F54E-4B67-859B-8D3E01D4F0FB} = {DE636D86-71E3-48D1-9C27-86D3A30F1256}
-		{4B4B0633-CCEB-4558-BE6F-E68330E3A14E} = {DE636D86-71E3-48D1-9C27-86D3A30F1256}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1DAEB613-C452-410F-8FD5-94CAB7BD56CE}
