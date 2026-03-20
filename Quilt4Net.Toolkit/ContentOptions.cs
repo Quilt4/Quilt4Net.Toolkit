@@ -22,4 +22,10 @@ public record ContentOptions
     /// This key can be retrieved from https://quilt4net.com/.
     /// </summary>
     public string ApiKey { get; set; }
+
+    /// <summary>
+    /// Duration to cache the default value when an API call fails (e.g. invalid API key).
+    /// Default is 60 minutes.
+    /// </summary>
+    public TimeSpan FailureCacheDuration { get; set; } = TimeSpan.FromMinutes(60);
 }

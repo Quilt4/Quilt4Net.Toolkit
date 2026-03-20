@@ -68,7 +68,7 @@ internal class LanguageStateService : ILanguageStateService
                 new Language
                 {
                     Name = "X",
-                    Key = Guid.Parse("8C12E829-318E-40DA-86E9-6B37A68EFFD1"),
+                    Key = Language.DeveloperLanguageKey,
                     Developer = true
                 }
             ]).ToArray();

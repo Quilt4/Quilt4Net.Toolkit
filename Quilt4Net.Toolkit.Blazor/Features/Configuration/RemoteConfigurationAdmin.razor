@@ -1,8 +1,10 @@
-﻿@using Quilt4Net.Toolkit.Blazor.Framework
+﻿@using Microsoft.Extensions.Logging
+@using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.FeatureToggle
 @using Quilt4Net.Toolkit.Framework
 @inject IRemoteConfigurationService RemoteConfigurationService
 @inject DialogService DialogService
+@inject ILogger<RemoteConfigurationAdmin> Logger
 
 <ConnectionWrapper Service="Service.Configuration">
     @if (_model == null)
@@ -68,7 +70,7 @@
     }
 </ConnectionWrapper>
 
-    @code {
+@code {
     private ConfigurationResponse[] _model;
 
     [Parameter]
@@ -76,7 +78,14 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        await ReloadDataAsync();
+        try
+        {
+            await ReloadDataAsync();
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning(e, e.Message);
+        }
 
         await base.OnParametersSetAsync();
     }
