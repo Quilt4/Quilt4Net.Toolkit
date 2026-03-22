@@ -28,11 +28,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
     public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType)
     {
-        if (languageKey == Guid.Parse("8C12E829-318E-40DA-86E9-6B37A68EFFD1")) return ("X", true);
-
-        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return ("No ApiKey provided.", false);
+        if (languageKey == Language.DeveloperLanguageKey) return ("X", true);
 
         defaultValue ??= $"No content for '{key}'.";
+
+        if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey)) return (defaultValue, false);
 
         try
         {
@@ -63,10 +63,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException($"Unable to get feature toggle for key '{key}' from address '{address}'. Response was '{response.StatusCode} {response.ReasonPhrase}'.");
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        _logger.LogError("Unauthorized access for key '{Key}' from address '{Address}'. Caching fallback for {Duration}.", key, address, _contentOptions.FailureCacheDuration);
+                        CacheFailure(key, languageKey, defaultValue);
+                        return (defaultValue, false);
+                    }
 
                     _logger.LogError("Unable to get content for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}' Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
                         key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase, defaultValue);
+                    CacheFailure(key, languageKey, defaultValue);
                     return (defaultValue, false);
                 }
 
@@ -77,19 +83,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
             return (result.Value ?? defaultValue, true);
         }
-        catch (UnauthorizedAccessException e)
-        {
-            _logger.LogError(e, "{Message} Key {Key}.", e.Message, key);
-            throw;
-        }
         catch (HttpRequestException e)
         {
             _logger.LogError(e, "{Message} Status code {StatusCode}. Using fallback value '{Fallback}' for key {Key}.", e.Message, e.StatusCode, defaultValue, key);
+            CacheFailure(key, languageKey, defaultValue);
             return (defaultValue, false);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using fallback value '{Fallback}' for key {Key}.", e.Message, defaultValue, key);
+            CacheFailure(key, languageKey, defaultValue);
             return (defaultValue, false);
         }
     }
@@ -132,7 +135,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
     public async Task<Language[]> GetLanguagesAsync(bool forceReload)
     {
-        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return [new Language { Name = "No ApiKey provided.", Key = Guid.Parse("8C12E829-318E-40DA-86E9-6B37A68EFFD1") }];
+        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return [new Language { Name = "No ApiKey provided.", Key = Language.NoApiKeyLanguageKey }];
 
         if (_languages != null && !forceReload && DateTime.UtcNow < _languagesValidTo) return _languages;
 
@@ -162,6 +165,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
     public async Task ClearContentCacheAsync()
     {
         _localCache.Clear();
+    }
+
+    private void CacheFailure(string key, Guid languageKey, string defaultValue)
+    {
+        var failureResponse = new GetContentResponse
+        {
+            Value = defaultValue,
+            ValidTo = DateTime.UtcNow.Add(_contentOptions.FailureCacheDuration)
+        };
+        _localCache.AddOrUpdate($"{key}_{languageKey}", failureResponse, (_, _) => failureResponse);
     }
 
     private static string BuildKey(GetContentRequest request)

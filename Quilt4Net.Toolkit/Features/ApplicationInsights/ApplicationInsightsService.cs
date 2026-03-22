@@ -156,11 +156,7 @@ union
             ? string.Empty
             : $"\n| where Environment == '{EscapeKqlSingleQuoted(envValue)}' or isempty(Environment)";
 
-        var textFilterExceptionsAndTraces = textValue is null
-            ? string.Empty
-            : $"\n| where Message contains '{EscapeKqlSingleQuoted(textValue)}'";
-
-        var textFilterRequests = textValue is null
+        var textFilter = textValue is null
             ? string.Empty
             : $"\n| where Message contains '{EscapeKqlSingleQuoted(textValue)}' or CorrelationId contains '{EscapeKqlSingleQuoted(textValue)}'";
 
@@ -171,11 +167,12 @@ union
 AppExceptions
 | extend _p = todynamic(Properties)
 | extend
+    CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(OuterMessage)
 {envFilter}
-{textFilterExceptionsAndTraces}
+{textFilter}
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
     Id = _ItemId,
@@ -229,11 +226,12 @@ AppExceptions
 AppTraces
 | extend _p = todynamic(Properties)
 | extend
+    CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     OriginalFormat = tostring(_p[""OriginalFormat""])
 {envFilter}
-{textFilterExceptionsAndTraces}
+{textFilter}
 | where SeverityLevel >= {(int)minSeverityLevel}
 | extend
     FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
@@ -294,7 +292,7 @@ AppRequests
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(Name)
 {envFilter}
-{textFilterRequests}
+{textFilter}
 | extend
     SeverityLevel = iif(tobool(coalesce(Success, true)), 1, 3)
 | where SeverityLevel >= {(int)minSeverityLevel}
@@ -576,15 +574,16 @@ AppExceptions
 AppTraces
 | where _ItemId == ""{id}""
 | extend _p = todynamic(Properties)
-| extend OriginalFormat = tostring(_p[""OriginalFormat""])
 | extend
+    OriginalFormat = tostring(_p[""OriginalFormat""]),
     CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(Message),
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat))),
     SeverityLevel = toint(SeverityLevel),
     Raw = pack_all()
+| extend
+    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat)))
 | project TimeGenerated, Message, Environment, Application, Fingerprint, SeverityLevel, CorrelationId, Raw
 | take 1",
 
@@ -687,11 +686,14 @@ AppTraces
 | extend _p = todynamic(Properties)
 | extend
     OriginalFormat = tostring(_p[""OriginalFormat""]),
-    Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat))),
     Message = tostring(Message),
     Environment = tostring(_p[""AspNetCoreEnvironment""]),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Id = _ItemId
+| extend
+    FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
+| extend
+    Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
 | order by TimeGenerated desc",
