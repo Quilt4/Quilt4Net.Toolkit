@@ -7,13 +7,10 @@ Features can be configured and monitored using [Quilt4Net Web](https://quilt4net
 
 ## Get started
 
-Install the NuGet package [Quilt4Net.Toolkit.Blazor](https://www.nuget.org/packages/Quilt4Net.Toolkit.Blazor) and register the service.
+Install the NuGet package [Quilt4Net.Toolkit.Blazor](https://www.nuget.org/packages/Quilt4Net.Toolkit.Blazor) and register the service in `Program.cs`.
 
 ```csharp
-builder.AddQuilt4NetBlazorContent(o =>
-{
-    o.ApiKey = "YOUR_API_KEY_HERE";
-});
+builder.AddQuilt4NetBlazorContent();
 ```
 
 Add your API key from [Quilt4Net Web](https://quilt4net.com) in `appsettings.json`.
@@ -24,6 +21,15 @@ Add your API key from [Quilt4Net Web](https://quilt4net.com) in `appsettings.jso
     "ApiKey": "YOUR_API_KEY_HERE"
   }
 }
+```
+
+The API key is read automatically from the `Quilt4Net:ApiKey` configuration path. You can also set it explicitly in code:
+
+```csharp
+builder.AddQuilt4NetBlazorContent(o =>
+{
+    o.ApiKey = builder.Configuration["Quilt4Net:ApiKey"];
+});
 ```
 
 ## Content components

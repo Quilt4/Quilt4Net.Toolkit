@@ -63,8 +63,8 @@ builder.AddQuilt4NetApiLogging();
 // Feature toggles and remote configuration
 builder.AddQuilt4NetRemoteConfiguration();
 
-// Content management
-builder.AddQuilt4NetContent();
+// Content management (Blazor components)
+builder.AddQuilt4NetBlazorContent();
 
 var app = builder.Build();
 
@@ -84,6 +84,22 @@ Add your API key in `appsettings.json`.
   }
 }
 ```
+
+## Configuration reference
+
+All packages read from `appsettings.json` under the `Quilt4Net` section. The shared `ApiKey` is used by content, remote configuration, and feature toggles.
+
+| Config path | Package | Description |
+|-------------|---------|-------------|
+| `Quilt4Net:ApiKey` | All | Shared API key from [Quilt4Net Web](https://quilt4net.com). |
+| `Quilt4Net:HealthApi` | Health | Health endpoint options (pattern, controller name, heartbeat, certificate). |
+| `Quilt4Net:ApiLogging` | Api | API logging options (log mode, paths, body size, correlation ID). |
+| `Quilt4Net:RemoteConfiguration` | Toolkit | Remote configuration and feature toggle options (TTL). |
+| `Quilt4Net:Content` | Toolkit / Blazor | Content management options (application name, server address). |
+| `Quilt4Net:ApplicationInsights` | Toolkit | Application Insights client options (tenant, workspace, credentials). |
+| `Quilt4Net:HealthClient` | Toolkit | Health client options (remote health API address). |
+
+See individual package READMEs for full option details.
 
 ## Samples
 
