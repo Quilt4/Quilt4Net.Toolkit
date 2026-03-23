@@ -1,23 +1,24 @@
 ﻿@using Quilt4Net.Toolkit.Framework
 @inject IConnectionService ConnectionService
 
-@if (_contnected == null)
+@if (_result == null)
 {
     <Loading Size="ProgressBarCircularSize.Small" />
 }
-else if (_contnected == false)
+else if (!_result.Success)
 {
-    <RadzenText>Not connected to <RadzenLink Text="Quilt4Net" Path="@(_connectionInfo.Address.AbsoluteUri)" Target="Quilt4Net" />.</RadzenText>
-    <RadzenText>@_connectionInfo.Message</RadzenText>
+    <RadzenText>Not connected to <RadzenLink Text="Quilt4Net" Path="@(_result.Address.AbsoluteUri)" Target="Quilt4Net" />.</RadzenText>
+    <RadzenText>@_result.Message</RadzenText>
 }
 else
 {
-    @ChildContent
+    <CascadingValue Value="@_result.Capabilities">
+        @ChildContent
+    </CascadingValue>
 }
 
 @code {
-    private bool? _contnected;
-    private (bool Success, string Message, Uri Address) _connectionInfo;
+    private ConnectionResult _result;
 
     [Parameter]
     public Service? Service { get; set; }
@@ -29,9 +30,7 @@ else
     {
         if (!Service.HasValue) throw new InvalidOperationException($"No {nameof(Service)} parameter provided to {nameof(ConnectionWrapper)} component.");
 
-        var response = await ConnectionService.CanConnectAsync(Service.Value);
-        _contnected = response.Success;
-        _connectionInfo = response;
+        _result = await ConnectionService.CanConnectAsync(Service.Value);
 
         await base.OnParametersSetAsync();
     }

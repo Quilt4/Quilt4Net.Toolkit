@@ -18,7 +18,8 @@
                 <RadzenDataGridColumn Title="Key" Property="@nameof(ConfigurationResponse.Key)"/>
                 <RadzenDataGridColumn Title="Value" Property="@nameof(ConfigurationResponse.Value)">
                     <Template>
-                        @{
+                        @if (_canWrite)
+                        {
                             @switch (context.ValueType)
                             {
                                 case "Boolean":
@@ -35,18 +36,22 @@
                                     break;
                             }
                         }
+                        else
+                        {
+                            <span>@context.Value</span>
+                        }
                     </Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn Title="Default" Property="@nameof(ConfigurationResponse.DefaultValue)">
                     <Template>
-                        @if (context.Value == context.DefaultValue)
-                        {
-                            @context.DefaultValue
-                        }
-                        else
+                        @if (_canWrite && context.Value != context.DefaultValue)
                         {
                             <span style="color: red;">@context.DefaultValue</span>
                             <RadzenButton Icon="reset_settings" Click="@(_ => ResetAsync(context))" />
+                        }
+                        else
+                        {
+                            @context.DefaultValue
                         }
                     </Template>
                 </RadzenDataGridColumn>
@@ -60,11 +65,14 @@
                         <DateTimeView Date="@context.LastUsed" />
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn>
-                    <Template>
-                        <ActionButton Icon="delete" Click="@(() => DeleteAsync(context))"/>
-                    </Template>
-                </RadzenDataGridColumn>
+                @if (_canWrite)
+                {
+                    <RadzenDataGridColumn>
+                        <Template>
+                            <ActionButton Icon="delete" Click="@(() => DeleteAsync(context))"/>
+                        </Template>
+                    </RadzenDataGridColumn>
+                }
             </Columns>
         </RadzenDataGrid>
     }
@@ -72,12 +80,18 @@
 
 @code {
     private ConfigurationResponse[] _model;
+    private bool _canWrite;
+
+    [CascadingParameter]
+    public WhoAmIResponse Capabilities { get; set; }
 
     [Parameter]
     public bool TogglesOnly { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
+        _canWrite = Capabilities?.HasScope("config:write") ?? true;
+
         try
         {
             await ReloadDataAsync();

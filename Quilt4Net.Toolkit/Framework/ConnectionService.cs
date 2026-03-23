@@ -1,11 +1,15 @@
-﻿using Microsoft.Extensions.Options;
+﻿using System.Text.Json;
+using Microsoft.Extensions.Options;
 
 namespace Quilt4Net.Toolkit.Framework;
 
 internal class ConnectionService : IConnectionService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     private readonly ContentOptions _contentOptions;
     private readonly RemoteConfigurationOptions _configurationOptions;
+    private readonly Dictionary<Service, ConnectionResult> _cache = new();
 
     public ConnectionService(IOptions<ContentOptions> contentOptions, IOptions<RemoteConfigurationOptions> configurationOptions)
     {
@@ -13,8 +17,11 @@ internal class ConnectionService : IConnectionService
         _configurationOptions = configurationOptions.Value;
     }
 
-    public async Task<(bool Success, string Message, Uri Address)> CanConnectAsync(Service service)
+    public async Task<ConnectionResult> CanConnectAsync(Service service)
     {
+        if (_cache.TryGetValue(service, out var cached))
+            return cached;
+
         var config = GetConfiguration(service);
 
         try
@@ -25,31 +32,44 @@ internal class ConnectionService : IConnectionService
             client.DefaultRequestHeaders.Add("X-API-KEY", config.ApiKey);
 
             var response = await client.GetAsync("Api/System/WhoAmI");
-            return (response.IsSuccessStatusCode, response.ReasonPhrase, config.BaseAddress);
+
+            WhoAmIResponse capabilities = null;
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                capabilities = JsonSerializer.Deserialize<WhoAmIResponse>(json, JsonOptions);
+            }
+
+            var result = new ConnectionResult
+            {
+                Success = response.IsSuccessStatusCode,
+                Message = response.ReasonPhrase,
+                Address = config.BaseAddress,
+                Capabilities = capabilities
+            };
+
+            _cache[service] = result;
+            return result;
         }
         catch (Exception e)
         {
-            return (false, e.Message, config.BaseAddress);
+            var result = new ConnectionResult
+            {
+                Success = false,
+                Message = e.Message,
+                Address = config.BaseAddress
+            };
+            return result;
         }
     }
 
     private (Uri BaseAddress, string ApiKey) GetConfiguration(Service service)
     {
-        (Uri BaseAddress, string ApiKey) x;
-        switch (service)
+        return service switch
         {
-            case Service.Content:
-                x.BaseAddress = new Uri(_contentOptions.Quilt4NetAddress);
-                x.ApiKey = _contentOptions.ApiKey;
-                break;
-            case Service.Configuration:
-                x.BaseAddress = new Uri(_configurationOptions.Quilt4NetAddress);
-                x.ApiKey = _configurationOptions.ApiKey;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(service), service, null);
-        }
-
-        return x;
+            Service.Content => (new Uri(_contentOptions.Quilt4NetAddress), _contentOptions.ApiKey),
+            Service.Configuration => (new Uri(_configurationOptions.Quilt4NetAddress), _configurationOptions.ApiKey),
+            _ => throw new ArgumentOutOfRangeException(nameof(service), service, null)
+        };
     }
 }
