@@ -73,6 +73,95 @@ builder.AddQuilt4NetHealth(o =>
 });
 ```
 
+#### IComponentService interface
+
+```csharp
+public interface IComponentService
+{
+    IEnumerable<Component> GetComponents();
+}
+```
+
+Each `Component` defines a named health check:
+
+```csharp
+public record Component
+{
+    /// <summary>Name of the component. Must be unique.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Essential components report Unhealthy/Unready (503) on failure.
+    /// Non-essential components report Degraded. Default: true.
+    /// </summary>
+    public bool Essential { get; init; } = true;
+
+    /// <summary>Async function that performs the check.</summary>
+    public required Func<IServiceProvider, Task<CheckResult>> CheckAsync { get; init; }
+}
+```
+
+The `CheckAsync` function receives `IServiceProvider` so you can resolve any DI service within the check.
+
+`CheckResult` is returned from each check:
+
+```csharp
+public record CheckResult
+{
+    public required bool Success { get; init; }
+    public string Message { get; init; }
+}
+```
+
+#### Example: database and external API check
+
+```csharp
+public class MyComponentService : IComponentService
+{
+    public IEnumerable<Component> GetComponents()
+    {
+        yield return new Component
+        {
+            Name = "database",
+            Essential = true,
+            CheckAsync = async sp =>
+            {
+                var db = sp.GetRequiredService<IDbConnection>();
+                try
+                {
+                    await db.OpenAsync();
+                    return new CheckResult { Success = true, Message = "Connected" };
+                }
+                catch (Exception ex)
+                {
+                    return new CheckResult { Success = false, Message = ex.Message };
+                }
+            }
+        };
+
+        yield return new Component
+        {
+            Name = "payment-api",
+            Essential = false,
+            CheckAsync = async sp =>
+            {
+                var client = sp.GetRequiredService<IHttpClientFactory>().CreateClient("payments");
+                var response = await client.GetAsync("/health");
+                return new CheckResult
+                {
+                    Success = response.IsSuccessStatusCode,
+                    Message = response.IsSuccessStatusCode ? "Reachable" : $"Status {response.StatusCode}"
+                };
+            }
+        };
+    }
+}
+```
+
+In this example, the database is `Essential = true` — if it fails, the service reports `Unhealthy` (503). The payment API is `Essential = false` — if it fails, the service reports `Degraded` but remains available.
+
+Multiple `IComponentService` implementations can be registered. All components from all services are included in health checks.
+
 ## Dependencies
 
 Register external services that use Quilt4Net Health API. The dependency endpoint calls their health check.
