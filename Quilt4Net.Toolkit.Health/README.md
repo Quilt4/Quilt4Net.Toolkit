@@ -339,6 +339,8 @@ builder.AddQuilt4NetHealth(o =>
 
 **DetailsLevel**: `Everyone`, `AuthenticatedOnly`, `NoOne` - controls response detail in GET requests.
 
+> **Note:** The Version endpoint always returns `Version`, `Environment`, and `Is64BitProcess` regardless of `DetailsLevel` or authentication status. Only `Machine` and `IpAddress` are considered sensitive and are hidden for unauthenticated users (when `AuthenticatedOnly`) or for everyone (when `NoOne`).
+
 ### Environment defaults
 
 | Setting | Development | Production | Other |
