@@ -1,0 +1,61 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+@typeparam TItem
+
+<RadzenDataGridColumn TItem="TItem" Title="@LoadedTitle" Property="@Property" Width="@Width" Sortable="@Sortable" Filterable="@Filterable" Visible="@Visible" SortOrder="@SortOrder" TextAlign="@TextAlign" FormatString="@FormatString" Template="@Template" />
+
+@code {
+    [Parameter]
+    public string TitleKey { get; set; }
+
+    [Parameter]
+    public string DefaultTitle { get; set; }
+
+    [Parameter]
+    public string Property { get; set; }
+
+    [Parameter]
+    public string Width { get; set; }
+
+    [Parameter]
+    public bool Sortable { get; set; } = true;
+
+    [Parameter]
+    public bool Filterable { get; set; } = true;
+
+    [Parameter]
+    public bool Visible { get; set; } = true;
+
+    [Parameter]
+    public SortOrder? SortOrder { get; set; }
+
+    [Parameter]
+    public TextAlign TextAlign { get; set; } = TextAlign.Left;
+
+    [Parameter]
+    public string FormatString { get; set; }
+
+    [Parameter]
+    public RenderFragment<TItem> Template { get; set; }
+
+    internal string LoadedTitle { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        var response = await ContentService.GetContentAsync(TitleKey, DefaultTitle, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        LoadedTitle = !string.IsNullOrEmpty(response.Value) ? response.Value : DefaultTitle;
+    }
+}
