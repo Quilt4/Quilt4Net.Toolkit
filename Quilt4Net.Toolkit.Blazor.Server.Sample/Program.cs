@@ -1,6 +1,6 @@
 using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Blazor;
-using Quilt4Net.Toolkit.Blazor.Sample.Components;
+using Quilt4Net.Toolkit.Blazor.Server.Sample.Components;
 using Radzen;
 
 var builder = WebApplication.CreateBuilder(args);

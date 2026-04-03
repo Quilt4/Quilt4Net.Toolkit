@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>e37e5897-4012-49b7-99bb-6a5c66b3124e</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
