@@ -34,7 +34,7 @@ HTTP request/response logging and correlation ID tracking middleware. Logs to Ap
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Blazor)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Blazor)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Blazor)
 
-Blazor component library for content management, language selection, remote configuration admin, and Application Insights log viewing. Built on Radzen. Depends on `Quilt4Net.Toolkit`.
+Blazor component library for content management, language selection, page titles, remote configuration admin, and Application Insights log viewing. Built on Radzen. Depends on `Quilt4Net.Toolkit`.
 
 [Read more](Quilt4Net.Toolkit.Blazor/README.md) | [Blazor sample](Quilt4Net.Toolkit.Blazor.Sample/)
 
