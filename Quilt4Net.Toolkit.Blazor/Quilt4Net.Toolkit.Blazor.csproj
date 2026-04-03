@@ -16,6 +16,9 @@
     <NoWarn>1701;1702;CS1591;CS0809</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Quilt4Net.Toolkit.Blazor.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Remove="wwwroot\**" />
     <Content Remove="wwwroot\**" />
     <EmbeddedResource Remove="wwwroot\**" />
