@@ -1,0 +1,75 @@
+@page "/content"
+@rendermode InteractiveServer
+
+<Quilt4PageTitle Key="page.content.title" Default="Content" />
+
+<h1>Content management</h1>
+
+<p>
+    Enable edit mode using the <strong>ContentAdmin</strong> toggle in the top bar.
+    When enabled, content components show a pink dotted outline and open an edit dialog on click.
+</p>
+
+<h3>Quilt4Text</h3>
+<Quilt4Text Key="sample-h1" Default="Heading 1 example" TextStyle="TextStyle.H1" />
+<Quilt4Text Key="sample-h3" Default="Heading 3 example" TextStyle="TextStyle.H3" />
+<Quilt4Text Key="sample-body" Default="Body text example" TextStyle="TextStyle.Body1" />
+
+<h3>Quilt4Content</h3>
+<Quilt4Content Key="sample-rich">
+    <p>This is <strong>rich HTML content</strong> with <em>formatting</em> and a <a href="https://quilt4net.com">link</a>.</p>
+</Quilt4Content>
+
+<h3>Quilt4Span and Quilt4Raw</h3>
+<p>
+    <Quilt4Span Key="inline-label" Default="Inline label:" />
+    <Quilt4Raw Key="inline-value" Default="raw value" />
+</p>
+
+<h3>Quilt4Button</h3>
+<Quilt4Button TextKey="content-action" DefaultText="Content action" Icon="edit" Click="@OnClick" />
+<p style="margin-top: 8px; color: gray;">@_message</p>
+
+<h3>Quilt4RadzenPanelMenuItem</h3>
+<RadzenCard>
+    <RadzenPanelMenu>
+        <Quilt4RadzenPanelMenuItem TextKey="menu.home" DefaultText="Home" Icon="home" Path="/" />
+        <Quilt4RadzenPanelMenuItem TextKey="menu.content" DefaultText="Content" Icon="book" Path="/content" />
+        <Quilt4RadzenPanelMenuItem TextKey="menu.settings" DefaultText="Settings" Icon="settings">
+            <Quilt4RadzenPanelMenuItem TextKey="menu.config" DefaultText="Configuration" Icon="tune" Path="/configuration" />
+            <Quilt4RadzenPanelMenuItem TextKey="menu.log" DefaultText="Log" Icon="list" Path="/log" />
+        </Quilt4RadzenPanelMenuItem>
+    </RadzenPanelMenu>
+</RadzenCard>
+
+<h3>Quilt4RadzenDataGridColumn</h3>
+<RadzenDataGrid TItem="SampleItem" Data="@_sampleItems" AllowSorting="true">
+    <Columns>
+        <Quilt4RadzenDataGridColumn TItem="SampleItem" TitleKey="col.name" DefaultTitle="Name" Property="@nameof(SampleItem.Name)" />
+        <Quilt4RadzenDataGridColumn TItem="SampleItem" TitleKey="col.description" DefaultTitle="Description" Property="@nameof(SampleItem.Description)" />
+        <Quilt4RadzenDataGridColumn TItem="SampleItem" TitleKey="col.status" DefaultTitle="Status" Property="@nameof(SampleItem.Status)" Width="120px" />
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    private string _message = "";
+
+    private static readonly SampleItem[] _sampleItems =
+    [
+        new("Quilt4PageTitle", "Content-driven page title", "New"),
+        new("Quilt4RadzenPanelMenuItem", "Content-driven menu item", "New"),
+        new("Quilt4RadzenDataGridColumn", "Content-driven grid column title", "New"),
+        new("Quilt4Button", "Content-driven button", "Existing"),
+        new("Quilt4Text", "Content-driven text", "Existing"),
+        new("Quilt4Content", "Content-driven rich HTML", "Existing"),
+    ];
+
+    private Task OnClick()
+    {
+        _message = $"Action triggered at {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private record SampleItem(string Name, string Description, string Status);
+}
