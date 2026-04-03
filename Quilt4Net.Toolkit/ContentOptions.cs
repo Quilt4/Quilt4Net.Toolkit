@@ -28,4 +28,11 @@ public record ContentOptions
     /// Default is 60 minutes.
     /// </summary>
     public TimeSpan FailureCacheDuration { get; set; } = TimeSpan.FromMinutes(60);
+
+    /// <summary>
+    /// Roles that grant content admin access (edit, debug, reload).
+    /// Checked against the authenticated user's claim roles (e.g. Entra ID).
+    /// Default is ["ContentAdmin", "Developer"].
+    /// </summary>
+    public string[] AdminRoles { get; set; } = ["ContentAdmin", "Developer"];
 }

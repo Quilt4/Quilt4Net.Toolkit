@@ -29,6 +29,7 @@ public static class Quilt4ContentRegistration
         services.AddScoped<IEditContentService, EditContentService>();
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddScoped<IQuilt4ContentService, Quilt4ContentService>();
+        services.AddScoped<IContentAdminService, ContentAdminService>();
         services.AddBlazoredLocalStorage();
         services.AddQuilt4NetContent(configuration, options);
 
