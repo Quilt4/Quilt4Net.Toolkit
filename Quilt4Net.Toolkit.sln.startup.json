@@ -2,9 +2,25 @@
   "Version": 3,
   "ListAllProjects": false,
   "MultiProjectConfigurations": {
-    "Sample": {
+    "Sample Blazor Server": {
       "Projects": {
+        "Quilt4Net.Toolkit.Blazor.Server.Sample": {}
+      }
+    },
+    "Sample API": {
+      "Projects": {
+        "Quilt4Net.Server": {},
         "Quilt4Net.Toolkit.Api.Sample": {}
+      }
+    },
+    "Sample Console": {
+      "Projects": {
+        "Quilt4Net.Toolkit.Console.Sample": {}
+      }
+    },
+    "Sample Blazor WASM": {
+      "Projects": {
+        "Quilt4Net.Toolkit.Blazor.Wasm.Sample": {}
       }
     }
   }

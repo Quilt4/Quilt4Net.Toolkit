@@ -16,6 +16,9 @@
     <NoWarn>1701;1702;CS1591;CS0809</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Quilt4Net.Toolkit.Blazor.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Remove="wwwroot\**" />
     <Content Remove="wwwroot\**" />
     <EmbeddedResource Remove="wwwroot\**" />
@@ -25,10 +28,16 @@
     <PackageReference Include="Microsoft.Authentication.WebAssembly.Msal" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.5" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.83.1" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.83.3" />
     <PackageReference Include="Tharga.Blazor" Version="2.1.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="9.0.7" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.5" />
   </ItemGroup>
 </Project>

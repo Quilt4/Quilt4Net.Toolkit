@@ -34,9 +34,9 @@ HTTP request/response logging and correlation ID tracking middleware. Logs to Ap
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit.Blazor)](https://www.nuget.org/packages/Quilt4Net.Toolkit.Blazor)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit.Blazor)
 
-Blazor component library for content management, language selection, remote configuration admin, and Application Insights log viewing. Built on Radzen. Depends on `Quilt4Net.Toolkit`.
+Blazor component library for content management, language selection, page titles, role-based content admin, remote configuration admin, and Application Insights log viewing. Built on Radzen. Depends on `Quilt4Net.Toolkit`.
 
-[Read more](Quilt4Net.Toolkit.Blazor/README.md) | [Blazor sample](Quilt4Net.Toolkit.Blazor.Sample/)
+[Read more](Quilt4Net.Toolkit.Blazor/README.md) | [Server sample](Quilt4Net.Toolkit.Blazor.Server.Sample/) | [WASM sample](Quilt4Net.Toolkit.Blazor.Wasm.Sample/)
 
 ## Package dependencies
 
@@ -103,10 +103,11 @@ See individual package READMEs for full option details.
 
 ## Samples
 
-Three sample projects demonstrate different platforms and features with no overlap.
+Four sample projects demonstrate different platforms and features.
 
 | Sample | Type | Features |
 |--------|------|----------|
 | [Quilt4Net.Toolkit.Api.Sample](Quilt4Net.Toolkit.Api.Sample/) | ASP.NET Core Web API | Health endpoints, API logging, authentication, feature toggles, remote configuration, measurements, Application Insights, hosted services |
-| [Quilt4Net.Toolkit.Blazor.Sample](Quilt4Net.Toolkit.Blazor.Sample/) | Blazor Server | Content components, language selector, edit mode, remote configuration admin, log viewer with tab deep linking |
+| [Quilt4Net.Toolkit.Blazor.Server.Sample](Quilt4Net.Toolkit.Blazor.Server.Sample/) | Blazor Server | Content components, language selector, edit mode, remote configuration admin, log viewer with tab deep linking |
+| [Quilt4Net.Toolkit.Blazor.Wasm.Sample](Quilt4Net.Toolkit.Blazor.Wasm.Sample/) | Blazor WebAssembly | Content components, language selector, edit mode, data grid with content-driven columns |
 | [Quilt4Net.Toolkit.Console.Sample](Quilt4Net.Toolkit.Console.Sample/) | Console | Feature toggles, remote configuration, health client |

@@ -1,14 +1,15 @@
-﻿@using Quilt4Net.Toolkit.Blazor.Framework
+@using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.Content
 @using Quilt4Net.Toolkit.Framework
 @inject ILanguageStateService LanguageStateService
 @inject IContentService ContentService
 @inject IEditContentService EditContentService
+@inject IContentAdminService ContentAdminService
 @inject NavigationManager NavigationManager
 
 <ConnectionWrapper Service="Service.Content">
     <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-        @if (_canWrite)
+        @if (_isAdmin)
         {
             <RadzenRow>
                 <RadzenColumn>
@@ -30,14 +31,11 @@
 </ConnectionWrapper>
 
 @code {
-    private bool _canWrite;
+    private bool _isAdmin;
 
-    [CascadingParameter]
-    public WhoAmIResponse Capabilities { get; set; }
-
-    protected override void OnParametersSet()
+    protected override async Task OnInitializedAsync()
     {
-        _canWrite = Capabilities?.HasScope("content:write") ?? true;
+        _isAdmin = await ContentAdminService.IsContentAdminAsync();
     }
 
     private async Task ReloadContent()

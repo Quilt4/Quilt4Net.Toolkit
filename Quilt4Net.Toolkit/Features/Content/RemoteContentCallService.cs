@@ -127,8 +127,6 @@ internal class RemoteContentCallService : IRemoteContentCallService
         catch (Exception e)
         {
             _logger.LogError(e, e.Message);
-            Console.WriteLine(e);
-            Debugger.Break();
             throw;
         }
     }
@@ -156,8 +154,6 @@ internal class RemoteContentCallService : IRemoteContentCallService
         catch (Exception e)
         {
             _logger.LogError(e, e.Message);
-            Console.WriteLine(e);
-            Debugger.Break();
             throw;
         }
     }

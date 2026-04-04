@@ -1,0 +1,71 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+
+<RadzenPanelMenuItem Text="@LoadedText" Icon="@Icon" Path="@Path" Target="@Target" Expanded="@Expanded" Selected="@Selected" Disabled="@Disabled" IconColor="@IconColor" Image="@Image" ImageAlternateText="@ImageAlternateText" Click="@Click" ExpandedChanged="@ExpandedChanged">
+    @ChildContent
+</RadzenPanelMenuItem>
+
+@code {
+    [Parameter]
+    public string TextKey { get; set; }
+
+    [Parameter]
+    public string DefaultText { get; set; }
+
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public string Path { get; set; }
+
+    [Parameter]
+    public string Target { get; set; }
+
+    [Parameter]
+    public bool Expanded { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> ExpandedChanged { get; set; }
+
+    [Parameter]
+    public bool Selected { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public string IconColor { get; set; }
+
+    [Parameter]
+    public string Image { get; set; }
+
+    [Parameter]
+    public string ImageAlternateText { get; set; }
+
+    [Parameter]
+    public EventCallback<MenuItemEventArgs> Click { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    internal string LoadedText { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        var response = await ContentService.GetContentAsync(TextKey, DefaultText, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        LoadedText = !string.IsNullOrEmpty(response.Value) ? response.Value : DefaultText;
+    }
+}

@@ -255,8 +255,7 @@ internal class EndpointHandlerService : IEndpointHandlerService
         return response with
         {
             IpAddress = null,
-            Machine = null,
-            Version = null
+            Machine = null
         };
     }
 

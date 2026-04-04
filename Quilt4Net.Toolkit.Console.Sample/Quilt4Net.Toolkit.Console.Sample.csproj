@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>ccbee3dc-2c32-45c3-9263-d65150ec92d5</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
