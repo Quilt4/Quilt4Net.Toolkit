@@ -14,8 +14,7 @@ builder.Services.AddRadzenComponents();
 
 builder.Services.AddQuilt4NetBlazorContent(builder.Configuration, o =>
 {
-    o.ApiKey = builder.Configuration["Quilt4Net:ApiKey"];
-    o.Quilt4NetAddress = builder.Configuration["Quilt4Net:Quilt4NetAddress"] ?? "https://quilt4net.com/";
+    o.AssumeAdmin = true;
 });
 
 builder.Services.AddQuilt4NetRemoteConfiguration(builder.Configuration);
