@@ -36,6 +36,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        LanguageStateService.LanguageLoadedEvent += (_, _) => { InvokeAsync(StateHasChanged); };
         LanguageStateService.DeveloperModeEvent += (_, _) => { InvokeAsync(StateHasChanged); };
         EditContentService.EditModeEvent += (_, _) => { InvokeAsync(StateHasChanged); };
 
