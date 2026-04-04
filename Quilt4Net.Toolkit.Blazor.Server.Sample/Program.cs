@@ -12,7 +12,7 @@ builder.Services.AddRadzenComponents();
 
 builder.AddQuilt4NetBlazorContent(o =>
 {
-    o.ApiKey = builder.Configuration["Quilt4Net:ApiKey"];
+    o.AssumeAdmin = true;
 });
 
 builder.AddQuilt4NetApplicationInsightsClient();

@@ -51,7 +51,4 @@
     <PackageReference Include="System.Linq.Async" Version="7.0.0" />
     <PackageReference Include="Tharga.Cache" Version="0.3.6" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Features\Heartbeat\" />
-  </ItemGroup>
 </Project>
