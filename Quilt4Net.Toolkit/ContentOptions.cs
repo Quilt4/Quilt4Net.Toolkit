@@ -35,4 +35,11 @@ public record ContentOptions
     /// Default is ["ContentAdmin", "Developer"].
     /// </summary>
     public string[] AdminRoles { get; set; } = ["ContentAdmin", "Developer"];
+
+    /// <summary>
+    /// When true, always grant content admin access regardless of authentication state.
+    /// Useful during development when no identity provider is configured.
+    /// Default is false.
+    /// </summary>
+    public bool AssumeAdmin { get; set; }
 }

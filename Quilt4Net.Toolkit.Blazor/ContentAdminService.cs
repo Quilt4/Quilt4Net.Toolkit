@@ -7,17 +7,22 @@ internal class ContentAdminService : IContentAdminService
 {
     private readonly AuthenticationStateProvider _authStateProvider;
     private readonly string[] _adminRoles;
+    private readonly bool _assumeAdmin;
 
     public ContentAdminService(IOptions<ContentOptions> options, AuthenticationStateProvider authStateProvider = null)
     {
         _authStateProvider = authStateProvider;
         _adminRoles = options.Value.AdminRoles ?? [];
+        _assumeAdmin = options.Value.AssumeAdmin;
     }
 
     public async Task<bool> IsContentAdminAsync()
     {
-        if (_authStateProvider == null)
+        if (_assumeAdmin)
             return true;
+
+        if (_authStateProvider == null)
+            return false;
 
         var state = await _authStateProvider.GetAuthenticationStateAsync();
         var user = state.User;

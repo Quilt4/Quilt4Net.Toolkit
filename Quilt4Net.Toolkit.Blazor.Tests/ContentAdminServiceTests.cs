@@ -9,9 +9,9 @@ namespace Quilt4Net.Toolkit.Blazor.Tests;
 
 public class ContentAdminServiceTests
 {
-    private static IOptions<ContentOptions> CreateOptions(string[] adminRoles = null)
+    private static IOptions<ContentOptions> CreateOptions(string[] adminRoles = null, bool assumeAdmin = false)
     {
-        var options = new ContentOptions();
+        var options = new ContentOptions { AssumeAdmin = assumeAdmin };
         if (adminRoles != null) options.AdminRoles = adminRoles;
         return Options.Create(options);
     }
@@ -76,9 +76,29 @@ public class ContentAdminServiceTests
     }
 
     [Fact]
-    public async Task Returns_True_When_No_AuthStateProvider_Configured()
+    public async Task Returns_False_When_No_AuthStateProvider_Configured()
     {
         var service = new ContentAdminService(CreateOptions(), authStateProvider: null);
+
+        var result = await service.IsContentAdminAsync();
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Returns_True_When_AssumeAdmin_Is_True()
+    {
+        var service = new ContentAdminService(CreateOptions(assumeAdmin: true), authStateProvider: null);
+
+        var result = await service.IsContentAdminAsync();
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AssumeAdmin_Overrides_Role_Check()
+    {
+        var service = new ContentAdminService(CreateOptions(assumeAdmin: true), CreateAuthProvider(["Viewer"]));
 
         var result = await service.IsContentAdminAsync();
 
