@@ -1,8 +1,17 @@
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Tharga.Blazor.Features.BreadCrumbs
 @inject NavigationManager NavigationManager
 @inject IServiceProvider ServiceProvider
+
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
+        @_configError
+    </RadzenAlert>
+    return;
+}
 
 <CascadingValue Value="_navOptions">
     <RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
@@ -48,6 +57,7 @@
     private EnvironmentOption _environment;
     private LogNavigationOptions _navOptions;
     private int _tabIndex;
+    private string _configError;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
@@ -100,6 +110,20 @@
 
     protected override void OnInitialized()
     {
+        if (Context == null)
+        {
+            var options = ServiceProvider.GetService<IOptions<ApplicationInsightsOptions>>()?.Value;
+            if (options == null
+                || string.IsNullOrEmpty(options.TenantId)
+                || string.IsNullOrEmpty(options.WorkspaceId)
+                || string.IsNullOrEmpty(options.ClientId)
+                || string.IsNullOrEmpty(options.ClientSecret))
+            {
+                _configError = "Application Insights is not configured. Set TenantId, WorkspaceId, ClientId, and ClientSecret in appsettings.json under Quilt4Net:ApplicationInsights.";
+                return;
+            }
+        }
+
         var breadCrumbService = ServiceProvider.GetService<BreadCrumbService>();
         breadCrumbService?.RegisterVirtualSegmentQueryParam("tab");
     }
