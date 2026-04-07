@@ -24,10 +24,19 @@ public record ContentOptions
     public string ApiKey { get; set; }
 
     /// <summary>
-    /// Duration to cache the default value when an API call fails (e.g. invalid API key).
-    /// Default is 60 minutes.
+    /// Duration to cache the stale or default value when an API call fails (e.g. server unreachable, invalid API key).
+    /// Only used when no prior successful response TTL is available.
+    /// Default is 10 minutes (matching the server's default content TTL).
     /// </summary>
-    public TimeSpan FailureCacheDuration { get; set; } = TimeSpan.FromMinutes(60);
+    public TimeSpan FailureCacheDuration { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Timeout for HTTP calls to the Quilt4Net server.
+    /// Default is 5 seconds. When a stale cached value exists, the caller
+    /// gets the stale value immediately and the refresh happens in the background.
+    /// This timeout only blocks when no cached value exists.
+    /// </summary>
+    public TimeSpan HttpTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Roles that grant content admin access (edit, debug, reload).
