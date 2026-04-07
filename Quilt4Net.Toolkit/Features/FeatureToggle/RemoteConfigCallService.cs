@@ -61,9 +61,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException($"Unable to get feature toggle for key '{key}' from address '{address}'. Response was '{response.StatusCode} {response.ReasonPhrase}'.");
-
-                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}' Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
+                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
                         key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase, defaultValue);
                     return defaultValue;
                 }
@@ -81,11 +79,6 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         {
             _logger.LogError(e, "{Message} Value of type {type} is not supported for {key}.", e.Message, typeof(T).Name, key);
             throw new Exception($"Value of type {typeof(T).Name} is not supported.", e);
-        }
-        catch (UnauthorizedAccessException e)
-        {
-            _logger.LogError(e, "{Message} Key {Key}.", e.Message, key);
-            throw;
         }
         catch (Exception e)
         {
