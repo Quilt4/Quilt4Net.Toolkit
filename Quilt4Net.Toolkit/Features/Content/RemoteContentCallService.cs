@@ -12,6 +12,8 @@ namespace Quilt4Net.Toolkit.Features.Content;
 
 internal class RemoteContentCallService : IRemoteContentCallService
 {
+    private static readonly TimeSpan DefaultLanguageFailureCacheDuration = TimeSpan.FromMinutes(60);
+
     private readonly EnvironmentName _environmentName;
     private readonly ContentOptions _contentOptions;
     private readonly ILogger<RemoteContentCallService> _logger;
@@ -149,7 +151,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             {
                 _logger.LogError("Unable to get languages from '{Address}'. Response was {StatusCode} {ReasonPhrase}. Returning cached or empty list.",
                     address, response.StatusCode, response.ReasonPhrase);
-                _languagesValidTo = DateTime.UtcNow.Add(_contentOptions.FailureCacheDuration);
+                _languagesValidTo = DateTime.UtcNow.Add(DefaultLanguageFailureCacheDuration);
                 return _languages ?? [];
             }
 
@@ -161,7 +163,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Returning cached or empty list.", e.Message);
-            _languagesValidTo = DateTime.UtcNow.Add(_contentOptions.FailureCacheDuration);
+            _languagesValidTo = DateTime.UtcNow.Add(DefaultLanguageFailureCacheDuration);
             return _languages ?? [];
         }
     }
