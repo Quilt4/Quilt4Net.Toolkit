@@ -63,17 +63,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    if (response.StatusCode == HttpStatusCode.Unauthorized)
-                    {
-                        _logger.LogError("Unauthorized access for key '{Key}' from address '{Address}'. Caching fallback for {Duration}.", key, address, _contentOptions.FailureCacheDuration);
-                        CacheFailure(key, languageKey, defaultValue);
-                        return (defaultValue, false);
-                    }
-
-                    _logger.LogError("Unable to get content for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}' Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
-                        key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase, defaultValue);
-                    CacheFailure(key, languageKey, defaultValue);
-                    return (defaultValue, false);
+                    var staleValue = result?.Value ?? defaultValue;
+                    _logger.LogError("Unable to get content for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using stale cache or fallback.",
+                        key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase);
+                    CacheFailure(key, languageKey, staleValue);
+                    return (staleValue, false);
                 }
 
                 result = await response.Content.ReadFromJsonAsync<GetContentResponse>();
@@ -85,15 +79,21 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
         catch (HttpRequestException e)
         {
-            _logger.LogError(e, "{Message} Status code {StatusCode}. Using fallback value '{Fallback}' for key {Key}.", e.Message, e.StatusCode, defaultValue, key);
-            CacheFailure(key, languageKey, defaultValue);
-            return (defaultValue, false);
+            var cacheKey = $"{key}_{languageKey}";
+            _localCache.TryGetValue(cacheKey, out var stale);
+            var staleValue = stale?.Value ?? defaultValue;
+            _logger.LogError(e, "{Message} Status code {StatusCode}. Using stale cache or fallback for key {Key}.", e.Message, e.StatusCode, key);
+            CacheFailure(key, languageKey, staleValue);
+            return (staleValue, false);
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "{Message} Using fallback value '{Fallback}' for key {Key}.", e.Message, defaultValue, key);
-            CacheFailure(key, languageKey, defaultValue);
-            return (defaultValue, false);
+            var cacheKey = $"{key}_{languageKey}";
+            _localCache.TryGetValue(cacheKey, out var stale);
+            var staleValue = stale?.Value ?? defaultValue;
+            _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
+            CacheFailure(key, languageKey, staleValue);
+            return (staleValue, false);
         }
     }
 
@@ -149,6 +149,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             {
                 _logger.LogError("Unable to get languages from '{Address}'. Response was {StatusCode} {ReasonPhrase}. Returning cached or empty list.",
                     address, response.StatusCode, response.ReasonPhrase);
+                _languagesValidTo = DateTime.UtcNow.Add(_contentOptions.FailureCacheDuration);
                 return _languages ?? [];
             }
 
@@ -160,6 +161,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Returning cached or empty list.", e.Message);
+            _languagesValidTo = DateTime.UtcNow.Add(_contentOptions.FailureCacheDuration);
             return _languages ?? [];
         }
     }

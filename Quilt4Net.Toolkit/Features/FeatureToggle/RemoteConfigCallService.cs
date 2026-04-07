@@ -10,6 +10,8 @@ namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
 internal class RemoteConfigCallService : IRemoteConfigCallService
 {
+    private static readonly TimeSpan DefaultFailureCacheDuration = TimeSpan.FromMinutes(10);
+
     private readonly IServiceProvider _serviceProvider;
     private readonly EnvironmentName _environmentName;
     private readonly RemoteConfigurationOptions _options;
@@ -61,9 +63,10 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using fallback value '{Fallback}'.",
-                        key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase, defaultValue);
-                    return defaultValue;
+                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using stale cache or fallback.",
+                        key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase);
+                    CacheFailure(key, result);
+                    return GetCachedOrDefault(result, defaultValue);
                 }
 
                 result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>();
@@ -77,7 +80,12 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "{Message} Using fallback value '{Fallback}' for key {Key}.", e.Message, defaultValue, key);
+            _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
+            if (_localCache.TryGetValue(key, out var stale))
+            {
+                CacheFailure(key, stale);
+                return GetCachedOrDefault(stale, defaultValue);
+            }
             return defaultValue;
         }
     }
@@ -145,6 +153,29 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
         var response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
+    }
+
+    private static T GetCachedOrDefault<T>(FeatureToggleResponse cached, T defaultValue)
+    {
+        if (cached?.Value == null) return defaultValue;
+        try
+        {
+            return (T)Convert.ChangeType(cached.Value, typeof(T));
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    private void CacheFailure(string key, FeatureToggleResponse stale)
+    {
+        var failureResponse = new FeatureToggleResponse
+        {
+            Value = stale?.Value,
+            ValidTo = DateTime.UtcNow.Add(DefaultFailureCacheDuration)
+        };
+        _localCache.AddOrUpdate(key, failureResponse, (_, _) => failureResponse);
     }
 
     private static string BuildKey(FeatureToggleRequest request)
