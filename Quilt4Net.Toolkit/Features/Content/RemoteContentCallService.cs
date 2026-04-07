@@ -38,6 +38,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey)) return (defaultValue, false);
 
+        var sw = Stopwatch.StartNew();
+
         try
         {
             var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
@@ -71,6 +73,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     _logger.LogError("Unable to get content for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using stale cache or fallback.",
                         key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase);
                     CacheFailure(key, languageKey, staleValue);
+                    _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
+                        key, sw.ElapsedMilliseconds, result != null ? "StaleCache" : "Default");
                     return (staleValue, false);
                 }
 
@@ -82,6 +86,14 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     _lastKnownTtl[cacheKey] = interval;
 
                 _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
+
+                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false.",
+                    key, sw.ElapsedMilliseconds);
+            }
+            else
+            {
+                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false.",
+                    key, sw.ElapsedMilliseconds);
             }
 
             return (result.Value ?? defaultValue, true);
@@ -93,6 +105,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var staleValue = stale?.Value ?? defaultValue;
             _logger.LogError(e, "{Message} Status code {StatusCode}. Using stale cache or fallback for key {Key}.", e.Message, e.StatusCode, key);
             CacheFailure(key, languageKey, staleValue);
+            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
+                key, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default");
             return (staleValue, false);
         }
         catch (Exception e)
@@ -102,6 +116,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var staleValue = stale?.Value ?? defaultValue;
             _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
             CacheFailure(key, languageKey, staleValue);
+            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
+                key, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default");
             return (staleValue, false);
         }
     }

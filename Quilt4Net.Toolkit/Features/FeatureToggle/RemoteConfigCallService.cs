@@ -1,10 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
@@ -30,6 +31,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
     public async Task<T> MakeCallAsync<T>(string key, T defaultValue, TimeSpan? ttl)
     {
         ttl ??= _options.Ttl;
+        var sw = Stopwatch.StartNew();
 
         try
         {
@@ -67,7 +69,10 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                     _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using stale cache or fallback.",
                         key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase);
                     CacheFailure(key, result);
-                    return GetCachedOrDefault(result, defaultValue);
+                    var staleValue = GetCachedOrDefault(result, defaultValue);
+                    _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true, Value: '{Value}'.",
+                        key, sw.ElapsedMilliseconds, result != null ? "StaleCache" : "Default", staleValue);
+                    return staleValue;
                 }
 
                 result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>();
@@ -77,11 +82,31 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                     _lastKnownTtl[key] = interval;
 
                 _localCache.AddOrUpdate(key, result, (a, b) => result);
+
+                if (result.Value == null)
+                {
+                    _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
+                        key, sw.ElapsedMilliseconds, defaultValue);
+                    return defaultValue;
+                }
+
+                var serverValue = (T)Convert.ChangeType(result.Value, typeof(T));
+                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
+                    key, sw.ElapsedMilliseconds, serverValue);
+                return serverValue;
             }
 
-            if (result.Value == null) return defaultValue;
-            var value = (T)Convert.ChangeType(result.Value, typeof(T));
-            return value;
+            if (result.Value == null)
+            {
+                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false, Value: '{Value}'.",
+                    key, sw.ElapsedMilliseconds, defaultValue);
+                return defaultValue;
+            }
+
+            var cachedValue = (T)Convert.ChangeType(result.Value, typeof(T));
+            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false, Value: '{Value}'.",
+                key, sw.ElapsedMilliseconds, cachedValue);
+            return cachedValue;
         }
         catch (Exception e)
         {
@@ -89,8 +114,13 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             if (_localCache.TryGetValue(key, out var stale))
             {
                 CacheFailure(key, stale);
-                return GetCachedOrDefault(stale, defaultValue);
+                var staleValue = GetCachedOrDefault(stale, defaultValue);
+                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
+                    key, sw.ElapsedMilliseconds, staleValue);
+                return staleValue;
             }
+            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+                key, sw.ElapsedMilliseconds, defaultValue);
             return defaultValue;
         }
     }
