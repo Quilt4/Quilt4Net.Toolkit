@@ -144,7 +144,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
             using var client = GetHttpClient();
             var address = $"Api/Language/{assemblyName}/{_environmentName.Name}";
             var response = await client.GetAsync(address);
-            response.EnsureSuccessStatusCode();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Unable to get languages from '{Address}'. Response was {StatusCode} {ReasonPhrase}. Returning cached or empty list.",
+                    address, response.StatusCode, response.ReasonPhrase);
+                return _languages ?? [];
+            }
 
             var result = await response.Content.ReadFromJsonAsync<LanguageResponse>();
             _languages = result.Languages;
@@ -153,8 +159,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
         catch (Exception e)
         {
-            _logger.LogError(e, e.Message);
-            throw;
+            _logger.LogError(e, "{Message} Returning cached or empty list.", e.Message);
+            return _languages ?? [];
         }
     }
 

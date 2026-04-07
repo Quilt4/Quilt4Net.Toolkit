@@ -75,11 +75,6 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             var value = (T)Convert.ChangeType(result.Value, typeof(T));
             return value;
         }
-        catch (InvalidCastException e)
-        {
-            _logger.LogError(e, "{Message} Value of type {type} is not supported for {key}.", e.Message, typeof(T).Name, key);
-            throw new Exception($"Value of type {typeof(T).Name} is not supported.", e);
-        }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using fallback value '{Fallback}' for key {Key}.", e.Message, defaultValue, key);
@@ -89,16 +84,30 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
     public async Task<ConfigurationResponse[]> GetAllAsync()
     {
-        using var client = GetHttpClient();
-        var response = await client.GetAsync("Api/Configuration");
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            using var client = GetHttpClient();
+            var response = await client.GetAsync("Api/Configuration");
 
-        var assemblyName = Assembly.GetEntryAssembly()?.GetName();
-        var application = assemblyName?.Name;
-        var environment = _environmentName.Name;
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Unable to get all configuration. Response was {StatusCode} {ReasonPhrase}. Returning empty list.",
+                    response.StatusCode, response.ReasonPhrase);
+                return [];
+            }
 
-        var data = await response.Content.ReadFromJsonAsync<ConfigurationResponse[]>();
-        return data.Where(x => x.Environment == environment && x.Application == application).ToArray();
+            var assemblyName = Assembly.GetEntryAssembly()?.GetName();
+            var application = assemblyName?.Name;
+            var environment = _environmentName.Name;
+
+            var data = await response.Content.ReadFromJsonAsync<ConfigurationResponse[]>();
+            return data.Where(x => x.Environment == environment && x.Application == application).ToArray();
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "{Message} Returning empty list.", e.Message);
+            return [];
+        }
     }
 
     public async Task DeleteAsync(string key, string application, string environment, string instance)
