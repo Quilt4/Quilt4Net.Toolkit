@@ -19,6 +19,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private readonly ILogger<RemoteContentCallService> _logger;
     private readonly ConcurrentDictionary<string, GetContentResponse> _localCache = new();
     private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
+    private readonly ConcurrentDictionary<string, bool> _refreshInProgress = new();
     private Language[] _languages;
     private DateTime _languagesValidTo;
     private TimeSpan _lastKnownLanguageTtl;
@@ -39,79 +40,34 @@ internal class RemoteContentCallService : IRemoteContentCallService
         if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey)) return (defaultValue, false);
 
         var sw = Stopwatch.StartNew();
+        var cacheKey = $"{key}_{languageKey}";
 
         try
         {
-            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
-            var request = new GetContentRequest
-            {
-                Key = key,
-                LanguageKey = languageKey,
-                Application = assemblyName,
-                Environment = _environmentName.Name,
-                Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
-                DefaultValue = contentType == null ? null : $"{defaultValue}",
-                ContentFormat = contentType
-            };
-            var complexKey = BuildKey(request);
+            _localCache.TryGetValue(cacheKey, out var cached);
+            var needRefresh = cached == null || DateTime.UtcNow > cached.ValidTo;
 
-            var needRefresh = true;
-            if (_localCache.TryGetValue($"{key}_{languageKey}", out var result))
-            {
-                needRefresh = DateTime.UtcNow > result.ValidTo;
-            }
-
-            if (needRefresh)
-            {
-                using var client = GetHttpClient();
-                var address = $"Api/Content/{complexKey}";
-                var response = await client.GetAsync(address);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var staleValue = result?.Value ?? defaultValue;
-                    _logger.LogError("Unable to get content for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using stale cache or fallback.",
-                        key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase);
-                    CacheFailure(key, languageKey, staleValue);
-                    _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
-                        key, sw.ElapsedMilliseconds, result != null ? "StaleCache" : "Default");
-                    return (staleValue, false);
-                }
-
-                result = await response.Content.ReadFromJsonAsync<GetContentResponse>();
-
-                var cacheKey = $"{key}_{languageKey}";
-                var interval = result.ValidTo - DateTime.UtcNow;
-                if (interval > TimeSpan.Zero)
-                    _lastKnownTtl[cacheKey] = interval;
-
-                _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
-
-                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false.",
-                    key, sw.ElapsedMilliseconds);
-            }
-            else
+            if (!needRefresh)
             {
                 _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false.",
                     key, sw.ElapsedMilliseconds);
+                return (cached.Value ?? defaultValue, true);
             }
 
-            return (result.Value ?? defaultValue, true);
-        }
-        catch (HttpRequestException e)
-        {
-            var cacheKey = $"{key}_{languageKey}";
-            _localCache.TryGetValue(cacheKey, out var stale);
-            var staleValue = stale?.Value ?? defaultValue;
-            _logger.LogError(e, "{Message} Status code {StatusCode}. Using stale cache or fallback for key {Key}.", e.Message, e.StatusCode, key);
-            CacheFailure(key, languageKey, staleValue);
-            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
-                key, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default");
-            return (staleValue, false);
+            // Stale-while-revalidate: return stale value immediately, refresh in background.
+            if (cached != null)
+            {
+                StartBackgroundRefresh(key, defaultValue, languageKey, contentType);
+                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
+                    key, sw.ElapsedMilliseconds);
+                return (cached.Value ?? defaultValue, true);
+            }
+
+            // No cache — must fetch with timeout.
+            return await FetchContentWithTimeout(key, defaultValue, languageKey, contentType, sw);
         }
         catch (Exception e)
         {
-            var cacheKey = $"{key}_{languageKey}";
             _localCache.TryGetValue(cacheKey, out var stale);
             var staleValue = stale?.Value ?? defaultValue;
             _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
@@ -199,6 +155,136 @@ internal class RemoteContentCallService : IRemoteContentCallService
     public async Task ClearContentCacheAsync()
     {
         _localCache.Clear();
+    }
+
+    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw)
+    {
+        try
+        {
+            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+            var request = new GetContentRequest
+            {
+                Key = key,
+                LanguageKey = languageKey,
+                Application = assemblyName,
+                Environment = _environmentName.Name,
+                Instance = null,
+                DefaultValue = contentType == null ? null : $"{defaultValue}",
+                ContentFormat = contentType
+            };
+            var complexKey = BuildKey(request);
+
+            using var cts = new CancellationTokenSource(_contentOptions.HttpTimeout);
+            using var client = GetHttpClient();
+            var address = $"Api/Content/{complexKey}";
+            var response = await client.GetAsync(address, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Unable to get content for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
+                    key, response.StatusCode, response.ReasonPhrase);
+                CacheFailure(key, languageKey, defaultValue);
+                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
+                    key, sw.ElapsedMilliseconds);
+                return (defaultValue, false);
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<GetContentResponse>(cancellationToken: cts.Token);
+
+            var cacheKey = $"{key}_{languageKey}";
+            var interval = result.ValidTo - DateTime.UtcNow;
+            if (interval > TimeSpan.Zero)
+                _lastKnownTtl[cacheKey] = interval;
+
+            _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
+
+            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false.",
+                key, sw.ElapsedMilliseconds);
+            return (result.Value ?? defaultValue, true);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("HTTP request timed out for content '{Key}' after {Timeout}ms. Using default value.",
+                key, _contentOptions.HttpTimeout.TotalMilliseconds);
+            CacheFailure(key, languageKey, defaultValue);
+            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
+                key, sw.ElapsedMilliseconds);
+            return (defaultValue, false);
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "{Message} Using default for content key {Key}.", e.Message, key);
+            CacheFailure(key, languageKey, defaultValue);
+            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
+                key, sw.ElapsedMilliseconds);
+            return (defaultValue, false);
+        }
+    }
+
+    private void StartBackgroundRefresh(string key, string defaultValue, Guid languageKey, ContentFormat? contentType)
+    {
+        var cacheKey = $"{key}_{languageKey}";
+        if (!_refreshInProgress.TryAdd(cacheKey, true)) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+                var request = new GetContentRequest
+                {
+                    Key = key,
+                    LanguageKey = languageKey,
+                    Application = assemblyName,
+                    Environment = _environmentName.Name,
+                    Instance = null,
+                    DefaultValue = contentType == null ? null : $"{defaultValue}",
+                    ContentFormat = contentType
+                };
+                var complexKey = BuildKey(request);
+
+                using var cts = new CancellationTokenSource(_contentOptions.HttpTimeout);
+                using var client = GetHttpClient();
+                var address = $"Api/Content/{complexKey}";
+                var response = await client.GetAsync(address, cts.Token);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Background refresh for content '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
+                        key, response.StatusCode, response.ReasonPhrase);
+                    var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
+                    CacheFailure(key, languageKey, staleValue);
+                    return;
+                }
+
+                var result = await response.Content.ReadFromJsonAsync<GetContentResponse>(cancellationToken: cts.Token);
+
+                var interval = result.ValidTo - DateTime.UtcNow;
+                if (interval > TimeSpan.Zero)
+                    _lastKnownTtl[cacheKey] = interval;
+
+                _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
+                _logger.LogInformation("Background refresh for content '{Key}' completed. ValidTo: {ValidTo}.",
+                    key, result.ValidTo);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Background refresh for content '{Key}' timed out after {Timeout}ms.",
+                    key, _contentOptions.HttpTimeout.TotalMilliseconds);
+                var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
+                CacheFailure(key, languageKey, staleValue);
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Background refresh for content '{Key}' failed: {Message}.", key, e.Message);
+                var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
+                CacheFailure(key, languageKey, staleValue);
+            }
+            finally
+            {
+                _refreshInProgress.TryRemove(cacheKey, out _);
+            }
+        });
     }
 
     private void CacheFailure(string key, Guid languageKey, string value)

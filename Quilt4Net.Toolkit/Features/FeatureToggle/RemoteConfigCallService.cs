@@ -19,6 +19,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
     private readonly ILogger<RemoteConfigCallService> _logger;
     private readonly ConcurrentDictionary<string, FeatureToggleResponse> _localCache = new();
     private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
+    private readonly ConcurrentDictionary<string, bool> _refreshInProgress = new();
 
     public RemoteConfigCallService(IServiceProvider serviceProvider, EnvironmentName environmentName, IOptions<RemoteConfigurationOptions> options, ILogger<RemoteConfigCallService> logger)
     {
@@ -38,75 +39,30 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             var changeType = ((T)Convert.ChangeType($"{defaultValue}", typeof(T)));
             if (!$"{changeType}".Equals($"{defaultValue}")) throw new NotSupportedException($"Value of type {typeof(T).Name} is not supported.");
 
-            var assemblyName = Assembly.GetEntryAssembly()?.GetName();
-            var request = new FeatureToggleRequest
+            _localCache.TryGetValue(key, out var cached);
+            var needRefresh = cached == null || DateTime.UtcNow > cached.ValidTo;
+
+            if (!needRefresh)
             {
-                Key = key,
-                Application = assemblyName?.Name,
-                Environment = _environmentName.Name,
-                Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
-                Version = $"{assemblyName?.Version}",
-                DefaultValue = $"{defaultValue}",
-                ValueType = typeof(T).Name,
-                Ttl = ttl
-            };
-            var complexKey = BuildKey(request);
-
-            var needRefresh = true;
-            if (_localCache.TryGetValue(key, out var result))
-            {
-                needRefresh = DateTime.UtcNow > result.ValidTo;
-            }
-
-            if (needRefresh)
-            {
-                using var client = GetHttpClient();
-                var address = $"Api/Configuration/{complexKey}";
-                var response = await client.GetAsync(address);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogError("Unable to get feature toggle for key '{Key}' (Application: {Application}, Environment: {Environment}) from '{HealthAddress}'. Response was {StatusCode} {ReasonPhrase}. Using stale cache or fallback.",
-                        key, request.Application, request.Environment, address, response.StatusCode, response.ReasonPhrase);
-                    CacheFailure(key, result);
-                    var staleValue = GetCachedOrDefault(result, defaultValue);
-                    _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true, Value: '{Value}'.",
-                        key, sw.ElapsedMilliseconds, result != null ? "StaleCache" : "Default", staleValue);
-                    return staleValue;
-                }
-
-                result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>();
-
-                var interval = result.ValidTo - DateTime.UtcNow;
-                if (interval > TimeSpan.Zero)
-                    _lastKnownTtl[key] = interval;
-
-                _localCache.AddOrUpdate(key, result, (a, b) => result);
-
-                if (result.Value == null)
-                {
-                    _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
-                        key, sw.ElapsedMilliseconds, defaultValue);
-                    return defaultValue;
-                }
-
-                var serverValue = (T)Convert.ChangeType(result.Value, typeof(T));
-                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
-                    key, sw.ElapsedMilliseconds, serverValue);
-                return serverValue;
-            }
-
-            if (result.Value == null)
-            {
+                var cachedValue = GetCachedOrDefault(cached, defaultValue);
                 _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false, Value: '{Value}'.",
-                    key, sw.ElapsedMilliseconds, defaultValue);
-                return defaultValue;
+                    key, sw.ElapsedMilliseconds, cachedValue);
+                return cachedValue;
             }
 
-            var cachedValue = (T)Convert.ChangeType(result.Value, typeof(T));
-            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false, Value: '{Value}'.",
-                key, sw.ElapsedMilliseconds, cachedValue);
-            return cachedValue;
+            // Stale-while-revalidate: if we have a stale cached value, return it immediately
+            // and refresh in the background.
+            if (cached != null)
+            {
+                StartBackgroundRefresh(key, defaultValue, ttl);
+                var staleValue = GetCachedOrDefault(cached, defaultValue);
+                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
+                    key, sw.ElapsedMilliseconds, staleValue);
+                return staleValue;
+            }
+
+            // No cache at all — must fetch with timeout.
+            return await FetchWithTimeout(key, defaultValue, ttl, sw);
         }
         catch (Exception e)
         {
@@ -123,6 +79,134 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 key, sw.ElapsedMilliseconds, defaultValue);
             return defaultValue;
         }
+    }
+
+    private async Task<T> FetchWithTimeout<T>(string key, T defaultValue, TimeSpan? ttl, Stopwatch sw)
+    {
+        try
+        {
+            var assemblyName = Assembly.GetEntryAssembly()?.GetName();
+            var request = new FeatureToggleRequest
+            {
+                Key = key,
+                Application = assemblyName?.Name,
+                Environment = _environmentName.Name,
+                Instance = null,
+                Version = $"{assemblyName?.Version}",
+                DefaultValue = $"{defaultValue}",
+                ValueType = typeof(T).Name,
+                Ttl = ttl
+            };
+            var complexKey = BuildKey(request);
+
+            using var cts = new CancellationTokenSource(_options.HttpTimeout);
+            using var client = GetHttpClient();
+            var address = $"Api/Configuration/{complexKey}";
+            var response = await client.GetAsync(address, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Unable to get feature toggle for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
+                    key, response.StatusCode, response.ReasonPhrase);
+                CacheFailure(key, null);
+                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+                    key, sw.ElapsedMilliseconds, defaultValue);
+                return defaultValue;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>(cancellationToken: cts.Token);
+
+            var interval = result.ValidTo - DateTime.UtcNow;
+            if (interval > TimeSpan.Zero)
+                _lastKnownTtl[key] = interval;
+
+            _localCache.AddOrUpdate(key, result, (_, _) => result);
+
+            var serverValue = GetCachedOrDefault(result, defaultValue);
+            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
+                key, sw.ElapsedMilliseconds, serverValue);
+            return serverValue;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("HTTP request timed out for configuration '{Key}' after {Timeout}ms. Using default value.",
+                key, _options.HttpTimeout.TotalMilliseconds);
+            CacheFailure(key, null);
+            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+                key, sw.ElapsedMilliseconds, defaultValue);
+            return defaultValue;
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "{Message} Using default for key {Key}.", e.Message, key);
+            CacheFailure(key, null);
+            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+                key, sw.ElapsedMilliseconds, defaultValue);
+            return defaultValue;
+        }
+    }
+
+    private void StartBackgroundRefresh<T>(string key, T defaultValue, TimeSpan? ttl)
+    {
+        if (!_refreshInProgress.TryAdd(key, true)) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var assemblyName = Assembly.GetEntryAssembly()?.GetName();
+                var request = new FeatureToggleRequest
+                {
+                    Key = key,
+                    Application = assemblyName?.Name,
+                    Environment = _environmentName.Name,
+                    Instance = null,
+                    Version = $"{assemblyName?.Version}",
+                    DefaultValue = $"{defaultValue}",
+                    ValueType = typeof(T).Name,
+                    Ttl = ttl
+                };
+                var complexKey = BuildKey(request);
+
+                using var cts = new CancellationTokenSource(_options.HttpTimeout);
+                using var client = GetHttpClient();
+                var address = $"Api/Configuration/{complexKey}";
+                var response = await client.GetAsync(address, cts.Token);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Background refresh for '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
+                        key, response.StatusCode, response.ReasonPhrase);
+                    CacheFailure(key, _localCache.GetValueOrDefault(key));
+                    return;
+                }
+
+                var result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>(cancellationToken: cts.Token);
+
+                var interval = result.ValidTo - DateTime.UtcNow;
+                if (interval > TimeSpan.Zero)
+                    _lastKnownTtl[key] = interval;
+
+                _localCache.AddOrUpdate(key, result, (_, _) => result);
+                _logger.LogInformation("Background refresh for '{Key}' completed. New value: '{Value}', ValidTo: {ValidTo}.",
+                    key, result.Value, result.ValidTo);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Background refresh for '{Key}' timed out after {Timeout}ms.",
+                    key, _options.HttpTimeout.TotalMilliseconds);
+                CacheFailure(key, _localCache.GetValueOrDefault(key));
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Background refresh for '{Key}' failed: {Message}.", key, e.Message);
+                CacheFailure(key, _localCache.GetValueOrDefault(key));
+            }
+            finally
+            {
+                _refreshInProgress.TryRemove(key, out _);
+            }
+        });
     }
 
     public async Task<ConfigurationResponse[]> GetAllAsync()
