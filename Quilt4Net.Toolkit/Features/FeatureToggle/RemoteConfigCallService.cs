@@ -10,13 +10,14 @@ namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
 internal class RemoteConfigCallService : IRemoteConfigCallService
 {
-    private static readonly TimeSpan DefaultFailureCacheDuration = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan FallbackFailureCacheDuration = TimeSpan.FromMinutes(10);
 
     private readonly IServiceProvider _serviceProvider;
     private readonly EnvironmentName _environmentName;
     private readonly RemoteConfigurationOptions _options;
     private readonly ILogger<RemoteConfigCallService> _logger;
     private readonly ConcurrentDictionary<string, FeatureToggleResponse> _localCache = new();
+    private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
 
     public RemoteConfigCallService(IServiceProvider serviceProvider, EnvironmentName environmentName, IOptions<RemoteConfigurationOptions> options, ILogger<RemoteConfigCallService> logger)
     {
@@ -70,6 +71,10 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 }
 
                 result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>();
+
+                var interval = result.ValidTo - DateTime.UtcNow;
+                if (interval > TimeSpan.Zero)
+                    _lastKnownTtl[key] = interval;
 
                 _localCache.AddOrUpdate(key, result, (a, b) => result);
             }
@@ -170,10 +175,11 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
     private void CacheFailure(string key, FeatureToggleResponse stale)
     {
+        var duration = _lastKnownTtl.GetValueOrDefault(key, FallbackFailureCacheDuration);
         var failureResponse = new FeatureToggleResponse
         {
             Value = stale?.Value,
-            ValidTo = DateTime.UtcNow.Add(DefaultFailureCacheDuration)
+            ValidTo = DateTime.UtcNow.Add(duration)
         };
         _localCache.AddOrUpdate(key, failureResponse, (_, _) => failureResponse);
     }

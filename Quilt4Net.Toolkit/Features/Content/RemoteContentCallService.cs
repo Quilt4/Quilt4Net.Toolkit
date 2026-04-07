@@ -12,14 +12,16 @@ namespace Quilt4Net.Toolkit.Features.Content;
 
 internal class RemoteContentCallService : IRemoteContentCallService
 {
-    private static readonly TimeSpan DefaultLanguageFailureCacheDuration = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan FallbackCacheDuration = TimeSpan.FromMinutes(10);
 
     private readonly EnvironmentName _environmentName;
     private readonly ContentOptions _contentOptions;
     private readonly ILogger<RemoteContentCallService> _logger;
     private readonly ConcurrentDictionary<string, GetContentResponse> _localCache = new();
+    private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
     private Language[] _languages;
     private DateTime _languagesValidTo;
+    private TimeSpan _lastKnownLanguageTtl;
 
     public RemoteContentCallService(EnvironmentName environmentName, IOptions<ContentOptions> contentOptions, ILogger<RemoteContentCallService> logger)
     {
@@ -74,7 +76,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
                 result = await response.Content.ReadFromJsonAsync<GetContentResponse>();
 
-                _localCache.AddOrUpdate($"{key}_{languageKey}", result, (_, _) => result);
+                var cacheKey = $"{key}_{languageKey}";
+                var interval = result.ValidTo - DateTime.UtcNow;
+                if (interval > TimeSpan.Zero)
+                    _lastKnownTtl[cacheKey] = interval;
+
+                _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
             }
 
             return (result.Value ?? defaultValue, true);
@@ -151,19 +158,24 @@ internal class RemoteContentCallService : IRemoteContentCallService
             {
                 _logger.LogError("Unable to get languages from '{Address}'. Response was {StatusCode} {ReasonPhrase}. Returning cached or empty list.",
                     address, response.StatusCode, response.ReasonPhrase);
-                _languagesValidTo = DateTime.UtcNow.Add(DefaultLanguageFailureCacheDuration);
+                _languagesValidTo = DateTime.UtcNow.Add(_lastKnownLanguageTtl > TimeSpan.Zero ? _lastKnownLanguageTtl : FallbackCacheDuration);
                 return _languages ?? [];
             }
 
             var result = await response.Content.ReadFromJsonAsync<LanguageResponse>();
             _languages = result.Languages;
             _languagesValidTo = result.ValidTo;
+
+            var langInterval = result.ValidTo - DateTime.UtcNow;
+            if (langInterval > TimeSpan.Zero)
+                _lastKnownLanguageTtl = langInterval;
+
             return _languages;
         }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Returning cached or empty list.", e.Message);
-            _languagesValidTo = DateTime.UtcNow.Add(DefaultLanguageFailureCacheDuration);
+            _languagesValidTo = DateTime.UtcNow.Add(_lastKnownLanguageTtl > TimeSpan.Zero ? _lastKnownLanguageTtl : FallbackCacheDuration);
             return _languages ?? [];
         }
     }
@@ -173,14 +185,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _localCache.Clear();
     }
 
-    private void CacheFailure(string key, Guid languageKey, string defaultValue)
+    private void CacheFailure(string key, Guid languageKey, string value)
     {
+        var cacheKey = $"{key}_{languageKey}";
+        var duration = _lastKnownTtl.GetValueOrDefault(cacheKey, _contentOptions.FailureCacheDuration);
         var failureResponse = new GetContentResponse
         {
-            Value = defaultValue,
-            ValidTo = DateTime.UtcNow.Add(_contentOptions.FailureCacheDuration)
+            Value = value,
+            ValidTo = DateTime.UtcNow.Add(duration)
         };
-        _localCache.AddOrUpdate($"{key}_{languageKey}", failureResponse, (_, _) => failureResponse);
+        _localCache.AddOrUpdate(cacheKey, failureResponse, (_, _) => failureResponse);
     }
 
     private static string BuildKey(GetContentRequest request)
