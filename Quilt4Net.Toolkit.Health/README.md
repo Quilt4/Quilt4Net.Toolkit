@@ -162,6 +162,120 @@ In this example, the database is `Essential = true` — if it fails, the service
 
 Multiple `IComponentService` implementations can be registered. All components from all services are included in health checks.
 
+### Real-world patterns
+
+A typical `ComponentService` checks infrastructure dependencies (databases, caches) and service connectivity (Quilt4Net). Here is a complete example combining all common patterns.
+
+```csharp
+public class ComponentService : IComponentService
+{
+    private readonly IConfiguration _configuration;
+    private readonly IMongoDbServiceFactory _mongoDbServiceFactory;
+    private readonly ICacheMonitor _cacheMonitor;
+    private readonly IConnectionService _connectionService;
+
+    public ComponentService(
+        IConfiguration configuration,
+        IMongoDbServiceFactory mongoDbServiceFactory,
+        ICacheMonitor cacheMonitor,
+        IConnectionService connectionService)
+    {
+        _configuration = configuration;
+        _mongoDbServiceFactory = mongoDbServiceFactory;
+        _cacheMonitor = cacheMonitor;
+        _connectionService = connectionService;
+    }
+
+    public IEnumerable<Component> GetComponents()
+    {
+        // MongoDB connectivity — one check per connection string.
+        // Essential: if the database is down, the service cannot function.
+        foreach (var cs in _configuration.GetSection("ConnectionStrings").GetChildren())
+        {
+            yield return new Component
+            {
+                Name = $"Database.{cs.Key}",
+                Essential = true,
+                CheckAsync = async _ =>
+                {
+                    var service = _mongoDbServiceFactory.GetMongoDbService(
+                        () => new DatabaseContext { ConfigurationName = cs.Key });
+                    var info = await service.GetInfoAsync();
+                    return new CheckResult
+                    {
+                        Success = info.CanConnect,
+                        Message = $"{info.Message} {info.Firewall}".TrimEnd()
+                    };
+                }
+            };
+        }
+
+        // Cache health — one check per cache provider (Memory, Redis, etc.).
+        // Not essential: the service can function without cache, just slower.
+        foreach (var healthType in _cacheMonitor.GetHealthTypes())
+        {
+            yield return new Component
+            {
+                Name = $"Cache.{healthType.Type}",
+                Essential = false,
+                CheckAsync = async _ =>
+                {
+                    var response = await healthType.GetHealthAsync();
+                    return new CheckResult
+                    {
+                        Success = response.Success,
+                        Message = response.Message
+                    };
+                }
+            };
+        }
+
+        // Quilt4Net service connectivity — one check per service type.
+        // Not essential: content and config can fall back to cached/default values.
+        foreach (var service in Enum.GetValues<Service>())
+        {
+            yield return new Component
+            {
+                Name = $"Quilt4Net.{service}",
+                Essential = false,
+                CheckAsync = async _ =>
+                {
+                    var result = await _connectionService.CanConnectAsync(service);
+                    return new CheckResult
+                    {
+                        Success = result.Success,
+                        Message = result.Message
+                    };
+                }
+            };
+        }
+    }
+}
+```
+
+#### Essential vs non-essential guidelines
+
+| Check type | Essential | Reason |
+|-----------|-----------|--------|
+| Primary database | `true` | Service cannot read or write data without it. |
+| Cache (Memory, Redis) | `false` | Service degrades (slower) but still functions. |
+| Quilt4Net Content/Config | `false` | Falls back to cached or default values. |
+| External payment API | `false` | Other features still work; payment can retry. |
+| Authentication provider | `true` | Users cannot log in without it. |
+
+#### IConnectionService
+
+`IConnectionService` verifies connectivity to the Quilt4Net server. It is registered automatically when `AddQuilt4NetRemoteConfiguration()` is called.
+
+```csharp
+public interface IConnectionService
+{
+    Task<ConnectionResult> CanConnectAsync(Service service);
+}
+```
+
+The `Service` enum has two values: `Content` and `Configuration`. Each maps to its own configured address and API key. Results are cached after the first successful check.
+
 ## Dependencies
 
 Register external services that use Quilt4Net Health API. The dependency endpoint calls their health check.
