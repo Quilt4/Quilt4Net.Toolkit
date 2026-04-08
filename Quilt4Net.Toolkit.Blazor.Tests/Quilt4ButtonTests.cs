@@ -73,14 +73,14 @@ public class Quilt4ButtonTests : BunitContext
             _success = success;
         }
 
-        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType)
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
         {
             if (_success && !string.IsNullOrEmpty(_value))
                 return Task.FromResult((_value, true));
             return Task.FromResult((defaultValue ?? "", _success));
         }
 
-        public Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType) => Task.CompletedTask;
+        public Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null) => Task.CompletedTask;
         public Task ClearCacheAsync() => Task.CompletedTask;
     }
 

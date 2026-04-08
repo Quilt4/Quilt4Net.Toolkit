@@ -29,7 +29,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         _logger = logger;
     }
 
-    public async Task<T> MakeCallAsync<T>(string key, T defaultValue, TimeSpan? ttl)
+    public async Task<T> MakeCallAsync<T>(string key, T defaultValue, TimeSpan? ttl, string application = null)
     {
         ttl ??= _options.Ttl;
         var sw = Stopwatch.StartNew();
@@ -54,7 +54,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             // and refresh in the background.
             if (cached != null)
             {
-                StartBackgroundRefresh(key, defaultValue, ttl);
+                StartBackgroundRefresh(key, defaultValue, ttl, application);
                 var staleValue = GetCachedOrDefault(cached, defaultValue);
                 _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, staleValue);
@@ -62,7 +62,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             }
 
             // No cache at all — must fetch with timeout.
-            return await FetchWithTimeout(key, defaultValue, ttl, sw);
+            return await FetchWithTimeout(key, defaultValue, ttl, sw, application);
         }
         catch (Exception e)
         {
@@ -81,7 +81,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         }
     }
 
-    private async Task<T> FetchWithTimeout<T>(string key, T defaultValue, TimeSpan? ttl, Stopwatch sw)
+    private async Task<T> FetchWithTimeout<T>(string key, T defaultValue, TimeSpan? ttl, Stopwatch sw, string application = null)
     {
         try
         {
@@ -89,7 +89,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             var request = new FeatureToggleRequest
             {
                 Key = key,
-                Application = assemblyName?.Name,
+                Application = application ?? assemblyName?.Name,
                 Environment = _environmentName.Name,
                 Instance = null,
                 Version = $"{assemblyName?.Version}",
@@ -146,7 +146,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         }
     }
 
-    private void StartBackgroundRefresh<T>(string key, T defaultValue, TimeSpan? ttl)
+    private void StartBackgroundRefresh<T>(string key, T defaultValue, TimeSpan? ttl, string application = null)
     {
         if (!_refreshInProgress.TryAdd(key, true)) return;
 
@@ -158,7 +158,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 var request = new FeatureToggleRequest
                 {
                     Key = key,
-                    Application = assemblyName?.Name,
+                    Application = application ?? assemblyName?.Name,
                     Environment = _environmentName.Name,
                     Instance = null,
                     Version = $"{assemblyName?.Version}",

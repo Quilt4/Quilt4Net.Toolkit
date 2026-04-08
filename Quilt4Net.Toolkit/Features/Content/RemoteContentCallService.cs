@@ -31,7 +31,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _logger = logger;
     }
 
-    public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType)
+    public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
     {
         if (languageKey == Language.DeveloperLanguageKey) return ("X", true);
 
@@ -57,14 +57,14 @@ internal class RemoteContentCallService : IRemoteContentCallService
             // Stale-while-revalidate: return stale value immediately, refresh in background.
             if (cached != null)
             {
-                StartBackgroundRefresh(key, defaultValue, languageKey, contentType);
+                StartBackgroundRefresh(key, defaultValue, languageKey, contentType, application);
                 _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
                     key, sw.ElapsedMilliseconds);
                 return (cached.Value ?? defaultValue, true);
             }
 
             // No cache — must fetch with timeout.
-            return await FetchContentWithTimeout(key, defaultValue, languageKey, contentType, sw);
+            return await FetchContentWithTimeout(key, defaultValue, languageKey, contentType, sw, application);
         }
         catch (Exception e)
         {
@@ -78,13 +78,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    public async Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType)
+    public async Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null)
     {
         if (string.IsNullOrEmpty(value)) throw new ArgumentNullException(nameof(value), $"No {nameof(value)} provided for key '{key}'.");
 
         try
         {
-            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+            var assemblyName = application ?? _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
             var setContentRequest = new SetContentRequest
             {
                 Key = key,
@@ -157,11 +157,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _localCache.Clear();
     }
 
-    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw)
+    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string application = null)
     {
         try
         {
-            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+            var assemblyName = application ?? _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
             var request = new GetContentRequest
             {
                 Key = key,
@@ -221,7 +221,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    private void StartBackgroundRefresh(string key, string defaultValue, Guid languageKey, ContentFormat? contentType)
+    private void StartBackgroundRefresh(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
     {
         var cacheKey = $"{key}_{languageKey}";
         if (!_refreshInProgress.TryAdd(cacheKey, true)) return;
@@ -230,7 +230,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         {
             try
             {
-                var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+                var assemblyName = application ?? _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
                 var request = new GetContentRequest
                 {
                     Key = key,
