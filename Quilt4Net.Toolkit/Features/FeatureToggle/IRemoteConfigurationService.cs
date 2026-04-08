@@ -2,7 +2,7 @@
 
 public interface IRemoteConfigurationService
 {
-    ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null);
+    ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = null);
     Task<ConfigurationResponse[]> GetTogglesAsync();
     Task DeleteAsync(string key, string application, string environment, string instance);
     Task SetValueAsync(string key, string application, string environment, string instance, string value);
