@@ -9,9 +9,9 @@ internal class RemoteConfigurationService : IRemoteConfigurationService
         _remoteConfigCallService = remoteConfigCallService;
     }
 
-    public async ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null)
+    public async ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = null)
     {
-        return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl);
+        return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl, application);
     }
 
     public Task<ConfigurationResponse[]> GetTogglesAsync()

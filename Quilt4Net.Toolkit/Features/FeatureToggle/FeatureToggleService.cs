@@ -11,8 +11,8 @@ internal class FeatureToggleService : IFeatureToggleService
         _remoteConfigCallService = remoteConfigCallService;
     }
 
-    public async ValueTask<bool> GetToggleAsync(string key, bool fallback = false, TimeSpan? ttl = null)
+    public async ValueTask<bool> GetToggleAsync(string key, bool fallback = false, TimeSpan? ttl = null, string application = null)
     {
-        return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl);
+        return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl, application);
     }
 }
