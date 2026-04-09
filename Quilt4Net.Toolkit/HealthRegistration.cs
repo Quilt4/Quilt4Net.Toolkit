@@ -30,10 +30,16 @@ public static class HealthRegistration
         var config = configuration?.GetSection("Quilt4Net:HealthClient").Get<HealthClientOptions>();
         var o = new HealthClientOptions
         {
-            HealthAddress = config?.HealthAddress.NullIfEmpty() ?? throw new InvalidOperationException($"No address for {nameof(HealthClient)} has been configured.")
+            HealthAddress = config?.HealthAddress.NullIfEmpty()
         };
 
         options?.Invoke(o);
+
+        if (string.IsNullOrEmpty(o.HealthAddress))
+        {
+            throw new InvalidOperationException($"No address for {nameof(HealthClient)} has been configured.");
+        }
+
         services.AddSingleton(Options.Create(o));
 
         services.AddTransient<IHealthClient, HealthClient>();
