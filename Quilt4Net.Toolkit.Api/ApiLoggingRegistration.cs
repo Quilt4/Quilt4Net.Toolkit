@@ -8,18 +8,6 @@ public static class ApiLoggingRegistration
     private static LoggingOptions _options;
 
     [Obsolete("Use builder.AddQuilt4NetLogging().AddHttpRequestLogging() instead.")]
-    public static void AddQuilt4NetLogging(this WebApplicationBuilder builder, Action<LoggingOptions> options = null)
-    {
-        AddQuilt4NetApiLogging(builder, options);
-    }
-
-    [Obsolete("Use builder.AddQuilt4NetLogging().AddHttpRequestLogging() instead.")]
-    public static void AddQuilt4NetLogging(this IServiceCollection services, IConfiguration configuration, Action<LoggingOptions> options = null)
-    {
-        services.AddQuilt4NetApiLogging(configuration, options);
-    }
-
-    [Obsolete("Use builder.AddQuilt4NetLogging().AddHttpRequestLogging() instead.")]
     public static void AddQuilt4NetApiLogging(this IHostApplicationBuilder builder, Action<LoggingOptions> options = null)
     {
         builder.Services.AddQuilt4NetApiLogging(builder.Configuration, options);
@@ -36,12 +24,6 @@ public static class ApiLoggingRegistration
         services.AddSingleton(Options.Create(_options));
 
         services.AddSingleton(_ => new CompiledLoggingOptions(_options));
-    }
-
-    [Obsolete("Use app.UseQuilt4NetLogging() instead.")]
-    public static void UseQuilt4NetLogging(this WebApplication app)
-    {
-        UseQuilt4NetApiLogging(app);
     }
 
     [Obsolete("Use app.UseQuilt4NetLogging() instead.")]

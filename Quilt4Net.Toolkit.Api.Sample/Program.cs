@@ -45,13 +45,14 @@ builder.AddQuilt4NetApplicationInsightsClient();
 builder.AddQuilt4NetHealthClient();
 builder.AddQuilt4NetContent();
 builder.AddQuilt4NetRemoteConfiguration();
-builder.AddQuilt4NetApiLogging(o =>
-{
-    o.Interceptor = (request, response, details, _) =>
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging(o =>
     {
-        return Task.FromResult((request, response, details));
-    };
-});
+        o.Interceptor = (request, response, details, _) =>
+        {
+            return Task.FromResult((request, response, details));
+        };
+    });
 builder.AddQuilt4NetHealth(o =>
 {
     o.Certificate.CertExpiryUnhealthyLimitDays = 33;
@@ -87,7 +88,7 @@ builder.AddQuilt4NetHealth(o =>
 
 var app = builder.Build();
 
-app.UseQuilt4NetApiLogging();
+app.UseQuilt4NetLogging();
 
 app.UseSwagger();
 app.UseSwaggerUI();
