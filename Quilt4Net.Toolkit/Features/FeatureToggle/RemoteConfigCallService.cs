@@ -89,7 +89,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             var request = new FeatureToggleRequest
             {
                 Key = key,
-                Application = application ?? assemblyName?.Name,
+                Application = application ?? _options.Application ?? assemblyName?.Name,
                 Environment = _environmentName.Name,
                 Instance = null,
                 Version = $"{assemblyName?.Version}",
@@ -158,7 +158,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 var request = new FeatureToggleRequest
                 {
                     Key = key,
-                    Application = application ?? assemblyName?.Name,
+                    Application = application ?? _options.Application ?? assemblyName?.Name,
                     Environment = _environmentName.Name,
                     Instance = null,
                     Version = $"{assemblyName?.Version}",
@@ -224,7 +224,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             }
 
             var assemblyName = Assembly.GetEntryAssembly()?.GetName();
-            var application = assemblyName?.Name;
+            var application = _options.Application ?? assemblyName?.Name;
             var environment = _environmentName.Name;
 
             var data = await response.Content.ReadFromJsonAsync<ConfigurationResponse[]>();
