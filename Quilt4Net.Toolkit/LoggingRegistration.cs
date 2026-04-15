@@ -15,21 +15,22 @@ public static class LoggingRegistration
     /// </summary>
     public static Quilt4NetLoggingBuilder AddQuilt4NetLogging(this IHostApplicationBuilder builder, Action<Quilt4NetLoggingOptions> options = null)
     {
-        return builder.Services.AddQuilt4NetLogging(builder.Configuration, options, builder.Environment?.EnvironmentName);
+        return builder.Services.AddQuilt4NetLogging(builder.Configuration, options, builder.Environment?.EnvironmentName, builder.Environment?.ApplicationName);
     }
 
     /// <summary>
     /// Register universal telemetry tagging for all Application Insights telemetry.
     /// </summary>
-    public static Quilt4NetLoggingBuilder AddQuilt4NetLogging(this IServiceCollection services, IConfiguration configuration = null, Action<Quilt4NetLoggingOptions> options = null, string environmentName = null)
+    public static Quilt4NetLoggingBuilder AddQuilt4NetLogging(this IServiceCollection services, IConfiguration configuration = null, Action<Quilt4NetLoggingOptions> options = null, string environmentName = null, string applicationName = null)
     {
         var config = configuration?.GetSection("Quilt4Net:Logging").Get<Quilt4NetLoggingOptions>();
 
-        var entryAssembly = Assembly.GetEntryAssembly();
+        var resolvedName = applicationName ?? config?.ApplicationName ?? ResolveApplicationNameFromEntryAssembly();
+        var resolvedVersion = config?.Version ?? ResolveVersion(resolvedName);
         var o = new Quilt4NetLoggingOptions
         {
-            ApplicationName = config?.ApplicationName ?? entryAssembly?.GetName().Name,
-            Version = config?.Version ?? entryAssembly?.GetName().Version?.ToString(),
+            ApplicationName = resolvedName,
+            Version = resolvedVersion,
             Environment = environmentName
                           ?? config?.Environment
                           ?? System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
@@ -43,5 +44,43 @@ public static class LoggingRegistration
         services.TryAddEnumerable(ServiceDescriptor.Singleton<ITelemetryInitializer, Quilt4NetTelemetryInitializer>());
 
         return new Quilt4NetLoggingBuilder(services, o);
+    }
+
+    private static string ResolveApplicationNameFromEntryAssembly()
+    {
+        var entryAssembly = Assembly.GetEntryAssembly();
+        var name = entryAssembly?.GetName().Name;
+
+        if (string.IsNullOrEmpty(name)) return null;
+
+        // Avoid defaulting to a framework assembly (Blazor WASM, in-process IIS, test runners can return these)
+        if (name.StartsWith("Microsoft.", StringComparison.Ordinal)
+            || name.StartsWith("System.", StringComparison.Ordinal)
+            || name.StartsWith("testhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return name;
+    }
+
+    private static string ResolveVersion(string applicationName)
+    {
+        // Try the named application assembly first (set by the host via IHostEnvironment.ApplicationName)
+        if (!string.IsNullOrEmpty(applicationName))
+        {
+            try
+            {
+                var assembly = Assembly.Load(applicationName);
+                var version = assembly.GetName().Version?.ToString();
+                if (!string.IsNullOrEmpty(version)) return version;
+            }
+            catch
+            {
+                // Fall through to entry assembly
+            }
+        }
+
+        return Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
     }
 }

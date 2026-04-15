@@ -155,8 +155,8 @@ By default the initializer sets:
 
 | Telemetry property | Default value |
 |---|---|
-| `Cloud.RoleName` | Entry assembly name |
-| `Component.Version` | Entry assembly version |
+| `Cloud.RoleName` | `IHostEnvironment.ApplicationName` → entry assembly name (framework assemblies excluded) |
+| `Component.Version` | Application assembly version |
 | `GlobalProperties["Environment"]` | `IHostEnvironment.EnvironmentName` → `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `"Production"` |
 
 Override via callback or `appsettings.json`:

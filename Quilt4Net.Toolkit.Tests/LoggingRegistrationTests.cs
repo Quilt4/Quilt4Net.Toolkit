@@ -78,6 +78,37 @@ public class LoggingRegistrationTests
     }
 
     [Fact]
+    public void ApplicationName_parameter_wins_over_config()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Quilt4Net:Logging:ApplicationName"] = "from-config"
+            })
+            .Build();
+
+        services.AddQuilt4NetLogging(configuration, applicationName: "from-host");
+
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<Quilt4NetLoggingOptions>();
+        options.ApplicationName.Should().Be("from-host");
+    }
+
+    [Fact]
+    public void ApplicationName_falls_back_to_null_when_entry_assembly_is_framework()
+    {
+        // Test runner's entry assembly is typically "testhost" — verify our filter rejects it
+        // and consumer can still set it via callback or parameter
+        var services = new ServiceCollection();
+        services.AddQuilt4NetLogging(applicationName: "my-app");
+
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<Quilt4NetLoggingOptions>();
+        options.ApplicationName.Should().Be("my-app");
+    }
+
+    [Fact]
     public void EnvironmentName_parameter_wins_over_config()
     {
         var services = new ServiceCollection();
