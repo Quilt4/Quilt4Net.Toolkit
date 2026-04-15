@@ -12,16 +12,19 @@ Install the NuGet package [Quilt4Net.Toolkit.Api](https://www.nuget.org/packages
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddQuilt4NetApiLogging();
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging();
 
 var app = builder.Build();
 
-app.UseQuilt4NetApiLogging();
+app.UseQuilt4NetLogging();
 
 app.Run();
 ```
 
-By default, all requests to paths starting with `/Api` are logged.
+`AddQuilt4NetLogging()` registers an `ITelemetryInitializer` that tags all Application Insights telemetry (traces, exceptions, requests) with `Cloud.RoleName`, `Component.Version`, and `Environment`. `AddHttpRequestLogging()` opts in to HTTP request/response middleware. By default, all requests to paths starting with `/Api` are logged.
+
+> The old `AddQuilt4NetApiLogging()` and `UseQuilt4NetApiLogging()` methods still work but are deprecated.
 
 ## Correlation ID
 
@@ -32,10 +35,11 @@ When `UseCorrelationId` is enabled (default), the middleware reads the `X-Correl
 Control where logs are sent using `HttpRequestLogMode`.
 
 ```csharp
-builder.AddQuilt4NetApiLogging(o =>
-{
-    o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights | HttpRequestLogMode.Logger;
-});
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging(o =>
+    {
+        o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights | HttpRequestLogMode.Logger;
+    });
 ```
 
 | Value | Description |
@@ -51,10 +55,11 @@ Values can be combined with `|` to log to multiple destinations.
 By default, only paths matching `^/Api` (case-insensitive) are logged. Override with regex patterns.
 
 ```csharp
-builder.AddQuilt4NetApiLogging(o =>
-{
-    o.IncludePaths = [".*"]; // Log all paths
-});
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging(o =>
+    {
+        o.IncludePaths = [".*"]; // Log all paths
+    });
 ```
 
 ## Per-endpoint control
@@ -85,15 +90,16 @@ The `[Logging]` attribute can be applied to methods or classes.
 Use an interceptor to modify or filter logged data before it is written. This is useful for removing sensitive information such as passwords or API keys.
 
 ```csharp
-builder.AddQuilt4NetApiLogging(o =>
-{
-    o.Interceptor = async (request, response, properties, serviceProvider) =>
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging(o =>
     {
-        // Remove sensitive headers
-        request.Headers.Remove("Authorization");
-        return (request, response, properties);
-    };
-});
+        o.Interceptor = async (request, response, properties, serviceProvider) =>
+        {
+            // Remove sensitive headers
+            request.Headers.Remove("Authorization");
+            return (request, response, properties);
+        };
+    });
 ```
 
 ## Configuration
@@ -103,15 +109,16 @@ All options can be set via code or `appsettings.json`. Code takes priority over 
 ### Code configuration
 
 ```csharp
-builder.AddQuilt4NetApiLogging(o =>
-{
-    o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights;
-    o.UseCorrelationId = true;
-    o.MaxBodySize = 5_000_000;
-    o.IncludePaths = ["^/Api", "^/webhook"];
-    o.LogRequestBodyByDefault = true;
-    o.LogResponseBodyByDefault = false;
-});
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging(o =>
+    {
+        o.LogHttpRequest = HttpRequestLogMode.ApplicationInsights;
+        o.UseCorrelationId = true;
+        o.MaxBodySize = 5_000_000;
+        o.IncludePaths = ["^/Api", "^/webhook"];
+        o.LogRequestBodyByDefault = true;
+        o.LogResponseBodyByDefault = false;
+    });
 ```
 
 ### appsettings.json
