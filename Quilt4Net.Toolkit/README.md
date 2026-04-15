@@ -141,6 +141,54 @@ builder.AddQuilt4NetApplicationInsightsClient();
 
 Configuration path: `Quilt4Net:ApplicationInsights`
 
+## Universal telemetry tagging
+
+`AddQuilt4NetLogging()` registers an `ITelemetryInitializer` that tags every Application Insights telemetry item (traces, exceptions, requests, dependencies) with application identity. Works for all app types — Web API, Blazor, WPF, console, worker service.
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.AddQuilt4NetLogging();
+```
+
+By default the initializer sets:
+
+| Telemetry property | Default value |
+|---|---|
+| `Cloud.RoleName` | `IHostEnvironment.ApplicationName` → entry assembly name (framework assemblies excluded) |
+| `Component.Version` | Application assembly version |
+| `GlobalProperties["Environment"]` | `IHostEnvironment.EnvironmentName` → `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `"Production"` |
+
+Override via callback or `appsettings.json`:
+
+```csharp
+builder.AddQuilt4NetLogging(o =>
+{
+    o.ApplicationName = "florida-server";
+    o.Version = "2.0.0";
+    o.Environment = "Production";
+});
+```
+
+```json
+{
+  "Quilt4Net": {
+    "Logging": {
+      "ApplicationName": "florida-server",
+      "Version": "2.0.0",
+      "Environment": "Production"
+    }
+  }
+}
+```
+
+`AddQuilt4NetLogging()` returns a `Quilt4NetLoggingBuilder` that extension packages can chain off. For example, `Quilt4Net.Toolkit.Api` adds `.AddHttpRequestLogging()` to enable HTTP request/response middleware:
+
+```csharp
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging();
+```
+
 ## Measure extensions
 
 Extension methods on `ILogger` to measure and log execution time.
