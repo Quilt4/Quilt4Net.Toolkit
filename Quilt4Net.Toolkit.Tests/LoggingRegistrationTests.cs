@@ -67,7 +67,7 @@ public class LoggingRegistrationTests
     }
 
     [Fact]
-    public void EnvironmentName_parameter_is_used_as_fallback()
+    public void EnvironmentName_parameter_is_used_when_no_config()
     {
         var services = new ServiceCollection();
         services.AddQuilt4NetLogging(environmentName: "Staging");
@@ -75,6 +75,24 @@ public class LoggingRegistrationTests
         var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<Quilt4NetLoggingOptions>();
         options.Environment.Should().Be("Staging");
+    }
+
+    [Fact]
+    public void EnvironmentName_parameter_wins_over_config()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Quilt4Net:Logging:Environment"] = "from-config"
+            })
+            .Build();
+
+        services.AddQuilt4NetLogging(configuration, environmentName: "from-host");
+
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<Quilt4NetLoggingOptions>();
+        options.Environment.Should().Be("from-host");
     }
 
     [Fact]

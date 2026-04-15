@@ -30,8 +30,8 @@ public static class LoggingRegistration
         {
             ApplicationName = config?.ApplicationName ?? entryAssembly?.GetName().Name,
             Version = config?.Version ?? entryAssembly?.GetName().Version?.ToString(),
-            Environment = config?.Environment
-                          ?? environmentName
+            Environment = environmentName
+                          ?? config?.Environment
                           ?? System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
                           ?? System.Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
                           ?? "Production"
