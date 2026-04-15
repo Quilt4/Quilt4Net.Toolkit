@@ -10,7 +10,7 @@ A set of NuGet packages for building .NET applications with health checks, metri
 [![NuGet](https://img.shields.io/nuget/v/Quilt4Net.Toolkit)](https://www.nuget.org/packages/Quilt4Net.Toolkit)
 ![Nuget](https://img.shields.io/nuget/dt/Quilt4Net.Toolkit)
 
-Core library providing feature toggles, remote configuration, content management, health check client, Application Insights client, and measure/count logging extensions. Used by all other packages in this repository.
+Core library providing feature toggles, remote configuration, content management, health check client, Application Insights client, universal telemetry tagging (`AddQuilt4NetLogging`), and measure/count logging extensions. Used by all other packages in this repository.
 
 [Read more](Quilt4Net.Toolkit/README.md) | [Console sample](Quilt4Net.Toolkit.Console.Sample/)
 
@@ -57,8 +57,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Health endpoints
 builder.AddQuilt4NetHealth();
 
-// API logging
-builder.AddQuilt4NetApiLogging();
+// Telemetry tagging + HTTP request logging
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging();
 
 // Feature toggles and remote configuration
 builder.AddQuilt4NetRemoteConfiguration();
@@ -70,7 +71,7 @@ var app = builder.Build();
 
 app.UseRouting();
 app.UseQuilt4NetHealth();
-app.UseQuilt4NetApiLogging();
+app.UseQuilt4NetLogging();
 
 app.Run();
 ```
