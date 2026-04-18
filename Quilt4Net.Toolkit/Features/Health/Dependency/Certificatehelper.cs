@@ -11,6 +11,22 @@ internal static class Certificatehelper
 {
     public static async Task<HealthComponent> GetCertificateHealthAsync(Uri uri, CertificateCheckOptions optionsCertificate, HealthStatus? certificateStatus = null, string message = null)
     {
+        // Non-HTTPS URIs have no certificate to check — return Healthy rather than
+        // attempting a TLS handshake that would throw (e.g. on local http://localhost:5232).
+        if (!IsHttps(uri))
+        {
+            return new HealthComponent
+            {
+                Status = EnumExtensions.MaxEnum(certificateStatus, HealthStatus.Healthy),
+                Details = new Dictionary<string, string>
+                {
+                    { "host", uri.Host },
+                    { "scheme", uri.Scheme },
+                    { "message", $"No certificate check — URI scheme is '{uri.Scheme}', not https." },
+                }
+            };
+        }
+
         var certInfo = await GetCertificateInfoAsync(uri);
         var sb = new StringBuilder();
         sb.Append($"Certificate for '{certInfo.Host}' with {certInfo.TlsVersion}");
@@ -58,7 +74,8 @@ internal static class Certificatehelper
         var host = uri.Host;
         var port = uri.Port == -1 ? 443 : uri.Port;
 
-        if (port == 80) return (SslProtocols.None, null, host);
+        // Only HTTPS URIs have a certificate; any other scheme (http, etc.) means no check.
+        if (!IsHttps(uri)) return (SslProtocols.None, null, host);
 
         using var client = new TcpClient();
         await client.ConnectAsync(host, port);
@@ -73,4 +90,7 @@ internal static class Certificatehelper
 
         return (sslStream.SslProtocol, expiry, host);
     }
+
+    private static bool IsHttps(Uri uri) =>
+        string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
 }
