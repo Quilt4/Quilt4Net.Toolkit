@@ -50,6 +50,6 @@
     </PackageReference>
     <PackageReference Include="System.Management" Version="10.0.6" />
     <PackageReference Include="System.Linq.Async" Version="7.0.1" />
-    <PackageReference Include="Tharga.Cache" Version="0.4.0" />
+    <PackageReference Include="Tharga.Cache" Version="0.4.1" />
   </ItemGroup>
 </Project>
