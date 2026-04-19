@@ -72,8 +72,7 @@ internal class StorageMetricsService : IStorageMetricsService
 
     static StorageDeviceType GetWindowsStorageType(DriveInfo drive)
     {
-        using var searcher = new ManagementObjectSearcher(
-            $"SELECT * FROM Win32_LogicalDisk WHERE DeviceID = '{drive.Name.TrimEnd('\\')}'");
+        using var searcher = new ManagementObjectSearcher($"SELECT * FROM Win32_LogicalDisk WHERE DeviceID = '{drive.Name.TrimEnd('\\')}'");
 
         foreach (var disk in searcher.Get())
         {
