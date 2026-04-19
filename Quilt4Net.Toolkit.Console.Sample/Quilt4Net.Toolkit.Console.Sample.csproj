@@ -7,6 +7,10 @@
     <UserSecretsId>ccbee3dc-2c32-45c3-9263-d65150ec92d5</UserSecretsId>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <NoWarn>1701;1702;CS1591;CS0809;CS0618</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.6" />
   </ItemGroup>
