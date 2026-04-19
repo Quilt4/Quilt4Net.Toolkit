@@ -1,5 +1,7 @@
 @page "/"
+@using Quilt4Net.Toolkit.Features.FeatureToggle
 @rendermode InteractiveServer
+@inject IRemoteConfigurationService RemoteConfigurationService
 
 <Quilt4PageTitle Key="page.home.title" Default="Quilt4Net Blazor Sample" />
 
@@ -9,6 +11,9 @@
     <p>This sample demonstrates the Blazor components from <strong>Quilt4Net.Toolkit.Blazor</strong>.</p>
     <p>Use the navigation menu to explore the available features.</p>
 </Quilt4Content>
+
+<h3>Configuration demonstrated</h3>
+<p>A: @_val</p>
 
 <h3>Components demonstrated</h3>
 
@@ -24,6 +29,13 @@
 
 @code {
     private string _buttonMessage = "";
+    private bool _val;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _val = await RemoteConfigurationService.GetValueAsync<bool>("A");
+        await base.OnInitializedAsync();
+    }
 
     private Task OnButtonClick()
     {

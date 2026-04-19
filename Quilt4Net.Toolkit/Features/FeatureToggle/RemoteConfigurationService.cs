@@ -9,12 +9,29 @@ internal class RemoteConfigurationService : IRemoteConfigurationService
         _remoteConfigCallService = remoteConfigCallService;
     }
 
-    public async ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = null)
+    [Obsolete($"Use {nameof(GetAsync)} instead.")]
+    public ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = null)
+    {
+        return GetAsync(key, fallback, ttl, application);
+    }
+
+    public async ValueTask<T> GetAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = null)
     {
         return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl, application);
     }
 
+    public ValueTask<bool> GetToggleAsync(string key, bool fallback = default, TimeSpan? ttl = null, string application = null)
+    {
+        return GetAsync(key, fallback, ttl, application);
+    }
+
+    [Obsolete($"Use {nameof(GetAsync)} instead.")]
     public Task<ConfigurationResponse[]> GetTogglesAsync()
+    {
+        return GetAsync();
+    }
+
+    public Task<ConfigurationResponse[]> GetAsync()
     {
         return _remoteConfigCallService.GetAllAsync();
     }
@@ -24,7 +41,13 @@ internal class RemoteConfigurationService : IRemoteConfigurationService
         return _remoteConfigCallService.DeleteAsync(key, application, environment, instance);
     }
 
+    [Obsolete($"Use {nameof(SetAsync)} instead.")]
     public Task SetValueAsync(string key, string application, string environment, string instance, string value)
+    {
+        return SetAsync(key, application, environment, instance, value);
+    }
+
+    public Task SetAsync(string key, string application, string environment, string instance, string value)
     {
         return _remoteConfigCallService.SetValueAsync(key, application, environment, instance, value);
     }
