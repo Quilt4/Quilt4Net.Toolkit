@@ -1,6 +1,5 @@
 using Bunit;
 using FluentAssertions;
-using Quilt4Net.Toolkit.Blazor;
 using Quilt4Net.Toolkit.Features.Content;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
 using Xunit;
