@@ -631,7 +631,7 @@ AppRequests
         var binary = (BinaryData)row[rawIndex]!;
         var json = binary.ToString();
 
-        var rawNullable = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+        var rawNullable = JsonSerializer.Deserialize<Dictionary<string, object>>(
             json,
             new JsonSerializerOptions
             {
