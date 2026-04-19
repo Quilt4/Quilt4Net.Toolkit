@@ -1,7 +1,8 @@
 using FluentAssertions;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Tests;
@@ -9,14 +10,25 @@ namespace Quilt4Net.Toolkit.Tests;
 public class LoggingRegistrationTests
 {
     [Fact]
-    public void Registers_ITelemetryInitializer()
+    public void Configures_OpenTelemetry_resource_with_expected_attributes()
     {
         var services = new ServiceCollection();
-        services.AddQuilt4NetLogging();
+        services.AddQuilt4NetLogging(options: o =>
+        {
+            o.ApplicationName = "my-app";
+            o.Version = "1.2.3";
+            o.Environment = "Staging";
+        });
+        services.AddOpenTelemetry().WithTracing(b => b.AddSource("probe"));
 
-        var provider = services.BuildServiceProvider();
-        var initializers = provider.GetServices<ITelemetryInitializer>();
-        initializers.Should().ContainSingle();
+        using var provider = services.BuildServiceProvider();
+        var tracerProvider = provider.GetRequiredService<TracerProvider>();
+        var resource = tracerProvider.GetResource();
+
+        resource.Attributes.Should().Contain(new KeyValuePair<string, object>("service.name", "my-app"));
+        resource.Attributes.Should().Contain(new KeyValuePair<string, object>("service.version", "1.2.3"));
+        resource.Attributes.Should().Contain(new KeyValuePair<string, object>("deployment.environment", "Staging"));
+        resource.Attributes.Should().ContainKey("service.instance.id");
     }
 
     [Fact]

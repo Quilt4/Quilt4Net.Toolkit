@@ -1,17 +1,16 @@
 using System.Reflection;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Quilt4Net.Toolkit.Features.Logging;
+using OpenTelemetry.Resources;
 
 namespace Quilt4Net.Toolkit;
 
 public static class LoggingRegistration
 {
     /// <summary>
-    /// Register universal telemetry tagging for all Application Insights telemetry.
+    /// Register universal telemetry identity (service.name, service.version, deployment.environment, service.instance.id)
+    /// on the OpenTelemetry Resource. Applies to traces, logs and metrics.
     /// </summary>
     public static Quilt4NetLoggingBuilder AddQuilt4NetLogging(this IHostApplicationBuilder builder, Action<Quilt4NetLoggingOptions> options = null)
     {
@@ -19,7 +18,8 @@ public static class LoggingRegistration
     }
 
     /// <summary>
-    /// Register universal telemetry tagging for all Application Insights telemetry.
+    /// Register universal telemetry identity (service.name, service.version, deployment.environment, service.instance.id)
+    /// on the OpenTelemetry Resource. Applies to traces, logs and metrics.
     /// </summary>
     public static Quilt4NetLoggingBuilder AddQuilt4NetLogging(this IServiceCollection services, IConfiguration configuration = null, Action<Quilt4NetLoggingOptions> options = null, string environmentName = null, string applicationName = null)
     {
@@ -41,7 +41,26 @@ public static class LoggingRegistration
         options?.Invoke(o);
 
         services.AddSingleton(o);
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<ITelemetryInitializer, Quilt4NetTelemetryInitializer>());
+
+        services.AddOpenTelemetry()
+            .ConfigureResource(resource =>
+            {
+                if (!string.IsNullOrEmpty(o.ApplicationName))
+                {
+                    resource.AddService(
+                        serviceName: o.ApplicationName,
+                        serviceVersion: string.IsNullOrEmpty(o.Version) ? null : o.Version,
+                        serviceInstanceId: System.Environment.MachineName);
+                }
+
+                if (!string.IsNullOrEmpty(o.Environment))
+                {
+                    resource.AddAttributes(new KeyValuePair<string, object>[]
+                    {
+                        new("deployment.environment", o.Environment),
+                    });
+                }
+            });
 
         return new Quilt4NetLoggingBuilder(services, o);
     }
@@ -53,7 +72,6 @@ public static class LoggingRegistration
 
         if (string.IsNullOrEmpty(name)) return null;
 
-        // Avoid defaulting to a framework assembly (Blazor WASM, in-process IIS, test runners can return these)
         if (name.StartsWith("Microsoft.", StringComparison.Ordinal)
             || name.StartsWith("System.", StringComparison.Ordinal)
             || name.StartsWith("testhost", StringComparison.OrdinalIgnoreCase))
@@ -66,7 +84,6 @@ public static class LoggingRegistration
 
     private static string ResolveVersion(string applicationName)
     {
-        // Try the named application assembly first (set by the host via IHostEnvironment.ApplicationName)
         if (!string.IsNullOrEmpty(applicationName))
         {
             try
