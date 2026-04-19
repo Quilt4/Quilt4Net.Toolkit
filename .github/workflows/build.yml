@@ -37,9 +37,10 @@ jobs:
         run: dotnet build -c Release --no-restore 2>&1 | tee build.log
 
       - name: Check warnings (ratchet)
-        # Warning ratchet: committed baseline can only decrease.
+        # Warning ratchet: committed baseline is enforced as a ceiling.
         # - current > ceil(baseline * 1.05) -> fail
-        # - current < baseline -> auto-commit new lower baseline on master push
+        # - current < baseline -> emit notice so the developer can update
+        #   .github/warning-baseline.txt in their PR to lock in the improvement
         # - otherwise -> pass
         run: |
           BASELINE_FILE=.github/warning-baseline.txt
@@ -57,21 +58,8 @@ jobs:
           fi
 
           if [ "$CURRENT" -lt "$BASELINE" ]; then
-            echo "::notice::Warnings decreased from $BASELINE to $CURRENT — ratcheting baseline down."
-            echo "$CURRENT" > "$BASELINE_FILE"
-            echo "baseline_updated=true" >> "$GITHUB_ENV"
-            echo "new_baseline=$CURRENT" >> "$GITHUB_ENV"
+            echo "::notice::Warnings dropped from $BASELINE to $CURRENT. Consider updating .github/warning-baseline.txt to lock in the improvement."
           fi
-
-      - name: Commit lowered warning baseline
-        # Only on push to master — PRs cannot push back to the source branch cleanly.
-        if: env.baseline_updated == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/warning-baseline.txt
-          git commit -m "chore: ratchet warning baseline down to ${{ env.new_baseline }} [skip ci]"
-          git push
 
       - name: Test with coverage
         run: dotnet test -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
