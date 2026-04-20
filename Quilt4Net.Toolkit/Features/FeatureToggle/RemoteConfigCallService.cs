@@ -34,12 +34,19 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         ttl ??= _options.Ttl;
         var sw = Stopwatch.StartNew();
 
+        // Resolve the effective application up front so the cache key, the
+        // outbound request and the background refresh all use the same value.
+        // Same toggle key with different applications is a different cache entry —
+        // otherwise the second call returns the first call's value silently.
+        var effectiveApplication = ResolveApplication(application);
+        var cacheKey = BuildCacheKey(key, effectiveApplication);
+
         try
         {
             var changeType = ((T)Convert.ChangeType($"{defaultValue}", typeof(T)));
             if (!$"{changeType}".Equals($"{defaultValue}")) throw new NotSupportedException($"Value of type {typeof(T).Name} is not supported.");
 
-            _localCache.TryGetValue(key, out var cached);
+            _localCache.TryGetValue(cacheKey, out var cached);
             var needRefresh = cached == null || DateTime.UtcNow > cached.ValidTo;
 
             if (!needRefresh)
@@ -54,7 +61,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             // and refresh in the background.
             if (cached != null)
             {
-                StartBackgroundRefresh(key, defaultValue, ttl, application);
+                StartBackgroundRefresh(key, cacheKey, defaultValue, ttl, effectiveApplication);
                 var staleValue = GetCachedOrDefault(cached, defaultValue);
                 _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, staleValue);
@@ -62,14 +69,14 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             }
 
             // No cache at all — must fetch with timeout.
-            return await FetchWithTimeout(key, defaultValue, ttl, sw, application);
+            return await FetchWithTimeout(key, cacheKey, defaultValue, ttl, sw, effectiveApplication);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
-            if (_localCache.TryGetValue(key, out var stale))
+            if (_localCache.TryGetValue(cacheKey, out var stale))
             {
-                CacheFailure(key, stale);
+                CacheFailure(cacheKey, stale);
                 var staleValue = GetCachedOrDefault(stale, defaultValue);
                 _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, staleValue);
@@ -81,7 +88,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         }
     }
 
-    private async Task<T> FetchWithTimeout<T>(string key, T defaultValue, TimeSpan? ttl, Stopwatch sw, string application = null)
+    private async Task<T> FetchWithTimeout<T>(string key, string cacheKey, T defaultValue, TimeSpan? ttl, Stopwatch sw, string effectiveApplication)
     {
         try
         {
@@ -89,7 +96,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             var request = new FeatureToggleRequest
             {
                 Key = key,
-                Application = application ?? _options.Application ?? assemblyName?.Name,
+                Application = effectiveApplication,
                 Environment = _environmentName.Name,
                 Instance = null,
                 Version = $"{assemblyName?.Version}",
@@ -108,7 +115,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             {
                 _logger.LogError("Unable to get feature toggle for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
                     key, response.StatusCode, response.ReasonPhrase);
-                CacheFailure(key, null);
+                CacheFailure(cacheKey, null);
                 _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, defaultValue);
                 return defaultValue;
@@ -118,9 +125,9 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
             var interval = result.ValidTo - DateTime.UtcNow;
             if (interval > TimeSpan.Zero)
-                _lastKnownTtl[key] = interval;
+                _lastKnownTtl[cacheKey] = interval;
 
-            _localCache.AddOrUpdate(key, result, (_, _) => result);
+            _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
 
             var serverValue = GetCachedOrDefault(result, defaultValue);
             _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
@@ -131,7 +138,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         {
             _logger.LogWarning("HTTP request timed out for configuration '{Key}' after {Timeout}ms. Using default value.",
                 key, _options.HttpTimeout.TotalMilliseconds);
-            CacheFailure(key, null);
+            CacheFailure(cacheKey, null);
             _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
                 key, sw.ElapsedMilliseconds, defaultValue);
             return defaultValue;
@@ -139,16 +146,16 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using default for key {Key}.", e.Message, key);
-            CacheFailure(key, null);
+            CacheFailure(cacheKey, null);
             _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
                 key, sw.ElapsedMilliseconds, defaultValue);
             return defaultValue;
         }
     }
 
-    private void StartBackgroundRefresh<T>(string key, T defaultValue, TimeSpan? ttl, string application = null)
+    private void StartBackgroundRefresh<T>(string key, string cacheKey, T defaultValue, TimeSpan? ttl, string effectiveApplication)
     {
-        if (!_refreshInProgress.TryAdd(key, true)) return;
+        if (!_refreshInProgress.TryAdd(cacheKey, true)) return;
 
         _ = Task.Run(async () =>
         {
@@ -158,7 +165,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 var request = new FeatureToggleRequest
                 {
                     Key = key,
-                    Application = application ?? _options.Application ?? assemblyName?.Name,
+                    Application = effectiveApplication,
                     Environment = _environmentName.Name,
                     Instance = null,
                     Version = $"{assemblyName?.Version}",
@@ -177,7 +184,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 {
                     _logger.LogError("Background refresh for '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
                         key, response.StatusCode, response.ReasonPhrase);
-                    CacheFailure(key, _localCache.GetValueOrDefault(key));
+                    CacheFailure(cacheKey, _localCache.GetValueOrDefault(cacheKey));
                     return;
                 }
 
@@ -185,9 +192,9 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
                 var interval = result.ValidTo - DateTime.UtcNow;
                 if (interval > TimeSpan.Zero)
-                    _lastKnownTtl[key] = interval;
+                    _lastKnownTtl[cacheKey] = interval;
 
-                _localCache.AddOrUpdate(key, result, (_, _) => result);
+                _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
                 _logger.LogInformation("Background refresh for '{Key}' completed. New value: '{Value}', ValidTo: {ValidTo}.",
                     key, result.Value, result.ValidTo);
             }
@@ -195,18 +202,32 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             {
                 _logger.LogWarning("Background refresh for '{Key}' timed out after {Timeout}ms.",
                     key, _options.HttpTimeout.TotalMilliseconds);
-                CacheFailure(key, _localCache.GetValueOrDefault(key));
+                CacheFailure(cacheKey, _localCache.GetValueOrDefault(cacheKey));
             }
             catch (Exception e)
             {
                 _logger.LogError(e, "Background refresh for '{Key}' failed: {Message}.", key, e.Message);
-                CacheFailure(key, _localCache.GetValueOrDefault(key));
+                CacheFailure(cacheKey, _localCache.GetValueOrDefault(cacheKey));
             }
             finally
             {
-                _refreshInProgress.TryRemove(key, out _);
+                _refreshInProgress.TryRemove(cacheKey, out _);
             }
         });
+    }
+
+    private string ResolveApplication(string application)
+    {
+        // The convention: only null means "default — toolkit looks it up". Empty string is
+        // an explicit "shared" and is forwarded as-is. A non-empty value is forwarded as-is.
+        if (application != null) return application;
+        return _options.Application ?? Assembly.GetEntryAssembly()?.GetName().Name;
+    }
+
+    private static string BuildCacheKey(string toggleKey, string effectiveApplication)
+    {
+        // "" and null both mean shared so they collapse to the same cache slot.
+        return $"{toggleKey}|{effectiveApplication ?? ""}";
     }
 
     public async Task<ConfigurationResponse[]> GetAllAsync()
@@ -287,15 +308,15 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         }
     }
 
-    private void CacheFailure(string key, FeatureToggleResponse stale)
+    private void CacheFailure(string cacheKey, FeatureToggleResponse stale)
     {
-        var duration = _lastKnownTtl.GetValueOrDefault(key, FallbackFailureCacheDuration);
+        var duration = _lastKnownTtl.GetValueOrDefault(cacheKey, FallbackFailureCacheDuration);
         var failureResponse = new FeatureToggleResponse
         {
             Value = stale?.Value,
             ValidTo = DateTime.UtcNow.Add(duration)
         };
-        _localCache.AddOrUpdate(key, failureResponse, (_, _) => failureResponse);
+        _localCache.AddOrUpdate(cacheKey, failureResponse, (_, _) => failureResponse);
     }
 
     private static string BuildKey(FeatureToggleRequest request)
