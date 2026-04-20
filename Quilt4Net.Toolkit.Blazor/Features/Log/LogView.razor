@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
@@ -29,25 +30,34 @@
         </RadzenColumn>
     </RadzenRow>
 
-    <RadzenTabs SelectedIndex="@_tabIndex" Change="@OnTabChange">
-        <Tabs>
-            <RadzenTabsItem Text="Search">
-                <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
-            </RadzenTabsItem>
-            <RadzenTabsItem Text="Summary">
-                <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
-            </RadzenTabsItem>
-            <RadzenTabsItem Text="Measure">
-                <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
-            </RadzenTabsItem>
-            <RadzenTabsItem Text="Count">
-                <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
-            </RadzenTabsItem>
-            <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
-                <LogTriggerView Context="Context" />
-            </RadzenTabsItem>
-        </Tabs>
-    </RadzenTabs>
+    <ErrorBoundary @ref="_errorBoundary">
+        <ChildContent>
+            <RadzenTabs SelectedIndex="@_tabIndex" Change="@OnTabChange">
+                <Tabs>
+                    <RadzenTabsItem Text="Search">
+                        <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Summary">
+                        <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Measure">
+                        <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Count">
+                        <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
+                        <LogTriggerView Context="Context" />
+                    </RadzenTabsItem>
+                </Tabs>
+            </RadzenTabs>
+        </ChildContent>
+        <ErrorContent Context="ex">
+            <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+                @ApplicationInsightsErrorMessage.Format("Could not query Application Insights.", ex)
+            </RadzenAlert>
+        </ErrorContent>
+    </ErrorBoundary>
 </CascadingValue>
 
 @code {
@@ -58,6 +68,7 @@
     private LogNavigationOptions _navOptions;
     private int _tabIndex;
     private string _configError;
+    private ErrorBoundary _errorBoundary;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
@@ -138,6 +149,8 @@
 
         var idx = Array.IndexOf(TabNames, Tab?.ToLower() ?? string.Empty);
         _tabIndex = idx >= 0 ? idx : 0;
+
+        _errorBoundary?.Recover();
     }
 
     private async Task OnTabChange(int index)

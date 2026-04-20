@@ -3,7 +3,11 @@
 @inject IHostEnvironment HostEnvironment
 @inject IApplicationInsightsService ApplicationInsightsService
 
-@if (_environments == null)
+@if (_loadError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">@_loadError</RadzenAlert>
+}
+else if (_environments == null)
 {
     <Loading Size="ProgressBarCircularSize.Small" />
 }
@@ -24,6 +28,7 @@ else
     private EnvironmentOption[] _environments;
     private IApplicationInsightsContext _loadedContext;
     private EnvironmentOption _firedContext;
+    private string _loadError;
 
     [Parameter]
     public EventCallback<EnvironmentOption> OnSelected { get; set; }
@@ -36,17 +41,26 @@ else
         if (_environments == null || !Equals(_loadedContext, Context))
         {
             _loadedContext = Context;
+            _loadError = null;
 
-            var environments = await ApplicationInsightsService.GetEnvironments(_loadedContext).ToArrayAsync();
+            try
+            {
+                var environments = await ApplicationInsightsService.GetEnvironments(_loadedContext).ToArrayAsync();
 
-            _environments = environments.Select(x => new EnvironmentOption(x)).ToArray();
+                _environments = environments.Select(x => new EnvironmentOption(x)).ToArray();
 
-            var current = _environments.FirstOrDefault(x => x.Value == HostEnvironment.EnvironmentName)
-                          ?? _environments.FirstOrDefault()
-                          ?? new EnvironmentOption(null, "Any!");
-            _selectedEnvironment = current;
+                var current = _environments.FirstOrDefault(x => x.Value == HostEnvironment.EnvironmentName)
+                              ?? _environments.FirstOrDefault()
+                              ?? new EnvironmentOption(null, "Any!");
+                _selectedEnvironment = current;
 
-            await OnChange(current);
+                await OnChange(current);
+            }
+            catch (Exception ex)
+            {
+                _loadError = ApplicationInsightsErrorMessage.Format("Could not load Application Insights environments.", ex);
+                _environments = Array.Empty<EnvironmentOption>();
+            }
         }
 
         await base.OnParametersSetAsync();
