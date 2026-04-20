@@ -2,6 +2,7 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Quilt4Net.Toolkit.Features.FeatureToggle;
 using Quilt4Net.Toolkit.Framework;
 using Xunit;
 
@@ -112,6 +113,81 @@ public class FeatureToggleTests
             var result = await service.GetToggleAsync("my-toggle", fallback: false);
 
             result.Should().BeFalse("fallback value should be returned when server returns 500");
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetToggleAsync_Same_Key_Different_Application_Are_Separate_Cache_Entries()
+    {
+        // Arrange — local listener that counts requests and returns the request's
+        // base64-encoded complex key in the body so we can verify the second call
+        // actually hit the server (different application = different cache entry).
+        var port = GetFreePort();
+        var prefix = $"http://127.0.0.1:{port}/";
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(prefix);
+        listener.Start();
+
+        var hits = 0;
+        var receivedApplications = new System.Collections.Concurrent.ConcurrentBag<string>();
+        var listenerTask = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                HttpListenerContext ctx;
+                try { ctx = await listener.GetContextAsync(); }
+                catch { return; }
+                Interlocked.Increment(ref hits);
+
+                // URL is /Api/Configuration/{base64(complexKey)} — decode the request to capture which Application was sent.
+                var segments = ctx.Request.Url!.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (segments.Length >= 3)
+                {
+                    var encoded = WebUtility.UrlDecode(segments[2]);
+                    var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("Application", out var appProp))
+                        receivedApplications.Add(appProp.GetString());
+                }
+
+                ctx.Response.StatusCode = 200;
+                ctx.Response.ContentType = "application/json";
+                var body = $$"""{"value":"True","validTo":"{{DateTime.UtcNow.AddHours(1):o}}"}""";
+                var buf = System.Text.Encoding.UTF8.GetBytes(body);
+                await ctx.Response.OutputStream.WriteAsync(buf);
+                ctx.Response.Close();
+            }
+        });
+
+        try
+        {
+            var host = Host.CreateDefaultBuilder()
+                .ConfigureServices(services =>
+                {
+                    services.AddQuilt4NetRemoteConfiguration(null, o =>
+                    {
+                        o.Quilt4NetAddress = prefix;
+                        o.ApiKey = "test-key";
+                    });
+                })
+                .Build();
+
+            var service = host.Services.GetRequiredService<IRemoteConfigurationService>();
+
+            // Act — same key, two different applications
+            await service.GetAsync("my-toggle", false, application: "App1");
+            await service.GetAsync("my-toggle", false, application: "App2");
+
+            // Assert — both calls must hit the server because the cache key
+            // includes the effective application. With a key-only cache, the
+            // second call would silently return the first call's cached value.
+            hits.Should().Be(2,
+                "same toggle key with different application is a different cache entry — neither call may use the other's cached value");
+            receivedApplications.Should().BeEquivalentTo(["App1", "App2"]);
         }
         finally
         {
