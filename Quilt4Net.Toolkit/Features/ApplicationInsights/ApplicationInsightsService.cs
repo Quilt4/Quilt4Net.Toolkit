@@ -891,14 +891,13 @@ AppRequests
     {
         if (context.IsCurrent()) context = null;
 
+        var authMode = context?.AuthMode ?? _options.AuthMode;
         var clientSecret = context?.ClientSecret ?? _options.ClientSecret;
         var tenantId = context?.TenantId ?? _options.TenantId;
         var clientId = context?.ClientId ?? _options.ClientId;
 
-        if (string.IsNullOrEmpty(clientSecret)) throw new InvalidOperationException($"No {nameof(ApplicationInsightsOptions.ClientSecret)} has been configured.");
-        var clientSecretCredential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-        var client = new LogsQueryClient(clientSecretCredential);
-        return client;
+        var credential = CredentialFactory.Create(authMode, tenantId, clientId, clientSecret);
+        return new LogsQueryClient(credential);
     }
 
     private static int GetColumnIndex(LogsTable table, string name)

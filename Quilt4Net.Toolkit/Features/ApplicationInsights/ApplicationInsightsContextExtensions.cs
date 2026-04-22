@@ -41,6 +41,7 @@ public static class ApplicationInsightsContextExtensions
         public required string WorkspaceId { get; init; }
         public required string ClientId { get; init; }
         public required string ClientSecret { get; init; }
+        public ApplicationInsightsAuthMode AuthMode { get; init; } = ApplicationInsightsAuthMode.ClientSecret;
 
         public static Ctx Current;
     }
