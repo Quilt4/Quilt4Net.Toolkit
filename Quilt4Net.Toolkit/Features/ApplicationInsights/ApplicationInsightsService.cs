@@ -105,9 +105,13 @@ union
 
     public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
     {
-        //TODO: Refactor: Cache here...
-        var items = await SearchInternalAsync(context, environment, text, timeSpan, minSeverityLevel).ToArrayAsync();
-        foreach (var item in items.GroupBy(x => x.Id).Select(x => x.First()))
+        var cacheKey = $"search|{context.ToKey()}|{environment}|{text}|{timeSpan}|{minSeverityLevel}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            var list = await SearchInternalAsync(context, environment, text, timeSpan, minSeverityLevel).ToArrayAsync();
+            return list.GroupBy(x => x.Id).Select(x => x.First()).ToArray();
+        });
+        foreach (var item in items)
         {
             yield return item;
         }
@@ -346,9 +350,13 @@ AppRequests
 
     public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
-        //TODO: Refactor: Cache here...
-        var items = await GetMeasureInternalAsync(context, environment, timeSpan).ToArrayAsync();
-        foreach (var item in items.GroupBy(x => x.Id).Select(x => x.First()))
+        var cacheKey = $"measure|{context.ToKey()}|{environment}|{timeSpan}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            var list = await GetMeasureInternalAsync(context, environment, timeSpan).ToArrayAsync();
+            return list.GroupBy(x => x.Id).Select(x => x.First()).ToArray();
+        });
+        foreach (var item in items)
         {
             yield return item;
         }
@@ -447,9 +455,13 @@ AppTraces
 
     public async IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
-        //TODO: Refactor: Cache here...
-        var items = await GetCountInternalAsync(context, environment, timeSpan).ToArrayAsync();
-        foreach (var item in items.GroupBy(x => x.Id).Select(x => x.First()))
+        var cacheKey = $"count|{context.ToKey()}|{environment}|{timeSpan}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            var list = await GetCountInternalAsync(context, environment, timeSpan).ToArrayAsync();
+            return list.GroupBy(x => x.Id).Select(x => x.First()).ToArray();
+        });
+        foreach (var item in items)
         {
             yield return item;
         }
@@ -662,7 +674,12 @@ AppRequests
 
     public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
     {
-        //TODO: Refactor: Cache here...
+        var cacheKey = $"summary|{context.ToKey()}|{fingerprint}|{source}|{environment}|{timeSpan}";
+        return await _timeToLiveCache.GetAsync(cacheKey, () => GetSummaryInternalAsync(context, fingerprint, source, environment, timeSpan));
+    }
+
+    private async Task<SummaryData> GetSummaryInternalAsync(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
+    {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
@@ -756,9 +773,13 @@ AppRequests
 
     public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
     {
-        //TODO: Refactor: Cache here...
-        var items = await GetSummariesInternal(context, environment, timeSpan).ToArrayAsync();
-        foreach (var item in items.GroupBy(x => x.Fingerprint).Select(x => x.First()))
+        var cacheKey = $"summaries|{context.ToKey()}|{environment}|{timeSpan}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            var list = await GetSummariesInternal(context, environment, timeSpan).ToArrayAsync();
+            return list.GroupBy(x => x.Fingerprint).Select(x => x.First()).ToArray();
+        });
+        foreach (var item in items)
         {
             yield return item;
         }
@@ -891,14 +912,13 @@ AppRequests
     {
         if (context.IsCurrent()) context = null;
 
+        var authMode = context?.AuthMode ?? _options.AuthMode;
         var clientSecret = context?.ClientSecret ?? _options.ClientSecret;
         var tenantId = context?.TenantId ?? _options.TenantId;
         var clientId = context?.ClientId ?? _options.ClientId;
 
-        if (string.IsNullOrEmpty(clientSecret)) throw new InvalidOperationException($"No {nameof(ApplicationInsightsOptions.ClientSecret)} has been configured.");
-        var clientSecretCredential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-        var client = new LogsQueryClient(clientSecretCredential);
-        return client;
+        var credential = CredentialFactory.Create(authMode, tenantId, clientId, clientSecret);
+        return new LogsQueryClient(credential);
     }
 
     private static int GetColumnIndex(LogsTable table, string name)

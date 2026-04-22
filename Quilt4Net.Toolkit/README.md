@@ -134,12 +134,30 @@ builder.AddQuilt4NetApplicationInsightsClient();
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `TenantId` | `null` | Azure AD tenant ID (found under "Tenant properties" in Azure portal). |
+| `TenantId` | `null` | Azure AD tenant ID (found under "Tenant properties" in Azure portal). Only required when `AuthMode = ClientSecret`. |
 | `WorkspaceId` | `null` | Application Insights workspace ID. |
-| `ClientId` | `null` | App registration client ID with `Data.Read` permission on Application Insights API. |
-| `ClientSecret` | `null` | Client secret for the app registration. |
+| `ClientId` | `null` | For `ClientSecret`: app registration client ID with `Data.Read` permission on Application Insights API. For `ManagedIdentity`: empty for system-assigned MI, or the user-assigned MI's client ID. |
+| `ClientSecret` | `null` | Client secret for the app registration. Only required when `AuthMode = ClientSecret`. |
+| `AuthMode` | `ClientSecret` | Authentication mode: `ClientSecret` (service principal) or `ManagedIdentity` (Azure-hosted apps). |
 
 Configuration path: `Quilt4Net:ApplicationInsights`
+
+#### Managed Identity
+
+When the app runs in Azure (App Service, Container Apps, VMs, …) you can skip the client secret entirely and authenticate with the hosting identity:
+
+```json
+{
+  "Quilt4Net": {
+    "ApplicationInsights": {
+      "WorkspaceId": "your-workspace-id",
+      "AuthMode": "ManagedIdentity"
+    }
+  }
+}
+```
+
+Grant the App Service identity the **Log Analytics Reader** (or Monitoring Reader) role on the target workspace. Use a user-assigned MI by setting `ClientId` to the identity's client ID; leave it empty for system-assigned.
 
 ## Universal telemetry tagging
 
@@ -237,7 +255,8 @@ All options can be set via code or `appsettings.json`. Code takes priority.
       "TenantId": "your-tenant-id",
       "WorkspaceId": "your-workspace-id",
       "ClientId": "your-client-id",
-      "ClientSecret": "your-client-secret"
+      "ClientSecret": "your-client-secret",
+      "AuthMode": "ClientSecret"
     },
     "RemoteConfiguration": {
       "Ttl": "00:10:00"

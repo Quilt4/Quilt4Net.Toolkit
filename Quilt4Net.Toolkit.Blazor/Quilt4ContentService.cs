@@ -14,9 +14,9 @@ internal class Quilt4ContentService : IQuilt4ContentService
         _languageStateService = languageStateService;
     }
 
-    public async Task<string> GetAsync(string key, string defaultValue)
+    public async Task<string> GetAsync(string key, string defaultValue, string application = null)
     {
-        var result = await _contentService.GetContentAsync(key, defaultValue, _languageStateService.Selected.Key, ContentFormat.String);
+        var result = await _contentService.GetContentAsync(key, defaultValue, _languageStateService.Selected.Key, ContentFormat.String, application);
         return result.Value;
     }
 }

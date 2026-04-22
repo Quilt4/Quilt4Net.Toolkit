@@ -40,7 +40,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
         if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey)) return (defaultValue, false);
 
         var sw = Stopwatch.StartNew();
-        var cacheKey = $"{key}_{languageKey}";
+        // Resolve effective application up front so cache key + request share the same value.
+        // Convention: null -> lookup (options.Application or entry assembly name);
+        // "" stays as "" (shared); value forwarded as-is.
+        var effectiveApplication = ResolveApplication(application);
+        var cacheKey = BuildCacheKey(key, languageKey, effectiveApplication);
 
         try
         {
@@ -57,21 +61,21 @@ internal class RemoteContentCallService : IRemoteContentCallService
             // Stale-while-revalidate: return stale value immediately, refresh in background.
             if (cached != null)
             {
-                StartBackgroundRefresh(key, defaultValue, languageKey, contentType, application);
+                StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication);
                 _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
                     key, sw.ElapsedMilliseconds);
                 return (cached.Value ?? defaultValue, true);
             }
 
             // No cache — must fetch with timeout.
-            return await FetchContentWithTimeout(key, defaultValue, languageKey, contentType, sw, application);
+            return await FetchContentWithTimeout(key, cacheKey, defaultValue, languageKey, contentType, sw, effectiveApplication);
         }
         catch (Exception e)
         {
             _localCache.TryGetValue(cacheKey, out var stale);
             var staleValue = stale?.Value ?? defaultValue;
             _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
-            CacheFailure(key, languageKey, staleValue);
+            CacheFailure(cacheKey, staleValue);
             _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
                 key, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default");
             return (staleValue, false);
@@ -84,12 +88,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         try
         {
-            var assemblyName = application ?? _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+            var effectiveApplication = ResolveApplication(application);
             var setContentRequest = new SetContentRequest
             {
                 Key = key,
                 LanguageKey = languageKey,
-                Application = assemblyName,
+                Application = effectiveApplication,
                 Environment = _environmentName.Name,
                 Instance = null, //_options.InstanceLoader?.Invoke(_serviceProvider),
                 Value = $"{value}",
@@ -101,7 +105,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var response = await client.PostAsJsonAsync(address, setContentRequest);
             response.EnsureSuccessStatusCode();
 
-            _localCache.TryRemove($"{key}_{languageKey}", out _);
+            _localCache.TryRemove(BuildCacheKey(key, languageKey, effectiveApplication), out _);
 
             //TODO: Notify the user that this content will be updated after this long time on all clients, because of cache.
         }
@@ -157,16 +161,15 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _localCache.Clear();
     }
 
-    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string application = null)
+    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string effectiveApplication)
     {
         try
         {
-            var assemblyName = application ?? _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
             var request = new GetContentRequest
             {
                 Key = key,
                 LanguageKey = languageKey,
-                Application = assemblyName,
+                Application = effectiveApplication,
                 Environment = _environmentName.Name,
                 Instance = null,
                 DefaultValue = contentType == null ? null : $"{defaultValue}",
@@ -183,7 +186,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             {
                 _logger.LogError("Unable to get content for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
                     key, response.StatusCode, response.ReasonPhrase);
-                CacheFailure(key, languageKey, defaultValue);
+                CacheFailure(cacheKey, defaultValue);
                 _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
                     key, sw.ElapsedMilliseconds);
                 return (defaultValue, false);
@@ -191,7 +194,6 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
             var result = await response.Content.ReadFromJsonAsync<GetContentResponse>(cancellationToken: cts.Token);
 
-            var cacheKey = $"{key}_{languageKey}";
             var interval = result.ValidTo - DateTime.UtcNow;
             if (interval > TimeSpan.Zero)
                 _lastKnownTtl[cacheKey] = interval;
@@ -206,7 +208,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         {
             _logger.LogWarning("HTTP request timed out for content '{Key}' after {Timeout}ms. Using default value.",
                 key, _contentOptions.HttpTimeout.TotalMilliseconds);
-            CacheFailure(key, languageKey, defaultValue);
+            CacheFailure(cacheKey, defaultValue);
             _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
                 key, sw.ElapsedMilliseconds);
             return (defaultValue, false);
@@ -214,28 +216,26 @@ internal class RemoteContentCallService : IRemoteContentCallService
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using default for content key {Key}.", e.Message, key);
-            CacheFailure(key, languageKey, defaultValue);
+            CacheFailure(cacheKey, defaultValue);
             _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
                 key, sw.ElapsedMilliseconds);
             return (defaultValue, false);
         }
     }
 
-    private void StartBackgroundRefresh(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+    private void StartBackgroundRefresh(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, string effectiveApplication)
     {
-        var cacheKey = $"{key}_{languageKey}";
         if (!_refreshInProgress.TryAdd(cacheKey, true)) return;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                var assemblyName = application ?? _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
                 var request = new GetContentRequest
                 {
                     Key = key,
                     LanguageKey = languageKey,
-                    Application = assemblyName,
+                    Application = effectiveApplication,
                     Environment = _environmentName.Name,
                     Instance = null,
                     DefaultValue = contentType == null ? null : $"{defaultValue}",
@@ -253,7 +253,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     _logger.LogError("Background refresh for content '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
                         key, response.StatusCode, response.ReasonPhrase);
                     var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
-                    CacheFailure(key, languageKey, staleValue);
+                    CacheFailure(cacheKey, staleValue);
                     return;
                 }
 
@@ -272,13 +272,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 _logger.LogWarning("Background refresh for content '{Key}' timed out after {Timeout}ms.",
                     key, _contentOptions.HttpTimeout.TotalMilliseconds);
                 var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
-                CacheFailure(key, languageKey, staleValue);
+                CacheFailure(cacheKey, staleValue);
             }
             catch (Exception e)
             {
                 _logger.LogError(e, "Background refresh for content '{Key}' failed: {Message}.", key, e.Message);
                 var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
-                CacheFailure(key, languageKey, staleValue);
+                CacheFailure(cacheKey, staleValue);
             }
             finally
             {
@@ -287,9 +287,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
         });
     }
 
-    private void CacheFailure(string key, Guid languageKey, string value)
+    private void CacheFailure(string cacheKey, string value)
     {
-        var cacheKey = $"{key}_{languageKey}";
         var duration = _lastKnownTtl.GetValueOrDefault(cacheKey, _contentOptions.FailureCacheDuration);
         var failureResponse = new GetContentResponse
         {
@@ -297,6 +296,20 @@ internal class RemoteContentCallService : IRemoteContentCallService
             ValidTo = DateTime.UtcNow.Add(duration)
         };
         _localCache.AddOrUpdate(cacheKey, failureResponse, (_, _) => failureResponse);
+    }
+
+    private string ResolveApplication(string application)
+    {
+        // The convention: null is the "default" sentinel — toolkit looks up the application.
+        // "" is forwarded as-is (= shared). A non-empty value is forwarded as-is.
+        if (application != null) return application;
+        return _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+    }
+
+    private static string BuildCacheKey(string key, Guid languageKey, string effectiveApplication)
+    {
+        // "" and null both mean "shared" so they collapse to the same cache slot.
+        return $"{key}_{languageKey}|{effectiveApplication ?? ""}";
     }
 
     private static string BuildKey(GetContentRequest request)

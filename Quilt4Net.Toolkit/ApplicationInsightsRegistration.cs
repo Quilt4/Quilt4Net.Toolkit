@@ -39,9 +39,35 @@ public static class ApplicationInsightsRegistration
 
         services.AddCache(s =>
         {
+            // Environment list rarely changes — hold it for an hour.
             s.RegisterType<EnvironmentOption[], IMemory>(x =>
             {
                 x.DefaultFreshSpan = TimeSpan.FromHours(1);
+            });
+            // Search is user-interactive; keep it short so typing-triggered changes don't
+            // see stale results for long.
+            s.RegisterType<LogItem[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromSeconds(30);
+            });
+            // Aggregation queries (measure, count, summary-list, single-fingerprint drilldown)
+            // — 1 minute is a reasonable fresh-reload cadence that still avoids re-running the
+            // same KQL on every page navigation.
+            s.RegisterType<MeasureData[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+            });
+            s.RegisterType<CountData[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+            });
+            s.RegisterType<SummaryData, IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+            });
+            s.RegisterType<SummarySubset[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
             });
         });
     }
