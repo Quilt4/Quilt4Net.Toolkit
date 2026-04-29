@@ -69,4 +69,30 @@ public class CredentialFactoryTests
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public void DefaultAzureCredential_mode_returns_DefaultAzureCredential()
+    {
+        var credential = CredentialFactory.Create(
+            ApplicationInsightsAuthMode.DefaultAzureCredential,
+            tenantId: "tenant-guid",
+            clientId: "11111111-1111-1111-1111-111111111111",
+            clientSecret: null);
+
+        credential.Should().BeOfType<DefaultAzureCredential>();
+    }
+
+    [Fact]
+    public void DefaultAzureCredential_mode_works_with_no_tenant_or_client()
+    {
+        // Local-dev story: developer has run `az login` and has nothing else configured.
+        // Empty TenantId / ClientId must fall through to the SDK's own discovery.
+        var act = () => CredentialFactory.Create(
+            ApplicationInsightsAuthMode.DefaultAzureCredential,
+            tenantId: null,
+            clientId: null,
+            clientSecret: null);
+
+        act.Should().NotThrow();
+    }
 }
