@@ -1,7 +1,13 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
-@inject IApplicationInsightsService ApplicationInsightsService
+@inject IServiceProvider ServiceProvider
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
+
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+    return;
+}
 
 <RadzenStack Style="margin-bottom: 6px;" Orientation="Orientation.Horizontal">
     <RadzenTextBox @bind-value="@_searchText" />
@@ -43,7 +49,18 @@ else if (Model != null)
 @code {
     private bool _loading;
     private string _searchText;
+    private string _configError;
+    private IApplicationInsightsService _ais;
     private LogItem[] Model { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+        }
+    }
 
     [CascadingParameter]
     private LogNavigationOptions _cascadedNavOptions { get; set; }
@@ -65,7 +82,7 @@ else if (Model != null)
         StateHasChanged();
 
         var searchText = _searchText ?? string.Empty;
-        Model = await ApplicationInsightsService.SearchAsync(Context, Environment, searchText, Range).ToArrayAsync();
+        Model = await _ais.SearchAsync(Context, Environment, searchText, Range).ToArrayAsync();
 
         _loading = false;
         StateHasChanged();

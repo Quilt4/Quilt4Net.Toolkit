@@ -121,6 +121,12 @@
 
     protected override void OnInitialized()
     {
+        if (LogConfigurationGuard.TryResolve(ServiceProvider) == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+            return;
+        }
+
         if (Context == null)
         {
             var options = ServiceProvider.GetService<IOptions<ApplicationInsightsOptions>>()?.Value;

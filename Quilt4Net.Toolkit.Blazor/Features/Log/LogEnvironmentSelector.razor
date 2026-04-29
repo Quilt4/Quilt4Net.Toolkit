@@ -1,9 +1,13 @@
 ﻿@using Microsoft.Extensions.Hosting
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IHostEnvironment HostEnvironment
-@inject IApplicationInsightsService ApplicationInsightsService
+@inject IServiceProvider ServiceProvider
 
-@if (_loadError != null)
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+}
+else if (_loadError != null)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">@_loadError</RadzenAlert>
 }
@@ -29,6 +33,8 @@ else
     private IApplicationInsightsContext _loadedContext;
     private EnvironmentOption _firedContext;
     private string _loadError;
+    private string _configError;
+    private IApplicationInsightsService _ais;
 
     [Parameter]
     public EventCallback<EnvironmentOption> OnSelected { get; set; }
@@ -36,8 +42,19 @@ else
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
+    protected override void OnInitialized()
+    {
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+        }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
+        if (_configError != null) return;
+
         if (_environments == null || !Equals(_loadedContext, Context))
         {
             _loadedContext = Context;
@@ -45,7 +62,7 @@ else
 
             try
             {
-                var environments = await ApplicationInsightsService.GetEnvironments(_loadedContext).ToArrayAsync();
+                var environments = await _ais.GetEnvironments(_loadedContext).ToArrayAsync();
 
                 _environments = environments.Select(x => new EnvironmentOption(x)).ToArray();
 

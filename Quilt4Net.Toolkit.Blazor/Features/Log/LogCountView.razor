@@ -1,9 +1,13 @@
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
-@inject IApplicationInsightsService ApplicationInsightsService
+@inject IServiceProvider ServiceProvider
 @inject NavigationManager NavigationManager
 @inject DialogService DialogService
 
-@if (Model == null)
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+}
+else if (Model == null)
 {
     <Loading />
 }
@@ -64,6 +68,17 @@ else
 @code {
     private CountData[] Model { get; set; }
     private IReadOnlyList<ActionSeries> Series { get; set; } = Array.Empty<ActionSeries>();
+    private string _configError;
+    private IApplicationInsightsService _ais;
+
+    protected override void OnInitialized()
+    {
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+        }
+    }
 
     [Parameter]
     public string Environment { get; set; }
@@ -81,8 +96,10 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        if (_configError != null) return;
+
         Model = null;
-        Model = await ApplicationInsightsService
+        Model = await _ais
             .GetCountAsync(Context, Environment, Range)
             .ToArrayAsync();
 
