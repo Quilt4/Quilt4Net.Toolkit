@@ -1,5 +1,8 @@
 @page "/configuration"
 @rendermode InteractiveServer
+@using Microsoft.Extensions.Options
+@using Quilt4Net.Toolkit
+@inject IOptions<RemoteConfigurationOptions> Options
 
 <PageTitle>Configuration</PageTitle>
 
@@ -7,7 +10,7 @@
 
 <p>
     The <code>RemoteConfigurationAdmin</code> component displays a data grid of feature toggles
-    and configuration values. Changes are saved to <a href="https://quilt4net.com">Quilt4Net Web</a>.
+    and configuration values. Changes are saved to <a href="@Options.Value.Quilt4NetAddress" target="_blank"><code>@Options.Value.Quilt4NetAddress</code></a>.
 </p>
 
 <h3>Full configuration view</h3>
