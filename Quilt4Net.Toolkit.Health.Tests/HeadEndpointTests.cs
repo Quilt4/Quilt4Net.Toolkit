@@ -10,7 +10,7 @@ public class HeadEndpointTests : IAsyncLifetime
     private WebApplication _app;
     private HttpClient _client;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -36,7 +36,7 @@ public class HeadEndpointTests : IAsyncLifetime
         _client = new HttpClient { BaseAddress = new Uri(address) };
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _client?.Dispose();
         if (_app != null) await _app.DisposeAsync();
