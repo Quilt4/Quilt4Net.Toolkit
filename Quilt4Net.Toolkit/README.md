@@ -136,9 +136,9 @@ builder.AddQuilt4NetApplicationInsightsClient();
 |----------|---------|-------------|
 | `TenantId` | `null` | Azure AD tenant ID (found under "Tenant properties" in Azure portal). Only required when `AuthMode = ClientSecret`. |
 | `WorkspaceId` | `null` | Application Insights workspace ID. |
-| `ClientId` | `null` | For `ClientSecret`: app registration client ID with `Data.Read` permission on Application Insights API. For `ManagedIdentity`: empty for system-assigned MI, or the user-assigned MI's client ID. |
+| `ClientId` | `null` | For `ClientSecret`: app registration client ID with `Data.Read` permission on Application Insights API. For `ManagedIdentity`: empty for system-assigned MI, or the user-assigned MI's client ID. For `DefaultAzureCredential`: optional hint, used as the preferred user-assigned MI when MI lights up in the chain. |
 | `ClientSecret` | `null` | Client secret for the app registration. Only required when `AuthMode = ClientSecret`. |
-| `AuthMode` | `ClientSecret` | Authentication mode: `ClientSecret` (service principal) or `ManagedIdentity` (Azure-hosted apps). |
+| `AuthMode` | `ClientSecret` | Authentication mode: `ClientSecret` (service principal), `ManagedIdentity` (Azure-hosted apps), or `DefaultAzureCredential` (chained — same config works locally via `az login` and in Azure via MI). |
 
 Configuration path: `Quilt4Net:ApplicationInsights`
 
@@ -158,6 +158,32 @@ When the app runs in Azure (App Service, Container Apps, VMs, …) you can skip 
 ```
 
 Grant the App Service identity the **Log Analytics Reader** (or Monitoring Reader) role on the target workspace. Use a user-assigned MI by setting `ClientId` to the identity's client ID; leave it empty for system-assigned.
+
+#### DefaultAzureCredential
+
+Use `DefaultAzureCredential` to share a single configuration across local dev and Azure-hosted environments:
+
+```json
+{
+  "Quilt4Net": {
+    "ApplicationInsights": {
+      "WorkspaceId": "your-workspace-id",
+      "AuthMode": "DefaultAzureCredential"
+    }
+  }
+}
+```
+
+The chained credential probes (in order): environment variables → workload identity → Managed Identity → Visual Studio / VS Code account → Azure CLI (`az login`) → Azure PowerShell. The first that succeeds is used.
+
+Typical setup:
+
+- **Local development**: developer runs `az login` once. The toolkit picks up that token and queries the workspace directly — no service principal secret to copy into user-secrets.
+- **Azure**: the App Service identity is used (same effect as `ManagedIdentity`). Grant it Log Analytics Reader as above.
+
+`TenantId` and `ClientId` are forwarded as hints (filter to a specific tenant; prefer a specific user-assigned MI) — both can be left empty.
+
+> **Trade-off**: `DefaultAzureCredential` masks *which* underlying credential succeeded. If authentication fails, the error chain is less specific than the explicit modes. For diagnosis, switch to `ClientSecret` or `ManagedIdentity` to isolate the issue.
 
 ## Universal telemetry tagging
 

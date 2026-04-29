@@ -25,9 +25,9 @@
     <None Remove="wwwroot\**" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Authentication.WebAssembly.Msal" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Authentication.WebAssembly.Msal" Version="10.0.7" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.83.3" />
-    <PackageReference Include="Tharga.Blazor" Version="2.1.3" />
+    <PackageReference Include="Tharga.Blazor" Version="2.1.4" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Quilt4Net.Toolkit\Quilt4Net.Toolkit.csproj" />
@@ -36,6 +36,6 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="9.0.15" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.7" />
   </ItemGroup>
 </Project>
