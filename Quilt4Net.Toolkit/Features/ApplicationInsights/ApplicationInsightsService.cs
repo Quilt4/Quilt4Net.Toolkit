@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using Azure.Identity;
-using Azure.Monitor.Query;
-using Azure.Monitor.Query.Models;
+using Azure.Monitor.Query.Logs;
+using Azure.Monitor.Query.Logs.Models;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 using Tharga.Cache;
@@ -25,7 +25,7 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         {
             var client = GetClient(context);
             var detailQuery = "AppTraces";
-            _ = await client.QueryWorkspaceAsync(context.WorkspaceId, detailQuery, new QueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
+            _ = await client.QueryWorkspaceAsync(context.WorkspaceId, detailQuery, new LogsQueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
 
             return true;
         }
@@ -88,7 +88,7 @@ union
         var response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(from, to));
+            new LogsQueryTimeRange(from, to));
 
         var table = response.Value.Table;
         var envIndex = GetColumnIndex(table, "Environment");
@@ -195,7 +195,7 @@ AppExceptions
         var response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(timeSpan));
+            new LogsQueryTimeRange(timeSpan));
 
         foreach (var table in response.Value.AllTables)
         {
@@ -256,7 +256,7 @@ AppTraces
         response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(timeSpan));
+            new LogsQueryTimeRange(timeSpan));
 
         foreach (var table in response.Value.AllTables)
         {
@@ -319,7 +319,7 @@ AppRequests
         response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(timeSpan));
+            new LogsQueryTimeRange(timeSpan));
 
         foreach (var table in response.Value.AllTables)
         {
@@ -421,7 +421,7 @@ AppTraces
         var response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(timeSpan));
+            new LogsQueryTimeRange(timeSpan));
 
         foreach (var table in response.Value.AllTables)
         {
@@ -528,7 +528,7 @@ AppTraces
         var response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(timeSpan));
+            new LogsQueryTimeRange(timeSpan));
 
         foreach (var table in response.Value.AllTables)
         {
@@ -620,7 +620,7 @@ AppRequests
         var response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(timeSpan));
+            new LogsQueryTimeRange(timeSpan));
 
         var table = response.Value.Table;
 
@@ -735,7 +735,7 @@ AppRequests
         var response = await client.QueryWorkspaceAsync(
             workspaceId,
             query,
-            new QueryTimeRange(timeSpan));
+            new LogsQueryTimeRange(timeSpan));
 
         var table = response.Value.Table;
         if (table.Rows.Count == 0)
@@ -864,7 +864,7 @@ AppRequests
             var response = await client.QueryWorkspaceAsync(
                 workspaceId,
                 query,
-                new QueryTimeRange(timeSpan));
+                new LogsQueryTimeRange(timeSpan));
 
             var table = response.Value.Table;
 
