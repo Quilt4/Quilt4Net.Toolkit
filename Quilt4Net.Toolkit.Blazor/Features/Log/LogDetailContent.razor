@@ -1,10 +1,14 @@
 @using System.Text.Json
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Tharga.Toolkit
-@inject IApplicationInsightsService ApplicationInsightsService
+@inject IServiceProvider ServiceProvider
 @inject NavigationManager NavigationManager
 
-@if (Model == null)
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+}
+else if (Model == null)
 {
     <Loading />
 }
@@ -81,6 +85,8 @@ else
 
 @code {
     private bool _showEmptyValues;
+    private string _configError;
+    private IApplicationInsightsService _ais;
 
     private string DisplayedJson => _showEmptyValues ? FormatJson(Model.RawJson) : FilterEmptyValues(Model.RawJson);
     private LogDetails Model { get; set; }
@@ -112,13 +118,24 @@ else
     [Parameter]
     public EventCallback OnSummaryNavigation { get; set; }
 
+    protected override void OnInitialized()
+    {
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+        }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
+        if (_configError != null) return;
+
         Model = null;
 
         if (!Source.HasValue || !Range.HasValue) return;
 
-        Model = await ApplicationInsightsService.GetDetail(Context, Id, Source.Value, Environment, Range.Value);
+        Model = await _ais.GetDetail(Context, Id, Source.Value, Environment, Range.Value);
 
         await base.OnParametersSetAsync();
     }
