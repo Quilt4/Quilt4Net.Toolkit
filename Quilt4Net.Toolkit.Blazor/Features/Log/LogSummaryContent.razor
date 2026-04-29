@@ -1,8 +1,12 @@
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
-@inject IApplicationInsightsService ApplicationInsightsService
+@inject IServiceProvider ServiceProvider
 @inject NavigationManager NavigationManager
 
-@if (Model == null)
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+}
+else if (Model == null)
 {
     <Loading />
 }
@@ -66,6 +70,17 @@ else
 @code {
     private SummaryData Model { get; set; }
     private string _selectedDetailId;
+    private string _configError;
+    private IApplicationInsightsService _ais;
+
+    protected override void OnInitialized()
+    {
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+        }
+    }
 
     [Parameter]
     public string Fingerprint { get; set; }
@@ -89,11 +104,13 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        if (_configError != null) return;
+
         Model = null;
 
         if (!Source.HasValue || !Range.HasValue) return;
 
-        Model = await ApplicationInsightsService.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
+        Model = await _ais.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
 
         await base.OnParametersSetAsync();
     }

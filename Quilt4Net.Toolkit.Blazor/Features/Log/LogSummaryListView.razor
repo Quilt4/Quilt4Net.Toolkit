@@ -1,9 +1,13 @@
 ﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
-@inject IApplicationInsightsService ApplicationInsightsService
+@inject IServiceProvider ServiceProvider
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
 
-@if (Model == null)
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+}
+else if (Model == null)
 {
     <Loading />
 }
@@ -38,6 +42,17 @@ else
 
 @code {
     private SummarySubset[] Model { get; set; }
+    private string _configError;
+    private IApplicationInsightsService _ais;
+
+    protected override void OnInitialized()
+    {
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+        }
+    }
 
     [CascadingParameter]
     private LogNavigationOptions _cascadedNavOptions { get; set; }
@@ -55,8 +70,10 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        if (_configError != null) return;
+
         Model = null;
-        Model = await ApplicationInsightsService
+        Model = await _ais
             .GetSummaries(Context, Environment, Range)
             .ToArrayAsync();
     }
