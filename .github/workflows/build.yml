@@ -62,7 +62,14 @@ jobs:
           fi
 
       - name: Test with coverage
-        run: dotnet test -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+        # -m:1 disables MSBuild parallelism. Microsoft.NET.Test.Sdk 18.5.1 has a regression
+        # where parallel VSTest invocations across multiple test projects (especially Web SDK
+        # ones like Health.Tests) intermittently produce
+        #   "The argument <path-to-test.dll> is invalid. Please use the /help option..."
+        # because the test DLL gets passed as a positional argument to the wrong vstest.console
+        # process. Running with a single MSBuild node serializes the VSTest invocations and
+        # avoids the cross-project arg leak. Slightly slower, reliable.
+        run: dotnet test -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage -m:1
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
