@@ -2,8 +2,10 @@
 using Azure.Identity;
 using Azure.Monitor.Query.Logs;
 using Azure.Monitor.Query.Logs.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using Quilt4Net.Toolkit.Features.Diagnostics;
 using Tharga.Cache;
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
@@ -12,27 +14,51 @@ internal class ApplicationInsightsService : IApplicationInsightsService
 {
     private readonly ITimeToLiveCache _timeToLiveCache;
     private readonly ApplicationInsightsOptions _options;
+    private readonly ILogger<ApplicationInsightsService> _logger;
 
-    public ApplicationInsightsService(ITimeToLiveCache timeToLiveCache, IOptions<ApplicationInsightsOptions> options)
+    public ApplicationInsightsService(
+        ITimeToLiveCache timeToLiveCache,
+        IOptions<ApplicationInsightsOptions> options,
+        ILogger<ApplicationInsightsService> logger)
     {
         _timeToLiveCache = timeToLiveCache;
         _options = options.Value;
+        _logger = logger;
     }
 
     public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)
     {
+        var incidentId = IncidentId.New();
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+        var tenantId = context?.TenantId ?? _options.TenantId;
+        var clientId = context?.ClientId ?? _options.ClientId;
+        var authMode = context?.AuthMode ?? _options.AuthMode;
+
         try
         {
             var client = GetClient(context);
-            var detailQuery = "AppTraces";
-            _ = await client.QueryWorkspaceAsync(context.WorkspaceId, detailQuery, new LogsQueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
+            const string detailQuery = "AppTraces";
+            _ = await client.QueryWorkspaceAsync(workspaceId, detailQuery, new LogsQueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
+
+            _logger.LogInformation(
+                "AI CanConnect succeeded. Incident={IncidentId} WorkspaceId={WorkspaceId} TenantId={TenantId} ClientId={ClientId} AuthMode={AuthMode}",
+                incidentId, MaskId(workspaceId), MaskId(tenantId), MaskId(clientId), authMode);
 
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex,
+                "AI CanConnect failed. Incident={IncidentId} WorkspaceId={WorkspaceId} TenantId={TenantId} ClientId={ClientId} AuthMode={AuthMode}",
+                incidentId, MaskId(workspaceId), MaskId(tenantId), MaskId(clientId), authMode);
             return false;
         }
+    }
+
+    private static string MaskId(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "(none)";
+        return id.Length <= 8 ? id : id.Substring(0, 8) + "…";
     }
 
     public async IAsyncEnumerable<EnvironmentOption> GetEnvironments(IApplicationInsightsContext context)

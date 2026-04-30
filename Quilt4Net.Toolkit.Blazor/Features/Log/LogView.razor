@@ -30,7 +30,7 @@
         </RadzenColumn>
     </RadzenRow>
 
-    <ErrorBoundary @ref="_errorBoundary">
+    <LoggingErrorBoundary @ref="_errorBoundary">
         <ChildContent>
             <RadzenTabs SelectedIndex="@_tabIndex" Change="@OnTabChange">
                 <Tabs>
@@ -54,10 +54,10 @@
         </ChildContent>
         <ErrorContent Context="ex">
             <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
-                @ApplicationInsightsErrorMessage.Format("Could not query Application Insights.", ex)
+                @ApplicationInsightsErrorMessage.Format("Could not query Application Insights.", ex, _errorBoundary?.IncidentId)
             </RadzenAlert>
         </ErrorContent>
-    </ErrorBoundary>
+    </LoggingErrorBoundary>
 </CascadingValue>
 
 @code {
@@ -68,7 +68,7 @@
     private LogNavigationOptions _navOptions;
     private int _tabIndex;
     private string _configError;
-    private ErrorBoundary _errorBoundary;
+    private LoggingErrorBoundary _errorBoundary;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
