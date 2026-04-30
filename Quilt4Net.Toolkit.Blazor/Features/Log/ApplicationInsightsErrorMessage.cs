@@ -3,13 +3,17 @@ namespace Quilt4Net.Toolkit.Blazor.Features.Log;
 internal static class ApplicationInsightsErrorMessage
 {
     public static string Format(string prefix, Exception ex)
-    {
-        if (IsAuthenticationFailure(ex))
-        {
-            return $"{prefix} Application Insights authentication failed — the configured TenantId, WorkspaceId, ClientId or ClientSecret may be incorrect, the secret may have expired, or the service principal may not have access to the workspace. Verify the Application Insights settings.";
-        }
+        => Format(prefix, ex, null);
 
-        return $"{prefix} {ex.Message}";
+    public static string Format(string prefix, Exception ex, string incidentId)
+    {
+        var body = IsAuthenticationFailure(ex)
+            ? "Application Insights authentication failed — the configured TenantId, WorkspaceId, ClientId or ClientSecret may be incorrect, the secret may have expired, or the service principal may not have access to the workspace. Verify the Application Insights settings."
+            : ex.Message;
+
+        return string.IsNullOrEmpty(incidentId)
+            ? $"{prefix} {body}"
+            : $"{prefix} {body} [Incident: {incidentId}]";
     }
 
     private static bool IsAuthenticationFailure(Exception ex)

@@ -1,7 +1,9 @@
 ﻿@using Microsoft.Extensions.Hosting
+@using Microsoft.Extensions.Logging
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IHostEnvironment HostEnvironment
 @inject IServiceProvider ServiceProvider
+@inject ILogger<LogEnvironmentSelector> Logger
 
 @if (_configError != null)
 {
@@ -75,7 +77,8 @@ else
             }
             catch (Exception ex)
             {
-                _loadError = ApplicationInsightsErrorMessage.Format("Could not load Application Insights environments.", ex);
+                _loadError = LogIncidentLogger.LogAndFormat(Logger, ex, nameof(LogEnvironmentSelector),
+                    "Could not load Application Insights environments.");
                 _environments = Array.Empty<EnvironmentOption>();
             }
         }
