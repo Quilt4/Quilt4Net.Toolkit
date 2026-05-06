@@ -2,7 +2,9 @@ using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Resources;
+using Quilt4Net.Toolkit.Features.Logging;
 
 namespace Quilt4Net.Toolkit;
 
@@ -42,6 +44,8 @@ public static class LoggingRegistration
 
         services.AddSingleton(o);
 
+        services.AddHostedService<Quilt4NetStartupHostedService>();
+
         services.AddOpenTelemetry()
             .ConfigureResource(resource =>
             {
@@ -63,6 +67,19 @@ public static class LoggingRegistration
             });
 
         return new Quilt4NetLoggingBuilder(services, o);
+    }
+
+    /// <summary>
+    /// Manually emit the Quilt4Net startup log entry. Use this in non-hosted
+    /// applications (WPF, console without IHost) where IHostedService does not run.
+    /// Hosted applications (IHostApplicationBuilder) get the startup entry automatically.
+    /// </summary>
+    public static void LogQuilt4NetStartup(this IServiceProvider serviceProvider)
+    {
+        var options = serviceProvider.GetRequiredService<Quilt4NetLoggingOptions>();
+        var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+        var logger = loggerFactory.CreateLogger<Quilt4NetStartupHostedService>();
+        Quilt4NetStartupLogger.Log(logger, options);
     }
 
     private static string ResolveApplicationNameFromEntryAssembly()
