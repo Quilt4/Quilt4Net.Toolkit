@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using Azure.Identity;
 using Azure.Monitor.Query.Logs;
 using Azure.Monitor.Query.Logs.Models;
@@ -12,9 +13,13 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 internal class ApplicationInsightsService : IApplicationInsightsService
 {
+    private static readonly LogsQueryOptions _probeOptions = new() { ServerTimeout = TimeSpan.FromSeconds(5) };
+    private readonly ConcurrentDictionary<ClientKey, LogsQueryClient> _clientCache = new();
     private readonly ITimeToLiveCache _timeToLiveCache;
     private readonly ApplicationInsightsOptions _options;
     private readonly ILogger<ApplicationInsightsService> _logger;
+
+    private readonly record struct ClientKey(ApplicationInsightsAuthMode AuthMode, string TenantId, string ClientId);
 
     public ApplicationInsightsService(
         ITimeToLiveCache timeToLiveCache,
@@ -37,8 +42,9 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         try
         {
             var client = GetClient(context);
-            const string detailQuery = "AppTraces";
-            _ = await client.QueryWorkspaceAsync(workspaceId, detailQuery, new LogsQueryTimeRange(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now));
+            // Cheapest possible probe: print produces a 1x1 result without scanning any table.
+            // Azure still validates token, tenant, workspace existence, and Reader access.
+            _ = await client.QueryWorkspaceAsync(workspaceId, "print _ = 'ok'", new LogsQueryTimeRange(TimeSpan.FromSeconds(1)), _probeOptions);
 
             _logger.LogInformation(
                 "AI CanConnect succeeded. Incident={IncidentId} WorkspaceId={WorkspaceId} TenantId={TenantId} ClientId={ClientId} AuthMode={AuthMode}",
@@ -1004,7 +1010,7 @@ union startup, fallback
         }
     }
 
-    private LogsQueryClient GetClient(IApplicationInsightsContext context = null)
+    internal LogsQueryClient GetClient(IApplicationInsightsContext context = null)
     {
         if (context.IsCurrent()) context = null;
 
@@ -1013,8 +1019,15 @@ union startup, fallback
         var tenantId = context?.TenantId ?? _options.TenantId;
         var clientId = context?.ClientId ?? _options.ClientId;
 
-        var credential = CredentialFactory.Create(authMode, tenantId, clientId, clientSecret);
-        return new LogsQueryClient(credential);
+        // Cache by (authMode, tenantId, clientId). The cached LogsQueryClient wraps a cached
+        // TokenCredential whose bearer token is reused across calls — saves the AAD token
+        // exchange (~150 ms) on every call after the first per credential set.
+        var key = new ClientKey(authMode, tenantId ?? string.Empty, clientId ?? string.Empty);
+        return _clientCache.GetOrAdd(key, _ =>
+        {
+            var credential = CredentialFactory.Create(authMode, tenantId, clientId, clientSecret);
+            return new LogsQueryClient(credential);
+        });
     }
 
     private static int GetColumnIndex(LogsTable table, string name)
