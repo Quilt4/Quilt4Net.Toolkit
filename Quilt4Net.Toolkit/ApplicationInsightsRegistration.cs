@@ -69,6 +69,12 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
             });
+            // Version matrix scans for the latest version per (app, env). The view is
+            // typically refreshed manually; 5 minutes balances freshness with query cost.
+            s.RegisterType<VersionMatrixCell[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(5);
+            });
         });
     }
 }
