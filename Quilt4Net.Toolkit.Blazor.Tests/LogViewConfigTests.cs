@@ -61,6 +61,7 @@ public class LogViewConfigTests : BunitContext
         public Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, string environment, TimeSpan timeSpan) => Task.FromResult<LogDetails>(null);
         public Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan) => Task.FromResult<SummaryData>(null);
         public IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan) => Empty<SummarySubset>();
+        public IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null) => Empty<VersionMatrixCell>();
 
         private static async IAsyncEnumerable<T> Empty<T>()
         {

@@ -934,6 +934,76 @@ AppRequests
         }
     }
 
+    public async IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null)
+    {
+        var cacheKey = $"versionmatrix|{context.ToKey()}|{lookback}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            return await GetVersionMatrixInternalAsync(context, lookback).ToArrayAsync();
+        });
+
+        foreach (var item in items)
+        {
+            yield return item;
+        }
+    }
+
+    private async IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixInternalAsync(IApplicationInsightsContext context, TimeSpan? lookback)
+    {
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        var query = @"
+let startup = AppTraces
+| extend _p = todynamic(Properties)
+| where tostring(_p[""Quilt4NetStartup""]) == ""true""
+| extend
+    ApplicationName = tostring(_p[""ApplicationName""]),
+    Environment = tostring(_p[""Environment""]),
+    Version = tostring(_p[""Version""])
+| where isnotempty(ApplicationName) and isnotempty(Version)
+| project TimeGenerated, ApplicationName, Environment, Version, Source = ""Startup"";
+let fallback = union AppTraces, AppExceptions, AppRequests
+| extend _p = todynamic(Properties)
+| extend
+    ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
+    Environment = coalesce(tostring(_p[""AspNetCoreEnvironment""]), tostring(_p[""deployment.environment""])),
+    Version = coalesce(tostring(_p[""application_Version""]), tostring(_p[""service.version""]), tostring(AppVersion))
+| where isnotempty(ApplicationName) and isnotempty(Version)
+| project TimeGenerated, ApplicationName, Environment, Version, Source = ""Log"";
+union startup, fallback
+| extend Environment = iff(isempty(Environment), ""(unknown)"", Environment)
+| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment
+| order by ApplicationName asc, Environment asc";
+
+        var range = lookback.HasValue
+            ? new LogsQueryTimeRange(DateTimeOffset.UtcNow - lookback.Value, DateTimeOffset.UtcNow)
+            : LogsQueryTimeRange.All;
+
+        var response = await client.QueryWorkspaceAsync(workspaceId, query, range);
+        var table = response.Value.Table;
+
+        var appIndex = GetColumnIndex(table, "ApplicationName");
+        var envIndex = GetColumnIndex(table, "Environment");
+        var versionIndex = GetColumnIndex(table, "Version");
+        var timeIndex = GetColumnIndex(table, "TimeGenerated");
+        var sourceIndex = GetColumnIndex(table, "Source");
+
+        foreach (var row in table.Rows)
+        {
+            yield return new VersionMatrixCell
+            {
+                ApplicationName = row[appIndex]?.ToString() ?? "",
+                Environment = row[envIndex]?.ToString() ?? "(unknown)",
+                Version = row[versionIndex]?.ToString() ?? "",
+                LastSeen = GetDateTime(row, timeIndex),
+                Source = string.Equals(row[sourceIndex]?.ToString(), "Startup", StringComparison.Ordinal)
+                    ? VersionMatrixSource.Startup
+                    : VersionMatrixSource.Log
+            };
+        }
+    }
+
     private LogsQueryClient GetClient(IApplicationInsightsContext context = null)
     {
         if (context.IsCurrent()) context = null;
