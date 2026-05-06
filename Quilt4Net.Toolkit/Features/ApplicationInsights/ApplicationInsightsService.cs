@@ -672,7 +672,10 @@ AppRequests
         var correlationIndex = GetColumnIndex(table, "CorrelationId");
         var rawIndex = GetColumnIndex(table, "Raw");
 
-        var binary = (BinaryData)row[rawIndex]!;
+        if (row[rawIndex] is not BinaryData binary)
+        {
+            throw new InvalidOperationException($"Row for {source} item id '{id}' has no Raw payload (got {row[rawIndex]?.GetType().Name ?? "null"}).");
+        }
         var json = binary.ToString();
 
         var rawNullable = JsonSerializer.Deserialize<Dictionary<string, object>>(
@@ -782,21 +785,24 @@ AppRequests
         var appIndex = GetColumnIndex(table, "Application");
         var severityIndex = GetColumnIndex(table, "SeverityLevel");
 
-        var items = table.Rows.Select(row => new SummaryData.Item
-        {
-            Id = row[idIndex]!.ToString()!,
-            TimeGenerated = GetDateTime(row, timeIndex),
-            Message = row[messageIndex]!.ToString()!
-        }).ToArray();
+        var items = table.Rows
+            .Select(row => new SummaryData.Item
+            {
+                Id = row[idIndex]?.ToString() ?? "",
+                TimeGenerated = GetDateTime(row, timeIndex),
+                Message = row[messageIndex]?.ToString() ?? ""
+            })
+            .Where(item => !string.IsNullOrEmpty(item.Id)) // skip rows without an Id — they can't be linked back
+            .ToArray();
 
         var first = table.Rows[0];
 
         return new SummaryData
         {
             Fingerprint = fingerprint,
-            Message = first[messageIndex]!.ToString()!,
-            Environment = first[envIndex]!.ToString()!,
-            Application = first[appIndex]!.ToString()!,
+            Message = first[messageIndex]?.ToString() ?? "",
+            Environment = first[envIndex]?.ToString() ?? "",
+            Application = first[appIndex]?.ToString() ?? "",
             SeverityLevel = (SeverityLevel)GetInt(first, severityIndex),
             Source = source,
             Items = items
@@ -910,9 +916,12 @@ AppRequests
 
             foreach (var row in table.Rows)
             {
+                var fingerprint = row[fp]?.ToString();
+                if (string.IsNullOrEmpty(fingerprint)) continue; // can't summarize a row without a fingerprint key
+
                 yield return new SummarySubset
                 {
-                    Fingerprint = row[fp]!.ToString()!,
+                    Fingerprint = fingerprint,
                     Message = row[msg]?.ToString() ?? "",
                     Environment = row[env]?.ToString() ?? "",
                     Application = row[app]?.ToString() ?? "",
