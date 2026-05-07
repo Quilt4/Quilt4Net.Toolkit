@@ -1066,7 +1066,8 @@ union startup, fallback
             return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
         }
 
-        return DateTime.Parse(value.ToString()!);
+        var s = value?.ToString();
+        return string.IsNullOrEmpty(s) ? default : DateTime.Parse(s);
     }
 
     private static int GetInt(IReadOnlyList<object> row, int index)
@@ -1083,7 +1084,8 @@ union startup, fallback
             return (int)l;
         }
 
-        return int.Parse(value.ToString()!);
+        var s = value?.ToString();
+        return string.IsNullOrEmpty(s) ? 0 : int.Parse(s);
     }
 
     private static TimeSpan GetTimeSpan(IReadOnlyList<object> row, int index)
