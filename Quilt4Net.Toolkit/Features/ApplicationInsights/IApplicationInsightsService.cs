@@ -19,4 +19,21 @@ public interface IApplicationInsightsService
     /// query the workspace's full retention.
     /// </summary>
     IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null);
+
+    /// <summary>
+    /// Returns all telemetry rows whose <c>Properties.IncidentId</c> matches
+    /// <paramref name="incidentId"/>. Searches AppTraces, AppExceptions, and
+    /// AppRequests over the supplied lookback window. Used by the MCP
+    /// <c>quilt4net.lookup_incident</c> tool to map a user-facing incident id
+    /// (e.g. from a UI alert) back to the structured log entry that produced it.
+    /// </summary>
+    IAsyncEnumerable<LogItem> SearchByIncidentIdAsync(IApplicationInsightsContext context, string incidentId, TimeSpan timeSpan);
+
+    /// <summary>
+    /// Returns all telemetry rows whose <c>OperationId</c> or
+    /// <c>Properties.CorrelationId</c> matches <paramref name="correlationId"/>.
+    /// Searches AppTraces, AppExceptions, and AppRequests over the supplied
+    /// lookback window.
+    /// </summary>
+    IAsyncEnumerable<LogItem> SearchByCorrelationIdAsync(IApplicationInsightsContext context, string correlationId, TimeSpan timeSpan);
 }

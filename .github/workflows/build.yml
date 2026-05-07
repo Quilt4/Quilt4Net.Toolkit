@@ -117,7 +117,8 @@ jobs:
             Quilt4Net.Toolkit/Quilt4Net.Toolkit.csproj \
             Quilt4Net.Toolkit.Api/Quilt4Net.Toolkit.Api.csproj \
             Quilt4Net.Toolkit.Health/Quilt4Net.Toolkit.Health.csproj \
-            Quilt4Net.Toolkit.Blazor/Quilt4Net.Toolkit.Blazor.csproj; do
+            Quilt4Net.Toolkit.Blazor/Quilt4Net.Toolkit.Blazor.csproj \
+            Quilt4Net.Toolkit.Mcp/Quilt4Net.Toolkit.Mcp.csproj; do
             echo "Packing $proj ($VERSION)..."
             dotnet pack "$proj" -c Release --no-build -o ./artifacts -p:PackageVersion="$VERSION"
           done
