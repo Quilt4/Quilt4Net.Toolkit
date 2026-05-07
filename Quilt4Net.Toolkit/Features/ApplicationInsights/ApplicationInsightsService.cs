@@ -1019,6 +1019,90 @@ union startup, fallback
         }
     }
 
+    public IAsyncEnumerable<LogItem> SearchByIncidentIdAsync(IApplicationInsightsContext context, string incidentId, TimeSpan timeSpan)
+    {
+        var predicate = $"tostring(_p['IncidentId']) == '{EscapeKqlSingleQuoted(incidentId)}'";
+        return SearchByIdAsync(context, predicate, timeSpan);
+    }
+
+    public IAsyncEnumerable<LogItem> SearchByCorrelationIdAsync(IApplicationInsightsContext context, string correlationId, TimeSpan timeSpan)
+    {
+        var escaped = EscapeKqlSingleQuoted(correlationId);
+        var predicate =
+            $"OperationId == '{escaped}' or " +
+            $"tostring(_p['CorrelationId']) == '{escaped}' or " +
+            $"tostring(_p['RequestId']) == '{escaped}'";
+        return SearchByIdAsync(context, predicate, timeSpan);
+    }
+
+    private async IAsyncEnumerable<LogItem> SearchByIdAsync(IApplicationInsightsContext context, string wherePredicate, TimeSpan timeSpan)
+    {
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        var query = $@"
+union withsource=_Source AppTraces, AppExceptions, AppRequests
+| extend _p = todynamic(Properties)
+| where {wherePredicate}
+| extend
+    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
+    Message = coalesce(tostring(Message), tostring(OuterMessage), tostring(Name)),
+    FingerprintSource = coalesce(tostring(ProblemId), tostring(_p[""OriginalFormat""]), tostring(Message), tostring(Name)),
+    EffectiveSeverity = iif(_Source == ""AppRequests"", iif(tobool(coalesce(Success, true)), 1, 3), toint(SeverityLevel))
+| extend
+    Id = _ItemId,
+    Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
+| project TimeGenerated, _Source, Application, Environment, Message, EffectiveSeverity, Id, Fingerprint
+| order by TimeGenerated asc";
+
+        var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
+
+        foreach (var table in response.Value.AllTables)
+        {
+            var timeIndex = GetColumnIndex(table, "TimeGenerated");
+            var sourceColIndex = GetColumnIndex(table, "_Source");
+            var appIndex = GetColumnIndex(table, "Application");
+            var envIndex = GetColumnIndex(table, "Environment");
+            var messageIndex = GetColumnIndex(table, "Message");
+            var severityIndex = GetColumnIndex(table, "EffectiveSeverity");
+            var idIndex = GetColumnIndex(table, "Id");
+            var fingerprintIndex = GetColumnIndex(table, "Fingerprint");
+
+            foreach (var row in table.Rows)
+            {
+                var sourceTable = row[sourceColIndex]?.ToString();
+                var source = sourceTable switch
+                {
+                    "AppExceptions" => LogSource.Exception,
+                    "AppRequests" => LogSource.Request,
+                    _ => LogSource.Trace
+                };
+
+                yield return new LogItem
+                {
+                    Id = row[idIndex]?.ToString(),
+                    Fingerprint = row[fingerprintIndex]?.ToString(),
+                    TimeGenerated = GetDateTime(row, timeIndex),
+                    Source = source,
+                    SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
+                    Message = row[messageIndex]?.ToString(),
+                    Environment = row[envIndex]?.ToString(),
+                    Application = row[appIndex]?.ToString()
+                };
+            }
+        }
+    }
+
+    private static string EscapeKqlSingleQuoted(string value)
+    {
+        if (value is null) return string.Empty;
+        return value
+            .Replace("'", "''")
+            .Replace("\r", " ")
+            .Replace("\n", " ");
+    }
+
     internal LogsQueryClient GetClient(IApplicationInsightsContext context = null)
     {
         if (context.IsCurrent()) context = null;
@@ -1066,7 +1150,8 @@ union startup, fallback
             return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
         }
 
-        return DateTime.Parse(value.ToString()!);
+        var s = value?.ToString();
+        return string.IsNullOrEmpty(s) ? default : DateTime.Parse(s);
     }
 
     private static int GetInt(IReadOnlyList<object> row, int index)
@@ -1083,7 +1168,8 @@ union startup, fallback
             return (int)l;
         }
 
-        return int.Parse(value.ToString()!);
+        var s = value?.ToString();
+        return string.IsNullOrEmpty(s) ? 0 : int.Parse(s);
     }
 
     private static TimeSpan GetTimeSpan(IReadOnlyList<object> row, int index)

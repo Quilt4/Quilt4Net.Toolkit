@@ -43,6 +43,8 @@ public class LogEnvironmentSelectorIncidentTests : BunitContext
         public Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan) => Task.FromException<SummaryData>(_ex);
         public IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan) => Throw<SummarySubset>();
         public IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null) => Throw<VersionMatrixCell>();
+        public IAsyncEnumerable<LogItem> SearchByIncidentIdAsync(IApplicationInsightsContext context, string incidentId, TimeSpan timeSpan) => Throw<LogItem>();
+        public IAsyncEnumerable<LogItem> SearchByCorrelationIdAsync(IApplicationInsightsContext context, string correlationId, TimeSpan timeSpan) => Throw<LogItem>();
 
 #pragma warning disable CS1998
         private async IAsyncEnumerable<T> Throw<T>()
