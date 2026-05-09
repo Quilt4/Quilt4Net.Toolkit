@@ -1,0 +1,55 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "..",
+          "files": [
+            "Quilt4Net.Toolkit/Quilt4Net.Toolkit.csproj",
+            "Quilt4Net.Toolkit.Api/Quilt4Net.Toolkit.Api.csproj",
+            "Quilt4Net.Toolkit.Blazor/Quilt4Net.Toolkit.Blazor.csproj",
+            "Quilt4Net.Toolkit.Health/Quilt4Net.Toolkit.Health.csproj",
+            "Quilt4Net.Toolkit.Mcp/Quilt4Net.Toolkit.Mcp.csproj"
+          ]
+        }
+      ],
+      "dest": "api",
+      "includePrivateMembers": false,
+      "disableGitFeatures": false,
+      "disableDefaultFilter": false,
+      "noRestore": false,
+      "namespaceLayout": "flattened",
+      "memberLayout": "samePage",
+      "EnumSortOrder": "alphabetic",
+      "allowCompilationErrors": false
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": ["**/*.{md,yml}"],
+        "exclude": ["_site/**", "obj/**"]
+      }
+    ],
+    "resource": [
+      {
+        "files": ["images/**", "CNAME"]
+      }
+    ],
+    "output": "_site",
+    "globalMetadata": {
+      "_appName": "Quilt4Net.Toolkit",
+      "_appTitle": "Quilt4Net.Toolkit",
+      "_enableSearch": true,
+      "_disableContribution": false,
+      "_gitContribute": {
+        "repo": "https://github.com/Quilt4/Quilt4Net.Toolkit",
+        "branch": "master"
+      }
+    },
+    "template": ["default", "modern"],
+    "postProcessors": ["ExtractSearchIndex"],
+    "keepFileLink": false,
+    "disableGitFeatures": false
+  }
+}
