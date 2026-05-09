@@ -1,4 +1,4 @@
-﻿@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
@@ -13,9 +13,11 @@ else if (Model == null)
 }
 else
 {
-    <RadzenDataGrid Data="Model" TItem="SummarySubset"
-                    AllowSorting="true"
-                    AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+    <LogFilterBar Applications="@_distinctApps" Environments="@_distinctEnvs"
+                  StorageKey="@FilterStorageKey" OnChanged="OnFiltersChanged" />
+
+    <RadzenDataGrid Data="@_filtered" TItem="SummarySubset"
+                    AllowSorting="true" AllowFiltering="false"
                     AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
                     ShowPagingSummary="true" PagingSummaryFormat="{2:N0} summary items, page {0} of {1}">
         <Columns>
@@ -25,16 +27,18 @@ else
                                   Click="@(() => OpenSummaryAsync(context.Fingerprint, context.Source))" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)" Filterable="false">
+            <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)">
                 <Template>
                     <DateTimeView Date="@context.LastTimeGenerated"/>
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Count" Property="@nameof(SummarySubset.Count)" SortOrder="SortOrder.Descending" Filterable="false" />
+            <RadzenDataGridColumn Title="Count" Property="@nameof(SummarySubset.Count)" SortOrder="SortOrder.Descending" />
             <RadzenDataGridColumn Title="Source" Property="@nameof(SummarySubset.Source)"/>
             <RadzenDataGridColumn Title="Level" Property="@nameof(SummarySubset.SeverityLevel)"/>
             <RadzenDataGridColumn Title="Message" Property="@nameof(SummarySubset.Message)"/>
-            <RadzenDataGridColumn Title="Application" Property="@nameof(SummarySubset.Application)"/>
+            <RadzenDataGridColumn Title="Application" Property="@nameof(SummarySubset.Application)">
+                <Template><ApplicationName Raw="@context.Application" /></Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Environment" Property="@nameof(SummarySubset.Environment)"/>
         </Columns>
     </RadzenDataGrid>
@@ -42,6 +46,10 @@ else
 
 @code {
     private SummarySubset[] Model { get; set; }
+    private SummarySubset[] _filtered = [];
+    private string[] _distinctApps = [];
+    private string[] _distinctEnvs = [];
+    private LogFilters _filters = LogFilters.Empty;
     private string _configError;
     private IApplicationInsightsService _ais;
 
@@ -56,6 +64,16 @@ else
 
     [CascadingParameter]
     private LogNavigationOptions _cascadedNavOptions { get; set; }
+
+    [CascadingParameter(Name = "ApplicationAliasMap")]
+    private IReadOnlyDictionary<string, string> _aliasMap { get; set; }
+
+    [CascadingParameter(Name = "FilterStorageScope")]
+    private string _storageScope { get; set; }
+
+    private string FilterStorageKey => string.IsNullOrEmpty(_storageScope)
+        ? null
+        : $"Quilt4Net.Log.Filters.{_storageScope}.summary";
 
     private LogNavigationOptions NavOptions => _cascadedNavOptions ?? new LogNavigationOptions();
 
@@ -76,6 +94,57 @@ else
         Model = await _ais
             .GetSummaries(Context, Environment, Range)
             .ToArrayAsync();
+
+        RecomputeDistincts();
+        ApplyFilters();
+    }
+
+    private Task OnFiltersChanged(LogFilters next)
+    {
+        _filters = next;
+        ApplyFilters();
+        return Task.CompletedTask;
+    }
+
+    private void RecomputeDistincts()
+    {
+        if (Model == null)
+        {
+            _distinctApps = [];
+            _distinctEnvs = [];
+            return;
+        }
+        _distinctApps = Model
+            .Select(x => Resolve(x.Application))
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _distinctEnvs = Model
+            .Select(x => x.Environment ?? string.Empty)
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private void ApplyFilters()
+    {
+        if (Model == null) { _filtered = []; return; }
+        _filtered = Model
+            .Where(x =>
+                _filters.MatchesSource(x.Source)
+                && _filters.MatchesLevel(x.SeverityLevel)
+                && _filters.MatchesApplication(Resolve(x.Application))
+                && _filters.MatchesEnvironment(x.Environment))
+            .ToArray();
+        StateHasChanged();
+    }
+
+    private string Resolve(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        return _aliasMap is { Count: > 0 } map ? map.GetValueOrDefault(raw, raw) : raw;
     }
 
     private async Task OpenSummaryAsync(string fingerprint, LogSource source)

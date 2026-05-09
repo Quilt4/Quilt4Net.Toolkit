@@ -2,5 +2,9 @@
   href: index.md
 - name: Getting started
   href: getting-started.md
+- name: Telemetry identity & correlation
+  href: telemetry-identity.md
+- name: Log views
+  href: log-views.md
 - name: Version matrix
   href: version-matrix.md

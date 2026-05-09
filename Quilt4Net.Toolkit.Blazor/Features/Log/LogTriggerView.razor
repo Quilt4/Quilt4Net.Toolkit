@@ -1,21 +1,36 @@
-﻿@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.Extensions.Logging
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Tharga.Blazor
 @inject ILogger<LogTriggerView> Logger
 @inject NotificationService NotificationService
 
-<RadzenDropDown Data="@_levels"
-                @bind-Value="_level"
-                TextProperty="Text"
-                ValueProperty="Value"
-                Style="width:200px" />
-<RadzenButton Text="Exception" Icon="error_med" Click="ThrowAsync" />
-<RadzenButton Text="Trace" Icon="barefoot" Click="TraceAsync" />
-<br/>
-<RadzenButton Text="Boundary Exception" Icon="error_med" Click="@(e => { throw new InvalidOperationException("Some exception that should be caught byt Error Boundary."); })" Style="margin-top: 6px;" />
+<CustomErrorBoundary>
+    <ChildContent>
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenText Text="Level" />
+                <RadzenDropDown Data="@_levels" @bind-Value="_level"
+                                TextProperty="Text" ValueProperty="Value" Style="width:200px" />
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                <RadzenButton Text="Log Trace" Icon="barefoot" Click="LogTrace" />
+                <RadzenButton Text="Log Exception (caught)" Icon="error_med" Click="LogException" />
+                <RadzenButton Text="Throw uncaught" Icon="bolt" ButtonStyle="ButtonStyle.Warning" Click="ThrowUncaught" />
+            </RadzenStack>
+
+            <RadzenText TextStyle="TextStyle.Caption">
+                <strong>Log Trace</strong>: writes a regular <code>ILogger.Log({Level})</code> entry.<br />
+                <strong>Log Exception (caught)</strong>: throws inside a try/catch and logs the caught exception at <code>{Level}</code>.<br />
+                <strong>Throw uncaught</strong>: throws and lets the surrounding <code>Tharga.Blazor.CustomErrorBoundary</code> catch it. The boundary mints a fresh GUID, attaches it via <code>BeginScope</code> so it lands in the log entry as <code>customDimensions["CorrelationId"]</code>, and surfaces it in the recovery banner.
+            </RadzenText>
+        </RadzenStack>
+    </ChildContent>
+</CustomErrorBoundary>
 
 @code {
-    private LogLevel _level;
+    private LogLevel _level = LogLevel.Information;
     private readonly IEnumerable<object> _levels = Enum
         .GetValues<LogLevel>()
         .Select(level => new
@@ -27,24 +42,28 @@
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
-    private async Task ThrowAsync(MouseEventArgs arg)
+    private void LogTrace(MouseEventArgs _)
+    {
+        Logger.Log(_level, "Manual test trace at {Level}.", _level);
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = $"Trace logged at {_level}" });
+    }
+
+    private void LogException(MouseEventArgs _)
     {
         try
         {
-            throw new InvalidOperationException("Manual trigger exception.");
+            throw new InvalidOperationException($"Manual test exception at {_level}.");
         }
         catch (Exception e)
         {
             Logger.Log(_level, e, e.Message);
         }
 
-        NotificationService.Notify(new NotificationMessage { Summary = "Logged" });
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = $"Exception logged at {_level}" });
     }
 
-    private async Task TraceAsync(MouseEventArgs arg)
+    private void ThrowUncaught(MouseEventArgs _)
     {
-        Logger.Log(_level, "Manual trigger trace.");
-        NotificationService.Notify(new NotificationMessage { Summary = "Logged" });
+        throw new InvalidOperationException("Uncaught test exception — should be caught by the surrounding Tharga.Blazor.CustomErrorBoundary.");
     }
-
 }

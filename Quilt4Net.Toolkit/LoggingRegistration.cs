@@ -3,7 +3,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Quilt4Net.Toolkit.Features.Logging;
 
 namespace Quilt4Net.Toolkit;
@@ -46,6 +48,13 @@ public static class LoggingRegistration
 
         services.AddHostedService<Quilt4NetStartupHostedService>();
 
+        var identity = new Features.Logging.TelemetryIdentity(
+            Environment: o.Environment,
+            ApplicationName: o.ApplicationName,
+            Version: o.Version,
+            MachineName: System.Environment.MachineName,
+            MonitorName: o.MonitorName);
+
         services.AddOpenTelemetry()
             .ConfigureResource(resource =>
             {
@@ -64,7 +73,13 @@ public static class LoggingRegistration
                         new("deployment.environment", o.Environment),
                     });
                 }
-            });
+            })
+            // Resource attributes alone don't reach per-row Properties via the Azure Monitor
+            // exporter (only the well-known service.* mappings → cloud_RoleName / AppVersion /
+            // cloud_RoleInstance columns). The processors below copy the identity onto each
+            // log record and span as per-record attributes so they land in customDimensions.
+            .WithLogging(b => b.AddProcessor(new Features.Logging.TelemetryIdentityLogProcessor(identity)))
+            .WithTracing(b => b.AddProcessor(new Features.Logging.TelemetryIdentityActivityProcessor(identity)));
 
         return new Quilt4NetLoggingBuilder(services, o);
     }

@@ -1,0 +1,116 @@
+@using System.Text.Json
+@using Blazored.LocalStorage
+@using Microsoft.Extensions.DependencyInjection
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IServiceProvider ServiceProvider
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" Style="margin-bottom: 0.5rem;">
+    @if (_sourceOptions.Length > 0)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+            <RadzenText Text="Source" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
+            <RadzenSelectBar Data="@_sourceOptions" Value="@_value.Sources" TValue="IEnumerable<LogSource>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<LogSource>>(this, OnSourcesChanged))" />
+        </RadzenStack>
+    }
+    @if (_levelOptions.Length > 0)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+            <RadzenText Text="Level" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
+            <RadzenSelectBar Data="@_levelOptions" Value="@_value.Levels" TValue="IEnumerable<SeverityLevel>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<SeverityLevel>>(this, OnLevelsChanged))" />
+        </RadzenStack>
+    }
+    @if (Applications is { Length: > 0 })
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenText Text="Application" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
+            <RadzenSelectBar Data="@Applications" Value="@_value.Applications" TValue="IEnumerable<string>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, OnApplicationsChanged))" />
+        </RadzenStack>
+    }
+    @if (Environments is { Length: > 0 })
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
+            <RadzenSelectBar Data="@Environments" Value="@_value.Environments" TValue="IEnumerable<string>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, OnEnvironmentsChanged))" />
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@code {
+    private static readonly LogSource[] _sourceOptions = Enum.GetValues<LogSource>();
+    private static readonly SeverityLevel[] _levelOptions = Enum.GetValues<SeverityLevel>();
+
+    private LogFilters _value = LogFilters.Empty;
+    private ILocalStorageService _localStorage;
+
+    /// <summary>Distinct application names (post-alias) currently selectable. When empty the row hides.</summary>
+    [Parameter]
+    public string[] Applications { get; set; } = [];
+
+    /// <summary>Distinct environment names currently selectable. When empty the row hides.</summary>
+    [Parameter]
+    public string[] Environments { get; set; } = [];
+
+    /// <summary>
+    /// localStorage key used to persist the selection. When null (default) the filter
+    /// state lives only for the lifetime of the component.
+    /// </summary>
+    [Parameter]
+    public string StorageKey { get; set; }
+
+    /// <summary>Fires whenever the user changes any filter dimension.</summary>
+    [Parameter]
+    public EventCallback<LogFilters> OnChanged { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _localStorage = ServiceProvider.GetService<ILocalStorageService>();
+
+        if (!string.IsNullOrEmpty(StorageKey) && _localStorage != null)
+        {
+            try
+            {
+                var stored = await _localStorage.GetItemAsStringAsync(StorageKey);
+                if (!string.IsNullOrEmpty(stored))
+                {
+                    var loaded = JsonSerializer.Deserialize<LogFilters>(stored);
+                    if (loaded != null)
+                    {
+                        _value = loaded;
+                        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync(_value);
+                    }
+                }
+            }
+            catch
+            {
+                // Corrupt entry — ignore and start fresh; the next save overwrites.
+            }
+        }
+    }
+
+    private Task OnSourcesChanged(IEnumerable<LogSource> value) => UpdateAsync(_value with { Sources = value?.ToArray() ?? [] });
+    private Task OnLevelsChanged(IEnumerable<SeverityLevel> value) => UpdateAsync(_value with { Levels = value?.ToArray() ?? [] });
+    private Task OnApplicationsChanged(IEnumerable<string> value) => UpdateAsync(_value with { Applications = value?.ToArray() ?? [] });
+    private Task OnEnvironmentsChanged(IEnumerable<string> value) => UpdateAsync(_value with { Environments = value?.ToArray() ?? [] });
+
+    private async Task UpdateAsync(LogFilters next)
+    {
+        _value = next;
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync(_value);
+        if (!string.IsNullOrEmpty(StorageKey) && _localStorage != null)
+        {
+            try
+            {
+                await _localStorage.SetItemAsStringAsync(StorageKey, JsonSerializer.Serialize(_value));
+            }
+            catch
+            {
+                // localStorage write failures (quota, private mode) shouldn't break the UI.
+            }
+        }
+    }
+
+}

@@ -20,9 +20,11 @@
 }
 else if (Model != null)
 {
-    <RadzenDataGrid TItem="LogItem" Data="@Model"
-                    AllowSorting="true"
-                    AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+    <LogFilterBar Applications="@_distinctApps" Environments="@_distinctEnvs"
+                  StorageKey="@FilterStorageKey" OnChanged="OnFiltersChanged" />
+
+    <RadzenDataGrid TItem="LogItem" Data="@_filtered"
+                    AllowSorting="true" AllowFiltering="false"
                     AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
                     ShowPagingSummary="true" PagingSummaryFormat="{2:N0} log items, page {0} of {1}">
         <Columns>
@@ -37,10 +39,26 @@ else if (Model != null)
                     <DateTimeView Date="@context.TimeGenerated" />
                 </Template>
             </RadzenDataGridColumn>
+            <RadzenDataGridColumn Title="Correlation" Property="@nameof(LogItem.CorrelationId)" Width="140px" Sortable="false" Filterable="false">
+                <Template>
+                    @if (!string.IsNullOrEmpty(context.CorrelationId))
+                    {
+                        var preview = context.CorrelationId.Length > 8 ? context.CorrelationId[..8] + "…" : context.CorrelationId;
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem">
+                            <span title="@($"{context.CorrelationId} (click to filter)")"
+                                  style="cursor: pointer; text-decoration: underline; font-family: var(--rz-font-family-monospace, monospace);"
+                                  @onclick="@(() => SearchByCorrelationIdAsync(context.CorrelationId))">@preview</span>
+                            <CopyButton Content="@context.CorrelationId" />
+                        </RadzenStack>
+                    }
+                </Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Source" Property="@nameof(LogItem.Source)" />
             <RadzenDataGridColumn Title="Level" Property="@nameof(LogItem.SeverityLevel)" />
             <RadzenDataGridColumn Title="Message" Property="@nameof(LogItem.Message)" />
-            <RadzenDataGridColumn Title="Application" Property="@nameof(LogItem.Application)" />
+            <RadzenDataGridColumn Title="Application" Property="@nameof(LogItem.Application)">
+                <Template><ApplicationName Raw="@context.Application" /></Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Environment" Property="@nameof(LogItem.Environment)" />
         </Columns>
     </RadzenDataGrid>
@@ -52,6 +70,10 @@ else if (Model != null)
     private string _configError;
     private IApplicationInsightsService _ais;
     private LogItem[] Model { get; set; }
+    private LogItem[] _filtered = [];
+    private string[] _distinctApps = [];
+    private string[] _distinctEnvs = [];
+    private LogFilters _filters = LogFilters.Empty;
 
     protected override void OnInitialized()
     {
@@ -64,6 +86,16 @@ else if (Model != null)
 
     [CascadingParameter]
     private LogNavigationOptions _cascadedNavOptions { get; set; }
+
+    [CascadingParameter(Name = "ApplicationAliasMap")]
+    private IReadOnlyDictionary<string, string> _aliasMap { get; set; }
+
+    [CascadingParameter(Name = "FilterStorageScope")]
+    private string _storageScope { get; set; }
+
+    private string FilterStorageKey => string.IsNullOrEmpty(_storageScope)
+        ? null
+        : $"Quilt4Net.Log.Filters.{_storageScope}.search";
 
     private LogNavigationOptions NavOptions => _cascadedNavOptions ?? new LogNavigationOptions();
 
@@ -84,8 +116,60 @@ else if (Model != null)
         var searchText = _searchText ?? string.Empty;
         Model = await _ais.SearchAsync(Context, Environment, searchText, Range).ToArrayAsync();
 
+        RecomputeDistincts();
+        ApplyFilters();
+
         _loading = false;
         StateHasChanged();
+    }
+
+    private Task OnFiltersChanged(LogFilters next)
+    {
+        _filters = next;
+        ApplyFilters();
+        return Task.CompletedTask;
+    }
+
+    private void RecomputeDistincts()
+    {
+        if (Model == null) { _distinctApps = []; _distinctEnvs = []; return; }
+        _distinctApps = Model
+            .Select(x => Resolve(x.Application))
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _distinctEnvs = Model
+            .Select(x => x.Environment ?? string.Empty)
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private void ApplyFilters()
+    {
+        if (Model == null) { _filtered = []; return; }
+        _filtered = Model
+            .Where(x =>
+                _filters.MatchesSource(x.Source)
+                && _filters.MatchesLevel(x.SeverityLevel)
+                && _filters.MatchesApplication(Resolve(x.Application))
+                && _filters.MatchesEnvironment(x.Environment))
+            .ToArray();
+        StateHasChanged();
+    }
+
+    private string Resolve(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        return _aliasMap is { Count: > 0 } map ? map.GetValueOrDefault(raw, raw) : raw;
+    }
+
+    private Task SearchByCorrelationIdAsync(string correlationId)
+    {
+        _searchText = correlationId;
+        return Search();
     }
 
     private async Task OpenDetailAsync(string id, LogSource source)

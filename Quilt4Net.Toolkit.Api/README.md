@@ -22,13 +22,27 @@ app.UseQuilt4NetLogging();
 app.Run();
 ```
 
-`AddQuilt4NetLogging()` registers an `ITelemetryInitializer` that tags all Application Insights telemetry (traces, exceptions, requests) with `Cloud.RoleName`, `Component.Version`, and `Environment`. `AddHttpRequestLogging()` opts in to HTTP request/response middleware. By default, all requests to paths starting with `/Api` are logged.
+`AddQuilt4NetLogging()` configures OpenTelemetry resource attributes and registers per-record processors that tag every `AppTrace` / `AppException` / `AppRequest` with `service.name`, `service.version`, `host.name`, `deployment.environment`, and `quilt4net.monitor` (see the core `Quilt4Net.Toolkit` README for details). `AddHttpRequestLogging()` opts in to HTTP request/response middleware on top of that. By default, all requests to paths starting with `/Api` are logged.
 
 > The old `AddQuilt4NetApiLogging()` and `UseQuilt4NetApiLogging()` methods still work but are deprecated.
 
 ## Correlation ID
 
-When `UseCorrelationId` is enabled (default), the middleware reads the `X-Correlation-ID` header from incoming requests. If no header is present, a new GUID is generated. The correlation ID is stored in `HttpContext.Items` and returned in the response header, enabling distributed tracing across services.
+`CorrelationIdMiddleware` reads the `X-Correlation-ID` header from incoming requests; if no header is present, a new GUID is generated. The id is:
+
+1. Stored in `HttpContext.Items["CorrelationId"]` for inspection by downstream code.
+2. Returned in the response's `X-Correlation-ID` header — clients can chain the same id to subsequent requests for distributed tracing.
+3. **Pushed into a logging scope** (`Logger.BeginScope({ ["CorrelationId"] = id })`) for the duration of the request, so every `ILogger` call made while handling the request inherits the id as a structured property. The Azure Monitor exporter writes it to `customDimensions["CorrelationId"]` on every resulting `AppTrace` / `AppException` / `AppRequest` row.
+
+KQL pattern for "show me everything from one call chain":
+
+```kql
+union AppTraces, AppExceptions, AppRequests
+| where Properties contains "<your-correlation-id>"
+| order by TimeGenerated asc
+```
+
+Or, in the toolkit's `LogView` Search tab, paste the id into the search box (it filters on both `Message` and `CorrelationId`). The Search tab's CorrelationId column also has a click-to-self-search shortcut — click any row's correlation chip and the grid re-runs scoped to that id.
 
 ## Logging mode
 

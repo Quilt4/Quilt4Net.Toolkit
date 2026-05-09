@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
+@using Quilt4Net.Toolkit
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Tharga.Blazor.Features.BreadCrumbs
 @inject NavigationManager NavigationManager
@@ -15,6 +16,9 @@
 }
 
 <CascadingValue Value="_navOptions">
+<CascadingValue Name="ApplicationAliasMap" Value="@_effectiveAliasMap">
+<CascadingValue Name="FilterStorageScope" Value="@FilterStorageScope">
+<CascadingValue Name="SourcePathRoots" Value="@SourcePathRoots">
     <RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
         <RadzenColumn Visible="@ShowRangeSelector">
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
@@ -46,7 +50,7 @@
                     <RadzenTabsItem Text="Count">
                         <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
                     </RadzenTabsItem>
-                    <RadzenTabsItem Text="Trigger" Visible="@(Context == null)">
+                    <RadzenTabsItem Text="Test" Visible="@ShowTestTab">
                         <LogTriggerView Context="Context" />
                     </RadzenTabsItem>
                 </Tabs>
@@ -59,13 +63,17 @@
         </ErrorContent>
     </LoggingErrorBoundary>
 </CascadingValue>
+</CascadingValue>
+</CascadingValue>
+</CascadingValue>
 
 @code {
-    private static readonly string[] TabNames = ["search", "summary", "measure", "count", "trigger"];
+    private static readonly string[] TabNames = ["search", "summary", "measure", "count", "test"];
 
     private LogRangeSelector.TimeRangeOption _range;
     private EnvironmentOption _environment;
     private LogNavigationOptions _navOptions;
+    private IReadOnlyDictionary<string, string> _effectiveAliasMap;
     private int _tabIndex;
     private string _configError;
     private LoggingErrorBoundary _errorBoundary;
@@ -105,6 +113,47 @@
     /// </summary>
     [Parameter]
     public string Tab { get; set; }
+
+    /// <summary>
+    /// Show the developer-facing "Test" tab that triggers logs / exceptions at every
+    /// <see cref="Microsoft.Extensions.Logging.LogLevel"/> via <c>ILogger</c>, plus an
+    /// uncaught throw caught by a local <see cref="LoggingErrorBoundary"/> so the
+    /// correlation Incident id is visible. Defaults to false so external consumers
+    /// don't expose log-injection controls accidentally; opt in from developer pages.
+    /// </summary>
+    [Parameter]
+    public bool ShowTestTab { get; set; }
+
+    /// <summary>
+    /// Optional <c>raw → logical</c> application alias map applied to every cell that
+    /// renders an Application name across the contained tabs. When supplied, the
+    /// logical name shows with the raw name as a hover tooltip (and a dotted underline
+    /// when they differ). When null, the toolkit falls back to the static map
+    /// configured via <see cref="ApplicationInsightsOptions.ApplicationAlias"/>.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> ApplicationAliasMap { get; set; }
+
+    /// <summary>
+    /// Optional scope key for browser-localStorage persistence of the per-tab filter bar
+    /// state (Source / Level / Application / Environment multi-selects on the Summary
+    /// and Search tabs). When supplied, filter state survives reloads and is keyed under
+    /// <c>Quilt4Net.Log.Filters.{scope}.{tab}</c>. Hosts that want per-team scoping
+    /// (e.g. Quilt4Net.Server) pass the team key. When null, filters reset on reload.
+    /// </summary>
+    [Parameter]
+    public string FilterStorageScope { get; set; }
+
+    /// <summary>
+    /// Project / repository folder names used to shorten file paths in the LogDetailContent
+    /// Stack Trace tab. When a path contains any of these names, everything up to (and
+    /// including) the rightmost match is stripped — leaving a leading-slash relative path
+    /// like <c>\Features\Team\UserService.cs:line 24</c> that Resharper / Rider can resolve
+    /// from any open solution containing that file. Typical Server use:
+    /// <c>SourcePathRoots="@(new[] { "Quilt4Net.Server" })"</c>.
+    /// </summary>
+    [Parameter]
+    public string[] SourcePathRoots { get; set; }
 
     /// <summary>
     /// Fires when the user switches tabs, passing the new tab name (lowercase).
@@ -153,10 +202,18 @@
             SummaryPath = SummaryPath
         };
 
+        _effectiveAliasMap = ApplicationAliasMap ?? ResolveStaticMap();
+
         var idx = Array.IndexOf(TabNames, Tab?.ToLower() ?? string.Empty);
         _tabIndex = idx >= 0 ? idx : 0;
 
         _errorBoundary?.Recover();
+    }
+
+    private IReadOnlyDictionary<string, string> ResolveStaticMap()
+    {
+        var options = ServiceProvider.GetService<IOptions<ApplicationInsightsOptions>>()?.Value;
+        return options?.ApplicationAlias?.ToResolverDictionary();
     }
 
     private async Task OnTabChange(int index)

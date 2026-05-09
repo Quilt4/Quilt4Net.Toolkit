@@ -58,7 +58,9 @@ else
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="Message" Property="@nameof(MeasureData.Message)" />
-                        <RadzenDataGridColumn Title="Application" Property="@nameof(MeasureData.Application)" />
+                        <RadzenDataGridColumn Title="Application" Property="@nameof(MeasureData.Application)">
+                            <Template><ApplicationName Raw="@context.Application" /></Template>
+                        </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="Environment" Property="@nameof(MeasureData.Environment)" />
                         <RadzenDataGridColumn Title="Elapsed" Property="@nameof(MeasureData.Elapsed)" Filterable="false">
                             <Template>
