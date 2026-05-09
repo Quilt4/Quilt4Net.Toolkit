@@ -13,6 +13,15 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 internal class ApplicationInsightsService : IApplicationInsightsService
 {
+    /// <summary>
+    /// Canonical KQL fragment for projecting the Environment column from any AppTraces /
+    /// AppExceptions / AppRequests row. Reads OTel resource attribute first (what
+    /// <c>AddQuilt4NetLogging</c> emits), then the legacy <c>AspNetCoreEnvironment</c>
+    /// scope tag. Centralised so all log queries stay in sync.
+    /// </summary>
+    internal const string EnvironmentProjection =
+        "coalesce(tostring(_p[\"deployment.environment\"]), tostring(_p[\"AspNetCoreEnvironment\"]))";
+
     private static readonly LogsQueryOptions _probeOptions = new() { ServerTimeout = TimeSpan.FromSeconds(5) };
     private readonly ConcurrentDictionary<ClientKey, LogsQueryClient> _clientCache = new();
     private readonly ITimeToLiveCache _timeToLiveCache;
@@ -95,22 +104,22 @@ internal class ApplicationInsightsService : IApplicationInsightsService
         var from = DateTimeOffset.UtcNow.AddDays(-Math.Max(1, lookbackDays));
         var to = DateTimeOffset.UtcNow;
 
-        var query = @"
+        var query = $@"
 union
 (
     AppTraces
     | extend _p = todynamic(Properties)
-    | project Environment = tostring(_p[""AspNetCoreEnvironment""])
+    | project Environment = {EnvironmentProjection}
 ),
 (
     AppExceptions
     | extend _p = todynamic(Properties)
-    | project Environment = tostring(_p[""AspNetCoreEnvironment""])
+    | project Environment = {EnvironmentProjection}
 ),
 (
     AppRequests
     | extend _p = todynamic(Properties)
-    | project Environment = tostring(_p[""AspNetCoreEnvironment""])
+    | project Environment = {EnvironmentProjection}
 )
 | extend Environment = trim(' ', Environment)
 | where isnotempty(Environment)
@@ -204,7 +213,7 @@ AppExceptions
 | extend _p = todynamic(Properties)
 | extend
     CorrelationId = tostring(_p[""CorrelationId""]),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(OuterMessage)
 {envFilter}
@@ -263,7 +272,7 @@ AppTraces
 | extend _p = todynamic(Properties)
 | extend
     CorrelationId = tostring(_p[""CorrelationId""]),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     OriginalFormat = tostring(_p[""OriginalFormat""])
 {envFilter}
@@ -324,7 +333,7 @@ AppRequests
 | extend _p = todynamic(Properties)
 | extend
     CorrelationId = tostring(_p[""CorrelationId""]),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(Name)
 {envFilter}
@@ -429,7 +438,7 @@ AppTraces
 | extend
     Action = tostring(_p[""Action""]),
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
-    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
+    Environment = trim(' ', {EnvironmentProjection}),
     OriginalFormat = trim(' ', tostring(_p[""OriginalFormat""])),
     ElapsedRaw = extract(@""in ([0-9:\.]+) ms"", 1, tostring(Message))
 {envFilter}
@@ -536,7 +545,7 @@ AppTraces
 | extend
     Action = tostring(_p[""Action""]),
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
-    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
+    Environment = trim(' ', {EnvironmentProjection}),
     OriginalFormat = trim(' ', tostring(_p[""OriginalFormat""])),
     CountRaw = tostring(DetailsJson[""Count""])
 {envFilter}
@@ -605,7 +614,7 @@ AppExceptions
 | extend _p = todynamic(Properties)
 | extend
     CorrelationId = tostring(_p[""CorrelationId""]),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(OuterMessage),
     Fingerprint = base64_encode_tostring(tostring(hash(ProblemId))),
@@ -621,7 +630,7 @@ AppTraces
 | extend
     OriginalFormat = tostring(_p[""OriginalFormat""]),
     CorrelationId = tostring(_p[""CorrelationId""]),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(Message),
     SeverityLevel = toint(SeverityLevel),
@@ -637,7 +646,7 @@ AppRequests
 | extend _p = todynamic(Properties)
 | extend
     CorrelationId = tostring(_p[""CorrelationId""]),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = tostring(Name),
     Fingerprint = base64_encode_tostring(tostring(hash(Name))),
@@ -726,7 +735,7 @@ AppExceptions
 | extend
     Fingerprint = base64_encode_tostring(tostring(hash(ProblemId))),
     Message = tostring(OuterMessage),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Id = _ItemId
 | where Fingerprint == ""{fingerprint}""
@@ -739,7 +748,7 @@ AppTraces
 | extend
     OriginalFormat = tostring(_p[""OriginalFormat""]),
     Message = tostring(Message),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Id = _ItemId
 | extend
@@ -756,7 +765,7 @@ AppRequests
 | extend
     Message = tostring(Name),
     Fingerprint = base64_encode_tostring(tostring(hash(Name))),
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = iif(tobool(Success), 1, 3),
     Id = _ItemId
@@ -851,7 +860,7 @@ AppExceptions
     TimeGenerated,
     Fingerprint = base64_encode_tostring(tostring(hash(ProblemId))),
     Message = tostring(OuterMessage),
-    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
+    Environment = trim(' ', {EnvironmentProjection}),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = toint(SeverityLevel)
 {envFilter}
@@ -870,7 +879,7 @@ AppTraces
     TimeGenerated,
     Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource))),
     Message = tostring(Message),
-    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
+    Environment = trim(' ', {EnvironmentProjection}),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = toint(SeverityLevel)
 {envFilter}
@@ -887,7 +896,7 @@ AppRequests
     TimeGenerated,
     Fingerprint = base64_encode_tostring(tostring(hash(Name))),
     Message = tostring(Name),
-    Environment = trim(' ', tostring(_p[""AspNetCoreEnvironment""])),
+    Environment = trim(' ', {EnvironmentProjection}),
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = iif(tobool(coalesce(Success, true)), 1, 3)
 {envFilter}
@@ -968,7 +977,7 @@ AppRequests
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-        var query = @"
+        var query = $@"
 let startup = AppTraces
 | extend _p = todynamic(Properties)
 | where tostring(_p[""Quilt4NetStartup""]) == ""true""
@@ -982,7 +991,7 @@ let fallback = union AppTraces, AppExceptions, AppRequests
 | extend _p = todynamic(Properties)
 | extend
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
-    Environment = coalesce(tostring(_p[""AspNetCoreEnvironment""]), tostring(_p[""deployment.environment""])),
+    Environment = {EnvironmentProjection},
     Version = coalesce(tostring(_p[""application_Version""]), tostring(_p[""service.version""]), tostring(AppVersion))
 | where isnotempty(ApplicationName) and isnotempty(Version)
 | project TimeGenerated, ApplicationName, Environment, Version, Source = ""Log"";
@@ -1045,7 +1054,7 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
 | extend _p = todynamic(Properties)
 | where {wherePredicate}
 | extend
-    Environment = tostring(_p[""AspNetCoreEnvironment""]),
+    Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Message = coalesce(tostring(Message), tostring(OuterMessage), tostring(Name)),
     FingerprintSource = coalesce(tostring(ProblemId), tostring(_p[""OriginalFormat""]), tostring(Message), tostring(Name)),
