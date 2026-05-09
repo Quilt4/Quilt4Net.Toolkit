@@ -70,5 +70,7 @@ public class WhatsLatest
 
 ## Where next
 
-- **[Version matrix](version-matrix.md)** — render the same data as a Blazor table with optional alias folding and conflict detection
-- **[API reference](xref:Quilt4Net.Toolkit)** — every public type and option
+- **[Telemetry identity & correlation](telemetry-identity.md)** — make sure your apps actually emit env / app / version / host / correlation-id properties on every record. `AddQuilt4NetLogging()` registers the OpenTelemetry processors that do this.
+- **[Log views](log-views.md)** — drop in `<LogView />` to get Search / Summary / Detail / Test tabs over the data you just queried, with multi-select filters, per-team browser persistence, the CorrelationId column, and the Stack Trace tab with copy-to-IDE links.
+- **[Version matrix](version-matrix.md)** — render the same data as a Blazor table with optional alias folding and conflict detection.
+- **[API reference](xref:Quilt4Net.Toolkit)** — every public type and option.

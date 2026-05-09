@@ -139,6 +139,8 @@ builder.AddQuilt4NetApplicationInsightsClient();
 | `ClientId` | `null` | For `ClientSecret`: app registration client ID with `Data.Read` permission on Application Insights API. For `ManagedIdentity`: empty for system-assigned MI, or the user-assigned MI's client ID. For `DefaultAzureCredential`: optional hint, used as the preferred user-assigned MI when MI lights up in the chain. |
 | `ClientSecret` | `null` | Client secret for the app registration. Only required when `AuthMode = ClientSecret`. |
 | `AuthMode` | `ClientSecret` | Authentication mode: `ClientSecret` (service principal), `ManagedIdentity` (Azure-hosted apps), or `DefaultAzureCredential` (chained — same config works locally via `az login` and in Azure via MI). |
+| `EnvironmentOrder` | `["Development", "CI", "Staging", "Test", "Production"]` | Preferred environment ordering for the version matrix. Names not listed render after, alphabetically; rows with empty env render last as `(unknown)`. |
+| `ApplicationAlias` | `[]` | Static `raw → logical` alias map for `VersionMatrixDisplay` consumers that don't pass a per-component `AliasFolder` delegate. Each entry groups one or more raw `cloud_RoleName` values under a single logical application name. |
 
 Configuration path: `Quilt4Net:ApplicationInsights`
 
@@ -185,9 +187,9 @@ Typical setup:
 
 > **Trade-off**: `DefaultAzureCredential` masks *which* underlying credential succeeded. If authentication fails, the error chain is less specific than the explicit modes. For diagnosis, switch to `ClientSecret` or `ManagedIdentity` to isolate the issue.
 
-## Universal telemetry tagging
+## Universal telemetry identity
 
-`AddQuilt4NetLogging()` registers an `ITelemetryInitializer` that tags every Application Insights telemetry item (traces, exceptions, requests, dependencies) with application identity. Works for all app types — Web API, Blazor, WPF, console, worker service.
+`AddQuilt4NetLogging()` configures OpenTelemetry resource attributes **and** registers two `BaseProcessor`s — one for `LogRecord`, one for `Activity` — that copy a fixed set of identity attributes onto every per-record Properties bag. Works for all app types; the Azure Monitor exporter forwards the per-record attributes into `customDimensions`, where KQL can read them.
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -195,13 +197,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddQuilt4NetLogging();
 ```
 
-By default the initializer sets:
+Five attributes attached to every `AppTrace`, `AppException`, `AppRequest` (and outbound `AppDependency`):
 
-| Telemetry property | Default value |
-|---|---|
-| `Cloud.RoleName` | `IHostEnvironment.ApplicationName` → entry assembly name (framework assemblies excluded) |
-| `Component.Version` | Application assembly version |
-| `GlobalProperties["Environment"]` | `IHostEnvironment.EnvironmentName` → `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `"Production"` |
+| Attribute key | Default value | Notes |
+|---|---|---|
+| `service.name` | `IHostEnvironment.ApplicationName` → entry assembly name (framework assemblies excluded) | Also surfaces as the `cloud_RoleName` column. |
+| `service.version` | Entry assembly version | Also surfaces as `application_Version`. |
+| `host.name` | `Environment.MachineName` | Also surfaces as `cloud_RoleInstance`. |
+| `deployment.environment` | `IHostEnvironment.EnvironmentName` → `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `"Production"` | The Azure Monitor exporter does **not** forward arbitrary OTel resource attributes into per-row `Properties`, so the per-record processor copies it in too. |
+| `quilt4net.monitor` | `"Quilt4Net"` (configurable via `MonitorName`) | Identifies which instrumentation produced the row. Useful when several Quilt4Net-hosted services ship to the same workspace. |
 
 Override via callback or `appsettings.json`:
 
@@ -211,6 +215,7 @@ builder.AddQuilt4NetLogging(o =>
     o.ApplicationName = "florida-server";
     o.Version = "2.0.0";
     o.Environment = "Production";
+    o.MonitorName = "florida";
 });
 ```
 
@@ -220,18 +225,21 @@ builder.AddQuilt4NetLogging(o =>
     "Logging": {
       "ApplicationName": "florida-server",
       "Version": "2.0.0",
-      "Environment": "Production"
+      "Environment": "Production",
+      "MonitorName": "florida"
     }
   }
 }
 ```
 
-`AddQuilt4NetLogging()` returns a `Quilt4NetLoggingBuilder` that extension packages can chain off. For example, `Quilt4Net.Toolkit.Api` adds `.AddHttpRequestLogging()` to enable HTTP request/response middleware:
+`AddQuilt4NetLogging()` returns a `Quilt4NetLoggingBuilder` that extension packages can chain off. `Quilt4Net.Toolkit.Api` adds `.AddHttpRequestLogging()` to enable HTTP request/response middleware including the `X-Correlation-ID` propagation scope:
 
 ```csharp
 builder.AddQuilt4NetLogging()
     .AddHttpRequestLogging();
 ```
+
+When `Quilt4Net.Toolkit.Api`'s `CorrelationIdMiddleware` is active, every `ILogger` call inside a request also picks up `customDimensions["CorrelationId"]` automatically — see the Api package README.
 
 ## Measure extensions
 

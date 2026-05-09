@@ -219,16 +219,20 @@ View and search Application Insights logs with the `LogView` component. Requires
 | `SummaryPath` | `null` | Path for the summary page (see below). |
 | `Tab` | `null` | Initially selected tab name (e.g. `"summary"`). Typically bound from a `?tab=` query parameter. |
 | `OnTabChanged` | — | Fires with the new tab name (lowercase) when the user switches tabs. |
+| `ShowTestTab` | `false` | Show the developer-only **Test** tab that triggers logs / exceptions / uncaught throws via `ILogger`. Opt-in so external consumers don't expose log-injection controls accidentally. |
+| `ApplicationAliasMap` | `null` | Optional `raw → logical` dictionary applied to every cell that renders an Application name across the embedded tabs. When null, falls back to `ApplicationInsightsOptions.ApplicationAlias`. See **Application alias rendering** below. |
+| `FilterStorageScope` | `null` | Optional scope key for browser-`localStorage` persistence of the per-tab filter bar selection. When set, state survives reloads under `Quilt4Net.Log.Filters.{scope}.{tab}`. Hosts that want per-team scoping pass the team key. |
+| `SourcePathRoots` | `null` | Project / repository folder names used to shorten file paths on the **Stack Trace** sub-tab in the Detail view. See **Stack Trace + Resharper-friendly file:line** below. |
 
 ### Tabs
 
 | Tab | Description |
 |-----|-------------|
-| **Search** | Free-text search across log entries. |
+| **Search** | Free-text search across log entries. Also surfaces a CorrelationId column with click-to-self-search and a copy button — see **CorrelationId column on Search** below. |
 | **Summary** | Grouped view by error fingerprint with count and last occurrence. |
 | **Measure** | Performance measurements with line charts (elapsed time by action). |
 | **Count** | Log count statistics with column charts. |
-| **Trigger** | Development utility for manually triggering log entries. |
+| **Test** | Opt-in dev utility (set `ShowTestTab="true"`) — triggers traces / exceptions at every `LogLevel`, plus an uncaught throw caught by `Tharga.Blazor.CustomErrorBoundary` so the correlation guid surfaces in `customDimensions["CorrelationId"]` and in the in-page recovery banner. |
 
 ### Navigation
 
@@ -297,9 +301,57 @@ Use `LogDetailView` and `LogSummaryView` to build your own dedicated pages that 
 | `LogDetailView` | `Id` | Log entry ID from the route. |
 | | `Params` | Encoded navigation params from the `p` query string. |
 | | `SummaryPath` | Path to navigate back to the summary page. When null, the fingerprint is shown as plain text. |
+| | `ApplicationAliasMap` | Optional `raw → logical` map (see **Application alias rendering**). |
+| | `SourcePathRoots` | Optional folder names that bound where file paths get stripped (see **Stack Trace + Resharper-friendly file:line**). |
 | `LogSummaryView` | `Fingerprint` | Fingerprint from the route. |
 | | `Params` | Encoded navigation params from the `p` query string. |
 | | `DetailPath` | Path to navigate to a detail page. When null, clicking a row opens an inline detail view. |
+| | `ApplicationAliasMap` | Same as on `LogDetailView`. |
+| | `SourcePathRoots` | Same as on `LogDetailView`. |
+
+### Application alias rendering
+
+The Detail header, the Summary header, and the Application column on the Search / Summary / Count / Measure tabs all render through `<ApplicationName Raw="..." />`. When an `ApplicationAliasMap` is supplied (parameter on `LogView` / `LogDetailView` / `LogSummaryView`, or `ApplicationInsightsOptions.ApplicationAlias` from the core toolkit), each cell shows the logical alias name with the raw `cloud_RoleName` available as a hover tooltip and a dotted underline when they differ. When no map is supplied, the raw name renders as-is.
+
+```razor
+<LogView ApplicationAliasMap="@(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["MyApp.Server"] = "myapp-web",
+        ["MyApp.Server.Client"] = "myapp-web"
+    })" />
+```
+
+For per-tenant / per-team alias maps loaded from a database, build the dictionary on the hosting page and pass it. For static maps shared across the whole app, set `ApplicationInsightsOptions.ApplicationAlias` once at startup and the toolkit picks it up automatically (no parameter needed).
+
+### Filter bar (Source / Level / Application / Environment)
+
+The Search and Summary tabs each show a `<LogFilterBar>` above the grid — four `RadzenSelectBar Multi="true"` rows. Source and Level options come from the `LogSource` / `SeverityLevel` enums; Application and Environment options are populated from the loaded data's distinct values (with alias resolution applied to applications). Filtering replaces Radzen's per-column filter inputs.
+
+When `FilterStorageScope` is set on `LogView`, the bar persists each tab's selection to `localStorage` under `Quilt4Net.Log.Filters.{scope}.{tab}` so the user's choices survive page reloads. Pass the team key, the workspace id, or any other identifier that should isolate persistence.
+
+```razor
+<LogView FilterStorageScope="@team.Key" />
+```
+
+> **Filter scope:** Summary applies the bar's selection client-side to the loaded model (cached). Search currently also applies the bar client-side after the existing server-side `text` / `Range` / `Environment` query — pushing the multi-select into KQL is a possible follow-up for very large result sets.
+
+### CorrelationId column on Search
+
+The Search tab renders a 140 px **Correlation** column showing the first 8 characters of the GUID + `…` in a monospace font, with the full guid available on hover and a `Tharga.Blazor.CopyButton` next to it. Clicking the preview re-runs Search with the full guid as the search text, so "show me every entry sharing this correlation id" is one click.
+
+For the column to be populated, your apps must emit the correlation id as a per-record property. `Quilt4Net.Toolkit.Api`'s `CorrelationIdMiddleware` does this automatically via a logging scope; see the Api package README.
+
+### Stack Trace + Resharper-friendly file:line
+
+The Detail view's **Stack Trace** sub-tab parses `AppExceptions.Details[].parsedStack` into a grid: `# / Assembly / Method / File / Line / Copy`. A "Show frames without file/line" toggle hides system / framework frames by default. Per-row CopyButton produces a `:line N`-suffixed path; when `SourcePathRoots` is supplied, the path is shortened so Resharper / Rider can resolve it from any open solution containing the file:
+
+```razor
+<LogView SourcePathRoots="@(new[] { "MyApp.Server" })" />
+```
+
+With that root configured, a frame whose `fileName` is `D:\a\1\s\MyApp.Server\Features\Team\UserService.cs` line 24 yields the clipboard text `\Features\Team\UserService.cs:line 24` — paste-ready into the IDE's "Find file" prompt or a chat / ticket. Without `SourcePathRoots` configured, the column shows just the filename and the copy gives the full path.
+
+The Stack Trace tab is exception-only; trace and request rows show a friendly "no parsed stack trace available" alert.
 
 ### Breadcrumb integration
 
