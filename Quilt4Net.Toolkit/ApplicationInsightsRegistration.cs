@@ -35,6 +35,7 @@ public static class ApplicationInsightsRegistration
         services.AddSingleton(Options.Create(o));
 
         services.AddTransient<IApplicationInsightsService, ApplicationInsightsService>();
+        services.AddSingleton<IVersionMatrixService, VersionMatrixService>();
         services.AddTransient<IHealthClient, HealthClient>();
 
         services.AddCache(s =>
