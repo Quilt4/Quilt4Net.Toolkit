@@ -9,32 +9,32 @@
     {
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
             <RadzenText Text="Source" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
-            <RadzenSelectBar Data="@_sourceOptions" Value="@_value.Sources" TValue="LogSource[]" Multiple="true" AllowSelectAll="false"
-                             Change="@(EventCallback.Factory.Create<LogSource[]>(this, OnSourcesChanged))" />
+            <RadzenSelectBar Data="@_sourceOptions" Value="@_value.Sources" TValue="IEnumerable<LogSource>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<LogSource>>(this, OnSourcesChanged))" />
         </RadzenStack>
     }
     @if (_levelOptions.Length > 0)
     {
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
             <RadzenText Text="Level" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
-            <RadzenSelectBar Data="@_levelOptions" Value="@_value.Levels" TValue="SeverityLevel[]" Multiple="true" AllowSelectAll="false"
-                             Change="@(EventCallback.Factory.Create<SeverityLevel[]>(this, OnLevelsChanged))" />
+            <RadzenSelectBar Data="@_levelOptions" Value="@_value.Levels" TValue="IEnumerable<SeverityLevel>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<SeverityLevel>>(this, OnLevelsChanged))" />
         </RadzenStack>
     }
     @if (Applications is { Length: > 0 })
     {
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
             <RadzenText Text="Application" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
-            <RadzenSelectBar Data="@Applications" Value="@_value.Applications" TValue="string[]" Multiple="true" AllowSelectAll="false"
-                             Change="@(EventCallback.Factory.Create<string[]>(this, OnApplicationsChanged))" />
+            <RadzenSelectBar Data="@Applications" Value="@_value.Applications" TValue="IEnumerable<string>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, OnApplicationsChanged))" />
         </RadzenStack>
     }
     @if (Environments is { Length: > 0 })
     {
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
             <RadzenText Text="Environment" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
-            <RadzenSelectBar Data="@Environments" Value="@_value.Environments" TValue="string[]" Multiple="true" AllowSelectAll="false"
-                             Change="@(EventCallback.Factory.Create<string[]>(this, OnEnvironmentsChanged))" />
+            <RadzenSelectBar Data="@Environments" Value="@_value.Environments" TValue="IEnumerable<string>" Multiple="true" AllowSelectAll="false"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, OnEnvironmentsChanged))" />
         </RadzenStack>
     }
 </RadzenStack>
@@ -91,10 +91,10 @@
         }
     }
 
-    private Task OnSourcesChanged(LogSource[] value) => UpdateAsync(_value with { Sources = value ?? [] });
-    private Task OnLevelsChanged(SeverityLevel[] value) => UpdateAsync(_value with { Levels = value ?? [] });
-    private Task OnApplicationsChanged(string[] value) => UpdateAsync(_value with { Applications = value ?? [] });
-    private Task OnEnvironmentsChanged(string[] value) => UpdateAsync(_value with { Environments = value ?? [] });
+    private Task OnSourcesChanged(IEnumerable<LogSource> value) => UpdateAsync(_value with { Sources = value?.ToArray() ?? [] });
+    private Task OnLevelsChanged(IEnumerable<SeverityLevel> value) => UpdateAsync(_value with { Levels = value?.ToArray() ?? [] });
+    private Task OnApplicationsChanged(IEnumerable<string> value) => UpdateAsync(_value with { Applications = value?.ToArray() ?? [] });
+    private Task OnEnvironmentsChanged(IEnumerable<string> value) => UpdateAsync(_value with { Environments = value?.ToArray() ?? [] });
 
     private async Task UpdateAsync(LogFilters next)
     {
