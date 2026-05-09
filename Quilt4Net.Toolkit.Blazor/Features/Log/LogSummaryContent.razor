@@ -33,6 +33,8 @@ else
             <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
             <RadzenText Text="@($"{Model.SeverityLevel}")" />
         </RadzenColumn>
+        <RadzenColumn>
+        </RadzenColumn>
     </RadzenRow>
     <RadzenRow>
         <RadzenColumn>
@@ -41,7 +43,7 @@ else
         </RadzenColumn>
         <RadzenColumn>
             <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@Model.Application" />
+            <div><ApplicationName Raw="@Model.Application" /></div>
         </RadzenColumn>
         <RadzenColumn>
             <RadzenText Text="Source" TextStyle="TextStyle.Caption" />

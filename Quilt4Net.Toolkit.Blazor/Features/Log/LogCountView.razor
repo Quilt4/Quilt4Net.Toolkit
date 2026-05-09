@@ -55,7 +55,9 @@ else
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="Message" Property="@nameof(CountData.Message)" />
-                        <RadzenDataGridColumn Title="Application" Property="@nameof(CountData.Application)" />
+                        <RadzenDataGridColumn Title="Application" Property="@nameof(CountData.Application)">
+                            <Template><ApplicationName Raw="@context.Application" /></Template>
+                        </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="Environment" Property="@nameof(CountData.Environment)" />
                         <RadzenDataGridColumn Title="Count" Property="@nameof(CountData.Count)" Filterable="false" />
                     </Columns>

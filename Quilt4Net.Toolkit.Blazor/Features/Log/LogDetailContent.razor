@@ -16,10 +16,6 @@ else
 {
     <RadzenRow>
         <RadzenColumn>
-            <RadzenText Text="Id" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@Model.Id" />
-        </RadzenColumn>
-        <RadzenColumn>
             <RadzenText Text="Fingerprint" TextStyle="TextStyle.Caption" />
             <div>
                 @if (OnSummaryNavigation.HasDelegate || NavOptions.SummaryPath != null)
@@ -34,21 +30,29 @@ else
                 }
             </div>
         </RadzenColumn>
+        <RadzenColumn Size="4">
+            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.SeverityLevel}")" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Id" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@Model.Id" />
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow>
         <RadzenColumn>
             <RadzenText Text="Time Generated" TextStyle="TextStyle.Caption" />
             <div>
                 <span title="@Model.TimeGenerated.ToLocalDateTimeString()">@Model.TimeGenerated.ToLocalDurationString()</span>
             </div>
         </RadzenColumn>
-    </RadzenRow>
-    <RadzenRow>
-        <RadzenColumn Size="4">
-            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@($"{Model.SeverityLevel}")" />
-        </RadzenColumn>
         <RadzenColumn>
             <RadzenText Text="Correlation Id" TextStyle="TextStyle.Caption" />
             <RadzenText Text="@($"{Model.CorrelationId}")" />
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenText Text="Version" TextStyle="TextStyle.Caption" />
+            <RadzenText Text="@($"{Model.Version}")" />
         </RadzenColumn>
     </RadzenRow>
     <RadzenRow>
@@ -58,7 +62,7 @@ else
         </RadzenColumn>
         <RadzenColumn>
             <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
-            <RadzenText Text="@Model.Application" />
+            <div><ApplicationName Raw="@Model.Application" /></div>
         </RadzenColumn>
         <RadzenColumn>
             <RadzenText Text="Source" TextStyle="TextStyle.Caption" />
@@ -72,19 +76,36 @@ else
         </RadzenColumn>
     </RadzenRow>
 
-    <RadzenCard>
-        <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
-                <RadzenSwitch @bind-Value="_showEmptyValues"/>
-                <RadzenText Text="Show empty values"/>
-            </RadzenStack>
-            <pre>@DisplayedJson</pre>
-        </RadzenStack>
-    </RadzenCard>
+    <RadzenTabs>
+        <Tabs>
+            <RadzenTabsItem Text="Details">
+                <p>TODO: Show details in table here.</p>
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Stack Trace">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
+                        <RadzenSwitch @bind-Value="_showUnknownLines" />
+                        <RadzenText Text="Show unknown lines" />
+                    </RadzenStack>
+                </RadzenStack>
+                <p>TODO: Show table with stacktrace. [level, assembly, method, fileName, line, (Copy-button)]</p>
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Raw">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
+                        <RadzenSwitch @bind-Value="_showEmptyValues"/>
+                        <RadzenText Text="Show empty values"/>
+                    </RadzenStack>
+                    <pre>@DisplayedJson</pre>
+                </RadzenStack>
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
 }
 
 @code {
     private bool _showEmptyValues;
+    private bool _showUnknownLines;
     private string _configError;
     private IApplicationInsightsService _ais;
 

@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
-using Azure.Identity;
 using Azure.Monitor.Query.Logs;
 using Azure.Monitor.Query.Logs.Models;
 using Microsoft.Extensions.Logging;
@@ -21,6 +20,15 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     /// </summary>
     internal const string EnvironmentProjection =
         "coalesce(tostring(_p[\"deployment.environment\"]), tostring(_p[\"AspNetCoreEnvironment\"]))";
+
+    /// <summary>
+    /// Canonical KQL fragment for projecting the Version column from any AppTraces /
+    /// AppExceptions / AppRequests row. Reads OTel attribute first (what the per-record
+    /// processor in <c>AddQuilt4NetLogging</c> writes), then a legacy <c>Version</c>
+    /// scope key, then the AI built-in <c>AppVersion</c> column.
+    /// </summary>
+    internal const string VersionProjection =
+        "coalesce(tostring(_p[\"service.version\"]), tostring(_p[\"Version\"]), tostring(AppVersion))";
 
     private static readonly LogsQueryOptions _probeOptions = new() { ServerTimeout = TimeSpan.FromSeconds(5) };
     private readonly ConcurrentDictionary<ClientKey, LogsQueryClient> _clientCache = new();
@@ -616,11 +624,12 @@ AppExceptions
     CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
+    Version = {VersionProjection},
     Message = tostring(OuterMessage),
     Fingerprint = base64_encode_tostring(tostring(hash(ProblemId))),
     SeverityLevel = toint(SeverityLevel),
     Raw = pack_all()
-| project TimeGenerated, Message, Environment, Application, Fingerprint, SeverityLevel, CorrelationId, Raw
+| project TimeGenerated, Message, Environment, Application, Version, Fingerprint, SeverityLevel, CorrelationId, Raw
 | take 1",
 
             LogSource.Trace => $@"
@@ -632,12 +641,13 @@ AppTraces
     CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
+    Version = {VersionProjection},
     Message = tostring(Message),
     SeverityLevel = toint(SeverityLevel),
     Raw = pack_all()
 | extend
     Fingerprint = base64_encode_tostring(tostring(hash(OriginalFormat)))
-| project TimeGenerated, Message, Environment, Application, Fingerprint, SeverityLevel, CorrelationId, Raw
+| project TimeGenerated, Message, Environment, Application, Version, Fingerprint, SeverityLevel, CorrelationId, Raw
 | take 1",
 
             LogSource.Request => $@"
@@ -648,11 +658,12 @@ AppRequests
     CorrelationId = tostring(_p[""CorrelationId""]),
     Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
+    Version = {VersionProjection},
     Message = tostring(Name),
     Fingerprint = base64_encode_tostring(tostring(hash(Name))),
     SeverityLevel = iif(tobool(Success), 1, 3),
     Raw = pack_all()
-| project TimeGenerated, Message, Environment, Application, Fingerprint, SeverityLevel, CorrelationId, Raw
+| project TimeGenerated, Message, Environment, Application, Version, Fingerprint, SeverityLevel, CorrelationId, Raw
 | take 1",
 
             _ => throw new ArgumentOutOfRangeException(nameof(source))
@@ -676,6 +687,7 @@ AppRequests
         var messageIndex = GetColumnIndex(table, "Message");
         var envIndex = GetColumnIndex(table, "Environment");
         var appIndex = GetColumnIndex(table, "Application");
+        var versionIndex = GetColumnIndex(table, "Version");
         var fpIndex = GetColumnIndex(table, "Fingerprint");
         var severityIndex = GetColumnIndex(table, "SeverityLevel");
         var correlationIndex = GetColumnIndex(table, "CorrelationId");
@@ -706,6 +718,7 @@ AppRequests
             Source = source,
             SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
             CorrelationId = row[correlationIndex]?.ToString() ?? string.Empty,
+            Version = row[versionIndex]?.ToString() ?? string.Empty,
             Fingerprint = row[fpIndex]?.ToString()!,
             TimeGenerated = GetDateTime(row, timeIndex),
             Message = row[messageIndex]?.ToString()!,

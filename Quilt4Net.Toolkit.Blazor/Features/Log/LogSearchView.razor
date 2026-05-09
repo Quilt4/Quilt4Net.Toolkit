@@ -40,7 +40,9 @@ else if (Model != null)
             <RadzenDataGridColumn Title="Source" Property="@nameof(LogItem.Source)" />
             <RadzenDataGridColumn Title="Level" Property="@nameof(LogItem.SeverityLevel)" />
             <RadzenDataGridColumn Title="Message" Property="@nameof(LogItem.Message)" />
-            <RadzenDataGridColumn Title="Application" Property="@nameof(LogItem.Application)" />
+            <RadzenDataGridColumn Title="Application" Property="@nameof(LogItem.Application)">
+                <Template><ApplicationName Raw="@context.Application" /></Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Environment" Property="@nameof(LogItem.Environment)" />
         </Columns>
     </RadzenDataGrid>

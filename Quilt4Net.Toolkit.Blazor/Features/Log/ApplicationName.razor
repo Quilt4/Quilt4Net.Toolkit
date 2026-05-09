@@ -1,0 +1,39 @@
+@*
+    Renders an application name with alias resolution applied:
+      - empty / null  → "(unknown)" placeholder
+      - raw matches a known logical alias  → renders the logical name with the raw
+        value as a tooltip and a dotted underline (so the actual emitter is one
+        hover away).
+      - no alias map cascaded, or raw is not in the map → renders the raw name as-is.
+
+    Consumes IReadOnlyDictionary<string, string> ApplicationAliasMap from a cascading
+    value set by an entry-point component (LogView / LogDetailView / LogSummaryView).
+*@
+
+@if (string.IsNullOrEmpty(Raw))
+{
+    <span style="color: var(--rz-text-tertiary-color); font-style: italic;">(unknown)</span>
+}
+else
+{
+    var logical = ApplicationAliasMap is { Count: > 0 } map
+        ? map.GetValueOrDefault(Raw, Raw)
+        : Raw;
+
+    if (!string.Equals(Raw, logical, StringComparison.OrdinalIgnoreCase))
+    {
+        <span title="@Raw" style="border-bottom: 1px dotted var(--rz-text-tertiary-color);">@logical</span>
+    }
+    else
+    {
+        @Raw
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string Raw { get; set; } = default!;
+
+    [CascadingParameter(Name = "ApplicationAliasMap")]
+    public IReadOnlyDictionary<string, string> ApplicationAliasMap { get; set; }
+}

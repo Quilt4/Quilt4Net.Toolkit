@@ -1,19 +1,26 @@
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
+@using Quilt4Net.Toolkit
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IServiceProvider ServiceProvider
 
 @if (_params != null && _params.GetSource().HasValue && _params.GetRange() != TimeSpan.Zero)
 {
     <CascadingValue Value="_navOptions">
-        <LogSummaryContent Fingerprint="@Fingerprint"
-                           Environment="@_params.Environment"
-                           Range="@_params.GetRange()"
-                           Source="@_params.GetSource()"
-                           Context="@_params.GetContext()" />
+        <CascadingValue Name="ApplicationAliasMap" Value="@_effectiveAliasMap">
+            <LogSummaryContent Fingerprint="@Fingerprint"
+                               Environment="@_params.Environment"
+                               Range="@_params.GetRange()"
+                               Source="@_params.GetSource()"
+                               Context="@_params.GetContext()" />
+        </CascadingValue>
     </CascadingValue>
 }
 
 @code {
     private LogNavParams _params;
     private LogNavigationOptions _navOptions;
+    private IReadOnlyDictionary<string, string> _effectiveAliasMap;
 
     /// <summary>
     /// The fingerprint identifying the log summary group.
@@ -36,6 +43,14 @@
     [Parameter]
     public string DetailPath { get; set; }
 
+    /// <summary>
+    /// Optional <c>raw → logical</c> application alias map applied to Application cells in
+    /// the embedded summary view. When null, the toolkit falls back to the static map
+    /// configured via <see cref="ApplicationInsightsOptions.ApplicationAlias"/>.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> ApplicationAliasMap { get; set; }
+
     protected override void OnParametersSet()
     {
         _params = LogNavParams.Decode(Params);
@@ -43,5 +58,12 @@
         {
             DetailPath = DetailPath
         };
+        _effectiveAliasMap = ApplicationAliasMap ?? ResolveStaticMap();
+    }
+
+    private IReadOnlyDictionary<string, string> ResolveStaticMap()
+    {
+        var options = ServiceProvider.GetService<IOptions<ApplicationInsightsOptions>>()?.Value;
+        return options?.ApplicationAlias?.ToResolverDictionary();
     }
 }

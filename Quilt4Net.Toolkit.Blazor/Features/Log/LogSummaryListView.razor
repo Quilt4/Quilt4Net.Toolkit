@@ -34,7 +34,9 @@ else
             <RadzenDataGridColumn Title="Source" Property="@nameof(SummarySubset.Source)"/>
             <RadzenDataGridColumn Title="Level" Property="@nameof(SummarySubset.SeverityLevel)"/>
             <RadzenDataGridColumn Title="Message" Property="@nameof(SummarySubset.Message)"/>
-            <RadzenDataGridColumn Title="Application" Property="@nameof(SummarySubset.Application)"/>
+            <RadzenDataGridColumn Title="Application" Property="@nameof(SummarySubset.Application)">
+                <Template><ApplicationName Raw="@context.Application" /></Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Environment" Property="@nameof(SummarySubset.Environment)"/>
         </Columns>
     </RadzenDataGrid>
