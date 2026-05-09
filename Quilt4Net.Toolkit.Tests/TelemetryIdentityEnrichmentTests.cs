@@ -123,11 +123,13 @@ public class TelemetryIdentityEnrichmentTests
         public override void OnEnd(LogRecord data) => _capture(data);
     }
 
-    private sealed class SeedProcessor : BaseProcessor<LogRecord>
+    // The Tests project doesn't enable nullable annotations so we erase to non-nullable
+    // before assigning to LogRecord.Attributes (its declared type uses object? but the
+    // runtime accepts the equivalent non-annotated payload — the cast is safe and the
+    // alternative spelling avoids CS8632 in this project).
+    private sealed class SeedProcessor(IList<KeyValuePair<string, object>> attrs) : BaseProcessor<LogRecord>
     {
-        private readonly IReadOnlyList<KeyValuePair<string, object?>> _attrs;
-        public SeedProcessor(IList<KeyValuePair<string, object>> attrs) =>
-            _attrs = attrs.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)).ToList();
-        public override void OnEnd(LogRecord data) => data.Attributes = _attrs;
+        public override void OnEnd(LogRecord data)
+            => data.Attributes = (IReadOnlyList<KeyValuePair<string, object>>)attrs;
     }
 }
