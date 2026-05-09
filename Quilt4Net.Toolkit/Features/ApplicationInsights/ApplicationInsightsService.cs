@@ -238,6 +238,7 @@ AppExceptions
     SeverityLevel,
     Id,
     Fingerprint,
+    CorrelationId,
     OperationId
 | order by TimeGenerated desc";
 
@@ -255,6 +256,7 @@ AppExceptions
             var messageIndex = GetColumnIndex(table, "Message");
             var environmentIndex = GetColumnIndex(table, "Environment");
             var applicationIndex = GetColumnIndex(table, "ApplicationName");
+            var correlationIndex = GetColumnIndex(table, "CorrelationId");
 
             foreach (var row in table.Rows)
             {
@@ -267,7 +269,8 @@ AppExceptions
                     SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
                     Message = row[messageIndex]?.ToString(),
                     Environment = row[environmentIndex]?.ToString(),
-                    Application = row[applicationIndex]?.ToString()
+                    Application = row[applicationIndex]?.ToString(),
+                    CorrelationId = row[correlationIndex]?.ToString() ?? string.Empty
                 };
             }
         }
@@ -299,6 +302,7 @@ AppTraces
     SeverityLevel,
     Id,
     Fingerprint,
+    CorrelationId,
     OperationId
 | order by TimeGenerated desc";
 
@@ -316,6 +320,7 @@ AppTraces
             var messageIndex = GetColumnIndex(table, "Message");
             var environmentIndex = GetColumnIndex(table, "Environment");
             var applicationIndex = GetColumnIndex(table, "ApplicationName");
+            var correlationIndex = GetColumnIndex(table, "CorrelationId");
 
             foreach (var row in table.Rows)
             {
@@ -328,7 +333,8 @@ AppTraces
                     SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
                     Message = row[messageIndex]?.ToString(),
                     Environment = row[environmentIndex]?.ToString(),
-                    Application = row[applicationIndex]?.ToString()
+                    Application = row[applicationIndex]?.ToString(),
+                    CorrelationId = row[correlationIndex]?.ToString() ?? string.Empty
                 };
             }
         }
@@ -360,6 +366,7 @@ AppRequests
     SeverityLevel,
     Id,
     Fingerprint,
+    CorrelationId,
     OperationId,
     ResultCode,
     Success
@@ -379,6 +386,7 @@ AppRequests
             var messageIndex = GetColumnIndex(table, "Message");
             var environmentIndex = GetColumnIndex(table, "Environment");
             var applicationIndex = GetColumnIndex(table, "ApplicationName");
+            var correlationIndex = GetColumnIndex(table, "CorrelationId");
 
             foreach (var row in table.Rows)
             {
@@ -391,7 +399,8 @@ AppRequests
                     SeverityLevel = (SeverityLevel)GetInt(row, severityIndex),
                     Message = row[messageIndex]?.ToString(),
                     Environment = row[environmentIndex]?.ToString(),
-                    Application = row[applicationIndex]?.ToString()
+                    Application = row[applicationIndex]?.ToString(),
+                    CorrelationId = row[correlationIndex]?.ToString() ?? string.Empty
                 };
             }
         }

@@ -17,6 +17,7 @@
 
 <CascadingValue Value="_navOptions">
 <CascadingValue Name="ApplicationAliasMap" Value="@_effectiveAliasMap">
+<CascadingValue Name="FilterStorageScope" Value="@FilterStorageScope">
     <RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
         <RadzenColumn Visible="@ShowRangeSelector">
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
@@ -60,6 +61,7 @@
             </RadzenAlert>
         </ErrorContent>
     </LoggingErrorBoundary>
+</CascadingValue>
 </CascadingValue>
 </CascadingValue>
 
@@ -129,6 +131,16 @@
     /// </summary>
     [Parameter]
     public IReadOnlyDictionary<string, string> ApplicationAliasMap { get; set; }
+
+    /// <summary>
+    /// Optional scope key for browser-localStorage persistence of the per-tab filter bar
+    /// state (Source / Level / Application / Environment multi-selects on the Summary
+    /// and Search tabs). When supplied, filter state survives reloads and is keyed under
+    /// <c>Quilt4Net.Log.Filters.{scope}.{tab}</c>. Hosts that want per-team scoping
+    /// (e.g. Quilt4Net.Server) pass the team key. When null, filters reset on reload.
+    /// </summary>
+    [Parameter]
+    public string FilterStorageScope { get; set; }
 
     /// <summary>
     /// Fires when the user switches tabs, passing the new tab name (lowercase).

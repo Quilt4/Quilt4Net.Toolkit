@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Quilt4Net.Toolkit.Api\Quilt4Net.Toolkit.Api.csproj" />
     <ProjectReference Include="..\Quilt4Net.Toolkit.Blazor\Quilt4Net.Toolkit.Blazor.csproj" />
   </ItemGroup>
 
