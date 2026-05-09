@@ -1,0 +1,180 @@
+@using Quilt4Net.Toolkit
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@using Microsoft.Extensions.Logging
+@using Microsoft.Extensions.Options
+@inject IVersionMatrixService VersionMatrixService
+@inject IOptions<ApplicationInsightsOptions> Options
+@inject ILogger<VersionMatrixDisplay> Logger
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
+        <RadzenButton Icon="refresh" Text="Refresh" Click="OnRefreshAsync" Disabled="@_loading" ButtonStyle="ButtonStyle.Secondary" />
+        @if (_view != null)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" Text="@($"Updated {_view.LastRefreshedUtc:u}")" />
+        }
+    </RadzenStack>
+
+    @if (_loading)
+    {
+        <RadzenText Text="Loading..." />
+    }
+    else if (_error != null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Failed to load version matrix" AllowClose="false" Text="@_error" />
+    }
+    else if (_view == null || _view.Applications.Count == 0)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false" Text="No version data found in the configured time window." />
+    }
+    else
+    {
+        <table class="version-matrix">
+            <thead>
+                <tr>
+                    <th>Application</th>
+                    @foreach (var env in _orderedEnvironments)
+                    {
+                        <th>@env</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var app in _view.Applications)
+                {
+                    <tr>
+                        <td><strong>@app</strong></td>
+                        @foreach (var env in _orderedEnvironments)
+                        {
+                            <td>
+                                @if (_view.TryGetCell(app, env, out var cell))
+                                {
+                                    var hasAlias = _view.TryGetAlias(app, env, out var alias);
+                                    var lastSeenLabel = hasAlias
+                                        ? $"Last seen {cell.LastSeen:u}\nMerged from: {string.Join(", ", alias.SourceNames)}"
+                                        : $"Last seen {cell.LastSeen:u}";
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+                                        <span title="@lastSeenLabel">@cell.Version</span>
+                                        @if (cell.Source == VersionMatrixSource.Startup)
+                                        {
+                                            <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="startup" Title="Identified from a Quilt4Net startup log entry" />
+                                        }
+                                        else
+                                        {
+                                            <RadzenBadge BadgeStyle="BadgeStyle.Light" Text="log" Title="Identified by scanning regular logs" />
+                                        }
+                                        @if (hasAlias && alias.HasConflict)
+                                        {
+                                            var conflictDetail = string.Join("\n", alias.ConflictingVersions.Select(c => $"{c.SourceName}: {c.Version} ({c.LastSeen:u})"));
+                                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text="conflict" Title="@($"Source apps disagree on version:\n{conflictDetail}")" />
+                                        }
+                                    </RadzenStack>
+                                }
+                                else
+                                {
+                                    <RadzenText TextStyle="TextStyle.Caption" Text="—" />
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</RadzenStack>
+
+<style>
+    .version-matrix { border-collapse: collapse; }
+    .version-matrix th, .version-matrix td {
+        border: 1px solid var(--rz-base);
+        padding: 0.4rem 0.8rem;
+        text-align: left;
+        color: var(--rz-text-color);
+    }
+    .version-matrix thead th {
+        background-color: var(--rz-base);
+        font-weight: 600;
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public IApplicationInsightsContext Context { get; set; } = default!;
+
+    [Parameter]
+    public TimeSpan? Lookback { get; set; }
+
+    /// <summary>
+    /// Per-component alias-folding override. When set, wins over the static
+    /// <see cref="ApplicationInsightsOptions.ApplicationAlias"/> map. Hosts with a dynamic alias
+    /// source (e.g. per-team Mongo lookups) supply this; external/static consumers leave it
+    /// null and rely on the options-bound map.
+    /// </summary>
+    [Parameter]
+    public Func<VersionMatrixView, CancellationToken, Task<VersionMatrixView>> AliasFolder { get; set; }
+
+    /// <summary>
+    /// Per-component environment ordering override. When set, wins over
+    /// <see cref="ApplicationInsightsOptions.EnvironmentOrder"/>. Hosts with a dynamic
+    /// environment source (e.g. per-team) supply this.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string> EnvironmentOrder { get; set; }
+
+    private VersionMatrixView _view;
+    private IReadOnlyList<string> _orderedEnvironments = [];
+    private bool _loading;
+    private string _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(forceRefresh: false);
+    }
+
+    private async Task OnRefreshAsync()
+    {
+        await LoadAsync(forceRefresh: true);
+    }
+
+    private async Task LoadAsync(bool forceRefresh)
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var raw = forceRefresh
+                ? await VersionMatrixService.RefreshAsync(Context, Lookback)
+                : await VersionMatrixService.GetAsync(Context, Lookback);
+
+            VersionMatrixView folded;
+            if (AliasFolder != null)
+            {
+                folded = await AliasFolder(raw, CancellationToken.None);
+            }
+            else if (Options.Value.ApplicationAlias is { Length: > 0 } staticMap)
+            {
+                folded = StaticAliasFolder.Fold(raw, staticMap);
+            }
+            else
+            {
+                folded = raw;
+            }
+
+            var order = EnvironmentOrder ?? Options.Value.EnvironmentOrder;
+            _orderedEnvironments = EnvironmentOrdering.Order(folded.Environments, order);
+            _view = folded;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load version matrix.");
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+}

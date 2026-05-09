@@ -41,4 +41,21 @@ public record ApplicationInsightsOptions
     /// Use <see cref="ApplicationInsightsAuthMode.DefaultAzureCredential"/> for a chained credential that works locally (via <c>az login</c>) and in Azure (via Managed Identity) with the same configuration.
     /// </summary>
     public ApplicationInsightsAuthMode AuthMode { get; set; } = ApplicationInsightsAuthMode.ClientSecret;
+
+    /// <summary>
+    /// Preferred environment ordering for the version matrix. Environments listed here render
+    /// in the given order; environments seen in telemetry but not listed render after, sorted
+    /// alphabetically; environments with empty names render last as <c>(unknown)</c>.
+    /// Falls back to <c>["Development", "CI", "Staging", "Test", "Production"]</c> when null/empty.
+    /// </summary>
+    public string[] EnvironmentOrder { get; set; }
+
+    /// <summary>
+    /// Static application alias map used by <see cref="Quilt4Net.Toolkit.Features.ApplicationInsights.IVersionMatrixService"/>
+    /// consumers that don't pass a per-component AliasFolder. Each entry groups one or more raw
+    /// <c>cloud_RoleName</c> values under a single logical application name. Hosts with a dynamic
+    /// alias source (e.g. per-team Mongo lookups) bypass this by passing an AliasFolder delegate
+    /// directly to the component.
+    /// </summary>
+    public ApplicationAliasMap[] ApplicationAlias { get; set; } = [];
 }
