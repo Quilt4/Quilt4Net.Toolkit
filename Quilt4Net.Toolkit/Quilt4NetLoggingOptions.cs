@@ -30,4 +30,12 @@ public record Quilt4NetLoggingOptions
     /// Default resolution: IHostEnvironment.EnvironmentName → DOTNET_ENVIRONMENT → ASPNETCORE_ENVIRONMENT → "Production".
     /// </summary>
     public string Environment { get; set; }
+
+    /// <summary>
+    /// Identifier for the instrumentation source emitting the telemetry.
+    /// Surfaces as <c>customDimensions["quilt4net.monitor"]</c> on every trace, exception
+    /// and request, so KQL queries can scope to telemetry produced by Quilt4Net (or by a
+    /// per-deployment override) without parsing message text. Default is <c>"Quilt4Net"</c>.
+    /// </summary>
+    public string MonitorName { get; set; } = "Quilt4Net";
 }

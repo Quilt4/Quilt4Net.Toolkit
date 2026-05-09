@@ -24,10 +24,14 @@ public record LoggingOptions
     public bool UseCorrelationId { get; set; } = true;
 
     /// <summary>
-    /// Monitor name used to track log-items to selected monitor.
-    /// If set to empty string the value will be omitted.
-    /// Default is Quilt4Net.
+    /// Monitor name used to identify log items from this Quilt4Net instrumentation.
     /// </summary>
+    /// <remarks>
+    /// Moved to <c>Quilt4NetLoggingOptions.MonitorName</c> so the value is attached to every
+    /// trace, exception and request via the OTel processors registered by
+    /// <c>AddQuilt4NetLogging</c>. Setting it here has no effect.
+    /// </remarks>
+    [Obsolete("Set MonitorName on Quilt4NetLoggingOptions (AddQuilt4NetLogging(o => o.MonitorName = ...)) instead. The value is now attached as customDimensions[\"quilt4net.monitor\"] on every record, not just AppRequests.")]
     public string MonitorName { get; set; } = Constants.Monitor;
 
     /// <summary>

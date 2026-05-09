@@ -80,13 +80,9 @@ public class RequestResponseLoggingMiddleware
             {
                 telemetry.Properties["UserId"] = context.User.Identity?.Name ?? "Anonymous";
                 if (!string.IsNullOrEmpty(correlationId)) telemetry.Properties["CorrelationId"] = correlationId;
-                var asm = Assembly.GetEntryAssembly();
-                var nm = asm?.GetName();
-                if (nm != null)
-                {
-                    telemetry.Properties["ApplicationName"] = nm.Name;
-                    telemetry.Properties["Version"] = $"{nm.Version}";
-                }
+                // ApplicationName + Version intentionally not duplicated here — AddQuilt4NetLogging
+                // attaches service.name / service.version to every record/span via OTel processors,
+                // which the Azure Monitor exporter forwards into customDimensions for AppRequests too.
             }
 
             sw.Start();
@@ -317,9 +313,11 @@ public class RequestResponseLoggingMiddleware
 
     private Dictionary<string, string> BuildDetails() //Exception e)
     {
+        // "Monitor" intentionally omitted — AddQuilt4NetLogging attaches it to every record
+        // as customDimensions["quilt4net.monitor"], so it no longer needs to live inside
+        // this per-request Details JSON blob.
         var dictionary = new Dictionary<string, string>
         {
-            { "Monitor", _options?.MonitorName ?? Constants.Monitor },
             { "Method", "Http" }
         };
 
