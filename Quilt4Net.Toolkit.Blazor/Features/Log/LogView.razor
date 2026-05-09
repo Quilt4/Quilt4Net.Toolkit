@@ -18,6 +18,7 @@
 <CascadingValue Value="_navOptions">
 <CascadingValue Name="ApplicationAliasMap" Value="@_effectiveAliasMap">
 <CascadingValue Name="FilterStorageScope" Value="@FilterStorageScope">
+<CascadingValue Name="SourcePathRoots" Value="@SourcePathRoots">
     <RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
         <RadzenColumn Visible="@ShowRangeSelector">
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
@@ -61,6 +62,7 @@
             </RadzenAlert>
         </ErrorContent>
     </LoggingErrorBoundary>
+</CascadingValue>
 </CascadingValue>
 </CascadingValue>
 </CascadingValue>
@@ -141,6 +143,17 @@
     /// </summary>
     [Parameter]
     public string FilterStorageScope { get; set; }
+
+    /// <summary>
+    /// Project / repository folder names used to shorten file paths in the LogDetailContent
+    /// Stack Trace tab. When a path contains any of these names, everything up to (and
+    /// including) the rightmost match is stripped — leaving a leading-slash relative path
+    /// like <c>\Features\Team\UserService.cs:line 24</c> that Resharper / Rider can resolve
+    /// from any open solution containing that file. Typical Server use:
+    /// <c>SourcePathRoots="@(new[] { "Quilt4Net.Server" })"</c>.
+    /// </summary>
+    [Parameter]
+    public string[] SourcePathRoots { get; set; }
 
     /// <summary>
     /// Fires when the user switches tabs, passing the new tab name (lowercase).

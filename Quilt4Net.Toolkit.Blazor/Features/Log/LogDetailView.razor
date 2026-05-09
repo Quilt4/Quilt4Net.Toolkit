@@ -8,11 +8,13 @@
 {
     <CascadingValue Value="_navOptions">
         <CascadingValue Name="ApplicationAliasMap" Value="@_effectiveAliasMap">
-            <LogDetailContent Id="@Id"
-                              Environment="@_params.Environment"
-                              Range="@_params.GetRange()"
-                              Source="@_params.GetSource()"
-                              Context="@_params.GetContext()" />
+            <CascadingValue Name="SourcePathRoots" Value="@SourcePathRoots">
+                <LogDetailContent Id="@Id"
+                                  Environment="@_params.Environment"
+                                  Range="@_params.GetRange()"
+                                  Source="@_params.GetSource()"
+                                  Context="@_params.GetContext()" />
+            </CascadingValue>
         </CascadingValue>
     </CascadingValue>
 }
@@ -51,6 +53,13 @@
     /// </summary>
     [Parameter]
     public IReadOnlyDictionary<string, string> ApplicationAliasMap { get; set; }
+
+    /// <summary>
+    /// Project / repository folder names that mark the boundary used to shorten file paths
+    /// in the Stack Trace tab. See <c>LogView.SourcePathRoots</c> for the full description.
+    /// </summary>
+    [Parameter]
+    public string[] SourcePathRoots { get; set; }
 
     protected override void OnParametersSet()
     {

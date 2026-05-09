@@ -79,22 +79,85 @@ else
     <RadzenTabs>
         <Tabs>
             <RadzenTabsItem Text="Details">
-                <p>TODO: Show details in table here.</p>
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
+                        <RadzenSwitch @bind-Value="_showEmptyValues" />
+                        <RadzenText Text="Show empty values" />
+                    </RadzenStack>
+                    <RadzenDataGrid Data="@DisplayedRows" TItem="DetailRow" AllowPaging="false">
+                        <Columns>
+                            <RadzenDataGridColumn Title="Key" Property="@nameof(DetailRow.Key)" Width="240px" />
+                            <RadzenDataGridColumn Title="Value" Property="@nameof(DetailRow.Value)">
+                                <Template>
+                                    <pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--rz-font-family-monospace, monospace);">@context.Value</pre>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </RadzenStack>
             </RadzenTabsItem>
             <RadzenTabsItem Text="Stack Trace">
-                <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-                    <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
-                        <RadzenSwitch @bind-Value="_showUnknownLines" />
-                        <RadzenText Text="Show unknown lines" />
+                @if (_stackFrames.Count == 0)
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
+                        No parsed stack trace available for this entry. Stack frames are produced for AppExceptions; trace and request rows have none.
+                    </RadzenAlert>
+                }
+                else
+                {
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
+                            <RadzenSwitch @bind-Value="_showUnknownLines" />
+                            <RadzenText Text="Show frames without file/line (system / framework code)" />
+                        </RadzenStack>
+                        <RadzenDataGrid Data="@DisplayedFrames" TItem="StackFrame" AllowPaging="false" AllowSorting="false">
+                            <Columns>
+                                <RadzenDataGridColumn Title="#" Property="@nameof(StackFrame.Level)" Width="60px" />
+                                <RadzenDataGridColumn Title="Assembly" Property="@nameof(StackFrame.Assembly)" Width="180px">
+                                    <Template>
+                                        <span style="font-family: var(--rz-font-family-monospace, monospace);">@context.Assembly</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn Title="Method" Property="@nameof(StackFrame.Method)">
+                                    <Template>
+                                        <span style="font-family: var(--rz-font-family-monospace, monospace);">@context.Method</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn Title="File" Property="@nameof(StackFrame.FileName)" Width="280px">
+                                    <Template>
+                                        @if (!string.IsNullOrEmpty(context.FileName))
+                                        {
+                                            <span title="@context.FileName" style="font-family: var(--rz-font-family-monospace, monospace);">@RenderRelativePath(context)</span>
+                                        }
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn Title="Line" Property="@nameof(StackFrame.Line)" Width="80px">
+                                    <Template>
+                                        @if (context.Line > 0)
+                                        {
+                                            @context.Line
+                                        }
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn Title="" Width="50px" Sortable="false">
+                                    <Template>
+                                        @if (context.HasFileLocation)
+                                        {
+                                            <CopyButton Content="@StackFrameParser.ToResharperPath(context, _sourcePathRoots)" />
+                                        }
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
                     </RadzenStack>
-                </RadzenStack>
-                <p>TODO: Show table with stacktrace. [level, assembly, method, fileName, line, (Copy-button)]</p>
+                }
             </RadzenTabsItem>
             <RadzenTabsItem Text="Raw">
-                <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-                    <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
-                        <RadzenSwitch @bind-Value="_showEmptyValues"/>
-                        <RadzenText Text="Show empty values"/>
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="6px" AlignItems="AlignItems.Center">
+                        <RadzenSwitch @bind-Value="_showEmptyValues" />
+                        <RadzenText Text="Show empty values" />
+                        <CopyButton Content="@DisplayedJson" />
                     </RadzenStack>
                     <pre>@DisplayedJson</pre>
                 </RadzenStack>
@@ -108,8 +171,19 @@ else
     private bool _showUnknownLines;
     private string _configError;
     private IApplicationInsightsService _ais;
+    private IReadOnlyList<StackFrame> _stackFrames = [];
 
-    private string DisplayedJson => _showEmptyValues ? FormatJson(Model.RawJson) : FilterEmptyValues(Model.RawJson);
+    private string DisplayedJson => Model == null ? string.Empty
+        : _showEmptyValues ? FormatJson(Model.RawJson) : FilterEmptyValues(Model.RawJson);
+
+    private IEnumerable<DetailRow> DisplayedRows => Model == null
+        ? []
+        : BuildRows(Model.Raw, _showEmptyValues);
+
+    private IEnumerable<StackFrame> DisplayedFrames => _showUnknownLines
+        ? _stackFrames
+        : _stackFrames.Where(f => f.HasFileLocation);
+
     private LogDetails Model { get; set; }
 
     [Parameter]
@@ -126,6 +200,9 @@ else
 
     [CascadingParameter]
     private LogNavigationOptions _cascadedNavOptions { get; set; }
+
+    [CascadingParameter(Name = "SourcePathRoots")]
+    private string[] _sourcePathRoots { get; set; }
 
     private LogNavigationOptions NavOptions => _cascadedNavOptions ?? new LogNavigationOptions();
 
@@ -153,12 +230,27 @@ else
         if (_configError != null) return;
 
         Model = null;
+        _stackFrames = [];
 
         if (!Source.HasValue || !Range.HasValue) return;
 
         Model = await _ais.GetDetail(Context, Id, Source.Value, Environment, Range.Value);
+        _stackFrames = StackFrameParser.Parse(Model?.Raw);
 
         await base.OnParametersSetAsync();
+    }
+
+    private string RenderRelativePath(StackFrame frame)
+    {
+        if (string.IsNullOrEmpty(frame.FileName)) return string.Empty;
+        if (_sourcePathRoots is { Length: > 0 })
+        {
+            var rel = StackFrameParser.ToResharperPath(frame with { Line = 0 }, _sourcePathRoots);
+            if (!string.IsNullOrEmpty(rel)) return rel;
+        }
+        // Fall back to just the file name if no source root configured.
+        var idx = frame.FileName.LastIndexOfAny(['\\', '/']);
+        return idx >= 0 ? frame.FileName[(idx + 1)..] : frame.FileName;
     }
 
     private async Task OpenSummaryAsync(string fingerprint)
@@ -174,6 +266,37 @@ else
         {
             NavigationManager.NavigateTo($"{NavOptions.SummaryPath}/{fingerprint}?p={p.Encode()}");
         }
+    }
+
+    public sealed record DetailRow(string Key, string Value);
+
+    private static IEnumerable<DetailRow> BuildRows(IReadOnlyDictionary<string, object> raw, bool includeEmpty)
+    {
+        if (raw == null) yield break;
+
+        foreach (var kvp in raw.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var rendered = RenderValue(kvp.Value);
+            if (!includeEmpty && string.IsNullOrEmpty(rendered)) continue;
+            yield return new DetailRow(kvp.Key, rendered);
+        }
+    }
+
+    private static string RenderValue(object value)
+    {
+        if (value is null) return string.Empty;
+        if (value is JsonElement el)
+        {
+            return el.ValueKind switch
+            {
+                JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
+                JsonValueKind.String => el.GetString() ?? string.Empty,
+                JsonValueKind.Object or JsonValueKind.Array => JsonSerializer.Serialize(el, new JsonSerializerOptions { WriteIndented = true }),
+                _ => el.GetRawText()
+            };
+        }
+        var s = value.ToString();
+        return s ?? string.Empty;
     }
 
     private static string FormatJson(string json)
