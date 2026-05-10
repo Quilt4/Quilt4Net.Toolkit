@@ -15,10 +15,11 @@ public class TelemetryIdentityEnrichmentTests
         ApplicationName: "MyApp",
         Version: "1.2.3",
         MachineName: "host-42",
-        MonitorName: "Quilt4Net");
+        MonitorName: "Quilt4Net",
+        ServiceInstanceId: "Thargelion");
 
     [Fact]
-    public void LogProcessor_attaches_all_five_attributes_to_a_record()
+    public void LogProcessor_attaches_all_six_attributes_to_a_record_when_identity_is_full()
     {
         var record = BuildLogRecord();
 
@@ -29,6 +30,21 @@ public class TelemetryIdentityEnrichmentTests
         record.Attributes.Should().Contain(new KeyValuePair<string, object>("service.version", "1.2.3"));
         record.Attributes.Should().Contain(new KeyValuePair<string, object>("host.name", "host-42"));
         record.Attributes.Should().Contain(new KeyValuePair<string, object>("quilt4net.monitor", "Quilt4Net"));
+        record.Attributes.Should().Contain(new KeyValuePair<string, object>("service.instance.id", "Thargelion"));
+    }
+
+    [Fact]
+    public void LogProcessor_omits_service_instance_id_when_identity_value_is_null_for_back_compat()
+    {
+        // Issue #86: when no ServiceInstanceId is configured, the per-record attribute must
+        // remain absent so existing consumers' AppTraces rows look exactly as they do today.
+        var noInstance = FullIdentity with { ServiceInstanceId = null };
+        var record = BuildLogRecord();
+
+        new TelemetryIdentityLogProcessor(noInstance).OnEnd(record);
+
+        record.Attributes.Should().NotContain(kv => kv.Key == "service.instance.id");
+        record.Attributes.Should().Contain(kv => kv.Key == "service.name" && kv.Value!.Equals("MyApp"));
     }
 
     [Fact]
@@ -57,7 +73,7 @@ public class TelemetryIdentityEnrichmentTests
     }
 
     [Fact]
-    public void ActivityProcessor_attaches_all_five_tags_to_an_activity()
+    public void ActivityProcessor_attaches_all_six_tags_to_an_activity_when_identity_is_full()
     {
         using var source = new ActivitySource(nameof(TelemetryIdentityEnrichmentTests));
         using var listener = new ActivityListener
@@ -75,6 +91,26 @@ public class TelemetryIdentityEnrichmentTests
         activity.GetTagItem("service.version").Should().Be("1.2.3");
         activity.GetTagItem("host.name").Should().Be("host-42");
         activity.GetTagItem("quilt4net.monitor").Should().Be("Quilt4Net");
+        activity.GetTagItem("service.instance.id").Should().Be("Thargelion");
+    }
+
+    [Fact]
+    public void ActivityProcessor_omits_service_instance_id_tag_when_identity_value_is_null()
+    {
+        using var source = new ActivitySource(nameof(TelemetryIdentityEnrichmentTests));
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = _ => true,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+        };
+        ActivitySource.AddActivityListener(listener);
+        using var activity = source.StartActivity("test")!;
+
+        var noInstance = FullIdentity with { ServiceInstanceId = null };
+        new TelemetryIdentityActivityProcessor(noInstance).OnEnd(activity);
+
+        activity.GetTagItem("service.instance.id").Should().BeNull();
+        activity.GetTagItem("service.name").Should().Be("MyApp");
     }
 
     [Fact]

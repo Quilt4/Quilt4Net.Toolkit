@@ -56,6 +56,48 @@ public class Quilt4NetStartupLoggerTests
     }
 
     [Fact]
+    public void Log_includes_service_instance_id_in_brackets_when_set()
+    {
+        // Issue #86: when ServiceInstanceId is configured, the startup line surfaces it
+        // between the application name and the version so multi-deployment hosts are
+        // distinguishable at-a-glance, e.g. "Eplicta.FortDocs.Server [Thargelion] v1.2.9 ..."
+        var capture = new CapturingLogger();
+        var options = new Quilt4NetLoggingOptions
+        {
+            ApplicationName = "Eplicta.FortDocs.Server",
+            ServiceInstanceId = "Thargelion",
+            Version = "1.2.9.0",
+            Environment = "CI"
+        };
+
+        Quilt4NetStartupLogger.Log(capture, options);
+
+        capture.Entries[0].FormattedMessage
+            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server [Thargelion] v1.2.9.0 in CI");
+    }
+
+    [Fact]
+    public void Log_omits_brackets_when_service_instance_id_is_null_for_back_compat()
+    {
+        // The historical message shape must be preserved when the new option is unset, so
+        // existing log scrapers / dashboards that match the old format don't regress.
+        var capture = new CapturingLogger();
+        var options = new Quilt4NetLoggingOptions
+        {
+            ApplicationName = "Eplicta.FortDocs.Server",
+            ServiceInstanceId = null,
+            Version = "1.2.9.0",
+            Environment = "CI"
+        };
+
+        Quilt4NetStartupLogger.Log(capture, options);
+
+        capture.Entries[0].FormattedMessage
+            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server v1.2.9.0 in CI")
+            .And.NotContain("[");
+    }
+
+    [Fact]
     public async Task Hosted_service_emits_log_on_StartAsync()
     {
         var capture = new CapturingLogger<Quilt4NetStartupHostedService>();

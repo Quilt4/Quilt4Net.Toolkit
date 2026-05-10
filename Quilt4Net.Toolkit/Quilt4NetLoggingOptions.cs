@@ -38,4 +38,21 @@ public record Quilt4NetLoggingOptions
     /// per-deployment override) without parsing message text. Default is <c>"Quilt4Net"</c>.
     /// </summary>
     public string MonitorName { get; set; } = "Quilt4Net";
+
+    /// <summary>
+    /// Logical instance identifier used to disambiguate multiple deployments of the same
+    /// compiled service (same <c>service.name</c>) — for example a multi-tenanted or
+    /// multi-branded deployment of one binary. Maps to OpenTelemetry resource attribute
+    /// <c>service.instance.id</c> (surfaces as <c>cloud_RoleInstance</c> and
+    /// <c>customDimensions["service.instance.id"]</c> in Application Insights).
+    ///
+    /// Resolution order if this property is null:
+    /// <list type="number">
+    /// <item><c>OTEL_RESOURCE_ATTRIBUTES</c> env var (parsed for <c>service.instance.id=...</c>).</item>
+    /// <item><c>QUILT4NET_SERVICE_INSTANCE_ID</c> env var.</item>
+    /// <item>Falls back to <c>MachineName</c> on the OTel resource (today's behaviour) and
+    ///       <i>absent</i> from per-record customDimensions — no breaking change for existing consumers.</item>
+    /// </list>
+    /// </summary>
+    public string ServiceInstanceId { get; set; }
 }
