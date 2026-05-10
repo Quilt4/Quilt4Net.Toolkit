@@ -44,6 +44,12 @@ public static class LoggingRegistration
 
         options?.Invoke(o);
 
+        // Resolve service.instance.id AFTER the option lambda so the user's explicit value
+        // wins, then fall back to the OTel-standard env var, then the Quilt4Net shorthand.
+        // Storing the resolved value back onto the options so the startup-line emitter
+        // reads the same value the resource gets.
+        o.ServiceInstanceId = Features.Logging.ServiceInstanceIdResolver.Resolve(o.ServiceInstanceId);
+
         services.AddSingleton(o);
 
         services.AddHostedService<Quilt4NetStartupHostedService>();
@@ -53,17 +59,23 @@ public static class LoggingRegistration
             ApplicationName: o.ApplicationName,
             Version: o.Version,
             MachineName: System.Environment.MachineName,
-            MonitorName: o.MonitorName);
+            MonitorName: o.MonitorName,
+            ServiceInstanceId: o.ServiceInstanceId);
 
         services.AddOpenTelemetry()
             .ConfigureResource(resource =>
             {
                 if (!string.IsNullOrEmpty(o.ApplicationName))
                 {
+                    // serviceInstanceId: when the user / env supplied a value, surface it on the
+                    // resource (so cloud_RoleInstance carries the variant); otherwise keep the
+                    // historical MachineName fallback so existing consumers see no change.
                     resource.AddService(
                         serviceName: o.ApplicationName,
                         serviceVersion: string.IsNullOrEmpty(o.Version) ? null : o.Version,
-                        serviceInstanceId: System.Environment.MachineName);
+                        serviceInstanceId: string.IsNullOrEmpty(o.ServiceInstanceId)
+                            ? System.Environment.MachineName
+                            : o.ServiceInstanceId);
                 }
 
                 if (!string.IsNullOrEmpty(o.Environment))

@@ -197,15 +197,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddQuilt4NetLogging();
 ```
 
-Five attributes attached to every `AppTrace`, `AppException`, `AppRequest` (and outbound `AppDependency`):
+Up to six attributes attached to every `AppTrace`, `AppException`, `AppRequest` (and outbound `AppDependency`):
 
 | Attribute key | Default value | Notes |
 |---|---|---|
 | `service.name` | `IHostEnvironment.ApplicationName` → entry assembly name (framework assemblies excluded) | Also surfaces as the `cloud_RoleName` column. |
 | `service.version` | Entry assembly version | Also surfaces as `application_Version`. |
-| `host.name` | `Environment.MachineName` | Also surfaces as `cloud_RoleInstance`. |
+| `host.name` | `Environment.MachineName` | Also surfaces as `cloud_RoleInstance` *unless* `ServiceInstanceId` is set (see below) — in which case the variant id wins for `cloud_RoleInstance` and `host.name` keeps the machine name in `customDimensions`. |
 | `deployment.environment` | `IHostEnvironment.EnvironmentName` → `DOTNET_ENVIRONMENT` → `ASPNETCORE_ENVIRONMENT` → `"Production"` | The Azure Monitor exporter does **not** forward arbitrary OTel resource attributes into per-row `Properties`, so the per-record processor copies it in too. |
 | `quilt4net.monitor` | `"Quilt4Net"` (configurable via `MonitorName`) | Identifies which instrumentation produced the row. Useful when several Quilt4Net-hosted services ship to the same workspace. |
+| `service.instance.id` | *unset by default* — see "Distinguishing multiple deployments of the same binary" below. | Only emitted per-record when explicitly configured. Existing consumers see no new attribute. |
 
 Override via callback or `appsettings.json`:
 
@@ -240,6 +241,55 @@ builder.AddQuilt4NetLogging()
 ```
 
 When `Quilt4Net.Toolkit.Api`'s `CorrelationIdMiddleware` is active, every `ILogger` call inside a request also picks up `customDimensions["CorrelationId"]` automatically — see the Api package README.
+
+### Distinguishing multiple deployments of the same binary
+
+If the same compiled service is deployed under multiple logical names (multi-tenant / multi-brand / blue-green / shadow) and `service.name` is the same across them, telemetry alone can't tell the deployments apart — `host.name` only disambiguates the *machine*, not the *variant*. Set `ServiceInstanceId` so each row carries the deployment-variant identity:
+
+```csharp
+builder.AddQuilt4NetLogging(o =>
+{
+    o.ServiceInstanceId = builder.Configuration["DeploymentVariant"]; // e.g. "Thargelion"
+});
+```
+
+When set, the value lands on the OTel resource (`cloud_RoleInstance` in Application Insights) **and** on `customDimensions["service.instance.id"]` for every record, so KQL can split rows by variant without portal lookups:
+
+```kql
+AppTraces
+| where AppRoleName == 'Eplicta.FortDocs.Server'
+| extend variant = tostring(todynamic(Properties)['service.instance.id'])
+| summarize count() by variant, host = tostring(todynamic(Properties)['host.name'])
+```
+
+The toolkit's startup line also surfaces the variant when set:
+
+```
+Quilt4Net startup: Eplicta.FortDocs.Server [Thargelion] v1.2.9.0 in CI
+```
+
+Resolution precedence if `ServiceInstanceId` isn't passed in code:
+
+1. `OTEL_RESOURCE_ATTRIBUTES` env var, parsed for the `service.instance.id=...` pair (the OTel-standard env var, [SDK env var spec](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#general-sdk-configuration)).
+2. `QUILT4NET_SERVICE_INSTANCE_ID` env var (Quilt4Net shorthand for hosts that don't want to construct the multi-key OTel string by hand).
+3. *Unset* — falls back to today's behaviour (`cloud_RoleInstance` is `MachineName`; no per-record attribute).
+
+### Registration order with other ILoggerProvider registrations
+
+If you also use a non-OTel logger provider — e.g. `Microsoft.ApplicationInsights.AspNetCore`'s `AddApplicationInsightsTelemetry` — **and** wrap `ILoggerFactory` (e.g. for enrichment), call `AddQuilt4NetLogging()` **before** the other AI/OTel `ILoggerProvider` registration **and** before the factory wrap. Some shapes of "wrap that captures `sp.GetServices<ILoggerProvider>()` and rebuilds a `LoggerFactory`" interact with the OTel pipeline in a way that silently drops `AppTraces` when the order is reversed (`AppRequests` continue to flow because they're written via `TelemetryClient.TrackRequest` directly). Tracked in [issue #87](https://github.com/Quilt4/Quilt4Net.Toolkit/issues/87).
+
+The recommended shape:
+
+```csharp
+// 1. Quilt4Net first.
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging();
+
+// 2. Then the AI / other OTel provider.
+builder.Services.AddApplicationInsightsTelemetry(o => { o.ConnectionString = "..."; });
+
+// 3. Then any custom ILoggerFactory wrapping.
+```
 
 ## Measure extensions
 
