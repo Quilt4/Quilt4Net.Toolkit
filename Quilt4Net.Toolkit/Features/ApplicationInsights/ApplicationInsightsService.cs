@@ -30,7 +30,35 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     internal const string VersionProjection =
         "coalesce(tostring(_p[\"service.version\"]), tostring(_p[\"Version\"]), tostring(AppVersion))";
 
+    /// <summary>
+    /// Canonical summarize clause for the <c>GetSummaries</c> queries. Buckets by
+    /// <c>Fingerprint</c> only and takes representative samples for the descriptive columns,
+    /// matching the post-fetch C# dedupe (one row per fingerprint, last-seen wins).
+    ///
+    /// Previously the summarize key was <c>(Fingerprint, Message, Environment, Application, SeverityLevel)</c>,
+    /// which split a single fingerprint into N rows whenever the message text varied (always, for
+    /// formatted trace logs) and could exceed Kusto's 64MB result-set limit. Aligning the server-side
+    /// grouping with what the UI actually shows shrinks the result set by orders of magnitude and
+    /// matches what <c>GetSummaries</c>'s C# layer was already enforcing post-fetch.
+    /// </summary>
+    internal const string SummarizeByFingerprint = @"| summarize
+    Count = count(),
+    LastTimeGenerated = max(TimeGenerated),
+    Message = take_any(Message),
+    Environment = take_any(Environment),
+    Application = take_any(Application),
+    SeverityLevel = max(SeverityLevel)
+    by Fingerprint
+| order by LastTimeGenerated desc";
+
     private static readonly LogsQueryOptions _probeOptions = new() { ServerTimeout = TimeSpan.FromSeconds(5) };
+
+    /// <summary>
+    /// Used by <c>GetSummariesInternal</c>. <c>AllowPartialErrors = true</c> means the SDK returns
+    /// truncation warnings via <c>LogsQueryResult.Error</c> instead of throwing — defence-in-depth
+    /// for any future query that grows past the 64MB limit despite the tightened summarize clause.
+    /// </summary>
+    private static readonly LogsQueryOptions _summariesQueryOptions = new() { AllowPartialErrors = true };
     private readonly ConcurrentDictionary<ClientKey, LogsQueryClient> _clientCache = new();
     private readonly ITimeToLiveCache _timeToLiveCache;
     private readonly ApplicationInsightsOptions _options;
@@ -886,11 +914,7 @@ AppExceptions
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = toint(SeverityLevel)
 {envFilter}
-| summarize
-    Count = count(),
-    LastTimeGenerated = max(TimeGenerated)
-    by Fingerprint, Message, Environment, Application, SeverityLevel
-| order by LastTimeGenerated desc";
+{SummarizeByFingerprint}";
 
         var appTracesQuery = $@"
 AppTraces
@@ -905,11 +929,7 @@ AppTraces
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = toint(SeverityLevel)
 {envFilter}
-| summarize
-    Count = count(),
-    LastTimeGenerated = max(TimeGenerated)
-    by Fingerprint, Message, Environment, Application, SeverityLevel
-| order by LastTimeGenerated desc";
+{SummarizeByFingerprint}";
 
         var appRequestsQuery = $@"
 AppRequests
@@ -922,18 +942,22 @@ AppRequests
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = iif(tobool(coalesce(Success, true)), 1, 3)
 {envFilter}
-| summarize
-    Count = count(),
-    LastTimeGenerated = max(TimeGenerated)
-    by Fingerprint, Message, Environment, Application, SeverityLevel
-| order by LastTimeGenerated desc";
+{SummarizeByFingerprint}";
 
         async IAsyncEnumerable<SummarySubset> Run(string query, LogSource source)
         {
             var response = await client.QueryWorkspaceAsync(
                 workspaceId,
                 query,
-                new LogsQueryTimeRange(timeSpan));
+                new LogsQueryTimeRange(timeSpan),
+                _summariesQueryOptions);
+
+            if (response.Value.Error != null)
+            {
+                _logger.LogWarning(
+                    "GetSummaries returned a partial result for {Source}. Error={Error} WorkspaceId={WorkspaceId} TimeSpan={TimeSpan}",
+                    source, response.Value.Error.Message, MaskId(workspaceId), timeSpan);
+            }
 
             var table = response.Value.Table;
 
