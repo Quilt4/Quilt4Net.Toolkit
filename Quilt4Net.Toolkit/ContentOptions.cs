@@ -13,9 +13,12 @@ public record ContentOptions
 
     /// <summary>
     /// Address to the Quilt4Net server.
-    /// Default is https://quilt4net.com/.
+    /// Default is https://quilt4net.com/. Defaulted on the type so an unbound
+    /// <c>IOptions&lt;ContentOptions&gt;</c> still carries a usable URL when only
+    /// part of the toolkit is registered (e.g. <c>AddQuilt4NetRemoteConfiguration</c>
+    /// without <c>AddQuilt4NetContent</c>).
     /// </summary>
-    public string Quilt4NetAddress { get; set; }
+    public string Quilt4NetAddress { get; set; } = "https://quilt4net.com/";
 
     /// <summary>
     /// Api key to be used for calls to the server.

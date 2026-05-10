@@ -3,7 +3,13 @@
 public record RemoteConfigurationOptions
 {
     public TimeSpan? Ttl { get; set; }
-    public string Quilt4NetAddress { get; set; }
+
+    /// <summary>
+    /// Address to the Quilt4Net server.
+    /// Default is https://quilt4net.com/. Defaulted on the type so an unbound
+    /// <c>IOptions&lt;RemoteConfigurationOptions&gt;</c> still carries a usable URL.
+    /// </summary>
+    public string Quilt4NetAddress { get; set; } = "https://quilt4net.com/";
     public string ApiKey { get; set; }
 
     /// <summary>
