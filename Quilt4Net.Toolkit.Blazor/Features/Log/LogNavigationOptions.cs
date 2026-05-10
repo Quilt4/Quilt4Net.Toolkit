@@ -21,4 +21,12 @@ public record LogNavigationOptions
     /// When null, clicking a summary link opens a dialog.
     /// </summary>
     public string SummaryPath { get; init; }
+
+    /// <summary>
+    /// Optional path for the host's Application Insights configuration page, e.g. "/monitor/configuration".
+    /// When set, log views render an "Edit configuration" link next to authentication-failure
+    /// alerts so operators can jump straight to the broken AI configuration instead of
+    /// hunting through the configuration list.
+    /// </summary>
+    public string ConfigurationPath { get; init; }
 }

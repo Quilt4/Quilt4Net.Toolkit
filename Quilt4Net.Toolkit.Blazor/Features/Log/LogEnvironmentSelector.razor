@@ -11,7 +11,13 @@
 }
 else if (_loadError != null)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">@_loadError</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+        @_loadError
+        @if (_loadErrorIsAuthFailure && !string.IsNullOrEmpty(NavOptions?.ConfigurationPath))
+        {
+            <text> </text><RadzenLink Path="@NavOptions.ConfigurationPath" Text="Edit configuration" />
+        }
+    </RadzenAlert>
 }
 else if (_environments == null)
 {
@@ -35,6 +41,7 @@ else
     private IApplicationInsightsContext _loadedContext;
     private EnvironmentOption _firedContext;
     private string _loadError;
+    private bool _loadErrorIsAuthFailure;
     private string _configError;
     private IApplicationInsightsService _ais;
 
@@ -43,6 +50,9 @@ else
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
+
+    [CascadingParameter]
+    public LogNavigationOptions NavOptions { get; set; }
 
     protected override void OnInitialized()
     {
@@ -61,6 +71,7 @@ else
         {
             _loadedContext = Context;
             _loadError = null;
+            _loadErrorIsAuthFailure = false;
 
             try
             {
@@ -78,7 +89,8 @@ else
             catch (Exception ex)
             {
                 _loadError = LogIncidentLogger.LogAndFormat(Logger, ex, nameof(LogEnvironmentSelector),
-                    "Could not load Application Insights environments.");
+                    "Could not load Application Insights environments.", _loadedContext);
+                _loadErrorIsAuthFailure = ApplicationInsightsErrorMessage.IsAuthenticationFailure(ex);
                 _environments = Array.Empty<EnvironmentOption>();
             }
         }

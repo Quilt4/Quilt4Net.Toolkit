@@ -1,4 +1,5 @@
 @using Quilt4Net.Toolkit
+@using Quilt4Net.Toolkit.Blazor.Features.Log
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Microsoft.Extensions.Logging
 @using Microsoft.Extensions.Options
@@ -21,7 +22,13 @@
     }
     else if (_error != null)
     {
-        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Failed to load version matrix" AllowClose="false" Text="@_error" />
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Failed to load version matrix" AllowClose="false">
+            @_error
+            @if (_errorIsAuthFailure && !string.IsNullOrEmpty(ConfigurationPath))
+            {
+                <text> </text><RadzenLink Path="@ConfigurationPath" Text="Edit configuration" />
+            }
+        </RadzenAlert>
     }
     else if (_view == null || _view.Applications.Count == 0)
     {
@@ -121,10 +128,19 @@
     [Parameter]
     public IReadOnlyList<string> EnvironmentOrder { get; set; }
 
+    /// <summary>
+    /// Optional path for the host's Application Insights configuration page, e.g. "/monitor/configuration".
+    /// When set, an "Edit configuration" link is rendered next to authentication-failure alerts so
+    /// operators can jump straight to the broken AI configuration instead of hunting through the list.
+    /// </summary>
+    [Parameter]
+    public string ConfigurationPath { get; set; }
+
     private VersionMatrixView _view;
     private IReadOnlyList<string> _orderedEnvironments = [];
     private bool _loading;
     private string _error;
+    private bool _errorIsAuthFailure;
 
     protected override async Task OnInitializedAsync()
     {
@@ -140,6 +156,7 @@
     {
         _loading = true;
         _error = null;
+        _errorIsAuthFailure = false;
         StateHasChanged();
 
         try
@@ -168,8 +185,9 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to load version matrix.");
-            _error = ex.Message;
+            _error = LogIncidentLogger.LogAndFormat(Logger, ex, nameof(VersionMatrixDisplay),
+                "Failed to load version matrix.", Context);
+            _errorIsAuthFailure = ApplicationInsightsErrorMessage.IsAuthenticationFailure(ex);
         }
         finally
         {
