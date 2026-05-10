@@ -48,7 +48,7 @@ else if (Model != null)
                             <span title="@($"{context.CorrelationId} (click to filter)")"
                                   style="cursor: pointer; text-decoration: underline; font-family: var(--rz-font-family-monospace, monospace);"
                                   @onclick="@(() => SearchByCorrelationIdAsync(context.CorrelationId))">@preview</span>
-                            <CopyButton Content="@context.CorrelationId" />
+                            <CopyButton Content="@context.CorrelationId" Size="ButtonSize.ExtraSmall"/>
                         </RadzenStack>
                     }
                 </Template>
