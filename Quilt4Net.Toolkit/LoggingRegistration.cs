@@ -24,6 +24,10 @@ public static class LoggingRegistration
     /// <summary>
     /// Register universal telemetry identity (service.name, service.version, deployment.environment, service.instance.id)
     /// on the OpenTelemetry Resource. Applies to traces, logs and metrics.
+    /// Also registers <see cref="Quilt4NetStartupHostedService"/> so apps with an <see cref="IHost"/>
+    /// (including those built via <see cref="IHostApplicationBuilder"/>, the older <c>IHostBuilder</c>
+    /// pattern, or <c>Tharga.Wpf</c>'s generic-host setup) emit the startup entry automatically.
+    /// Truly no-host contexts should call <see cref="LogQuilt4NetStartup"/> manually.
     /// </summary>
     public static Quilt4NetLoggingBuilder AddQuilt4NetLogging(this IServiceCollection services, IConfiguration configuration = null, Action<Quilt4NetLoggingOptions> options = null, string environmentName = null, string applicationName = null)
     {
@@ -97,9 +101,18 @@ public static class LoggingRegistration
     }
 
     /// <summary>
-    /// Manually emit the Quilt4Net startup log entry. Use this in non-hosted
-    /// applications (WPF, console without IHost) where IHostedService does not run.
-    /// Hosted applications (IHostApplicationBuilder) get the startup entry automatically.
+    /// Manually emit the Quilt4Net startup log entry. Use this **only** when the calling code
+    /// has no <see cref="IHost"/> and therefore no <see cref="IHostedService"/> runs — e.g. a
+    /// pure script, a static-<c>Main</c> console without `Microsoft.Extensions.Hosting`, or a
+    /// plain `Application.Run` WPF app that doesn't build a host.
+    ///
+    /// Apps that DO build an <see cref="IHost"/> — including those wired via
+    /// <see cref="IHostApplicationBuilder"/>, the older <c>IHostBuilder</c> pattern, or
+    /// <c>Tharga.Wpf</c>'s generic-host setup — get the startup entry automatically via
+    /// <see cref="Quilt4NetStartupHostedService"/> regardless of which <c>AddQuilt4NetLogging</c>
+    /// overload was used to register it (the <see cref="IServiceCollection"/> overload registers
+    /// the hosted service the same as the <see cref="IHostApplicationBuilder"/> overload).
+    /// Calling this method in those contexts produces a duplicate startup entry.
     /// </summary>
     public static void LogQuilt4NetStartup(this IServiceProvider serviceProvider)
     {

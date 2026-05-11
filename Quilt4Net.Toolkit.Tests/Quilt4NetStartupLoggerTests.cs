@@ -161,12 +161,26 @@ public class Quilt4NetStartupLoggerTests
     }
 
     [Fact]
-    public void Hosted_service_is_registered_by_AddQuilt4NetLogging()
+    public void Hosted_service_is_registered_by_AddQuilt4NetLogging_via_IServiceCollection_overload()
     {
         var services = new ServiceCollection();
         services.AddQuilt4NetLogging(applicationName: "x");
 
         services.Should().Contain(d => d.ServiceType == typeof(IHostedService)
+            && d.ImplementationType == typeof(Quilt4NetStartupHostedService));
+    }
+
+    [Fact]
+    public void Hosted_service_is_registered_by_AddQuilt4NetLogging_via_IHostApplicationBuilder_overload()
+    {
+        // The IHostApplicationBuilder overload delegates to the IServiceCollection overload —
+        // pinning that hosted-service registration survives the indirection so legacy
+        // IHostBuilder / Tharga.Wpf consumers that route through the IHostApplicationBuilder
+        // overload also get the startup entry without calling LogQuilt4NetStartup manually.
+        var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder();
+        builder.AddQuilt4NetLogging();
+
+        builder.Services.Should().Contain(d => d.ServiceType == typeof(IHostedService)
             && d.ImplementationType == typeof(Quilt4NetStartupHostedService));
     }
 
