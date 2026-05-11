@@ -59,6 +59,30 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     /// for any future query that grows past the 64MB limit despite the tightened summarize clause.
     /// </summary>
     private static readonly LogsQueryOptions _summariesQueryOptions = new() { AllowPartialErrors = true };
+
+    /// <summary>
+    /// Pick-the-winner stage for <c>GetVersionMatrixAsync</c>'s KQL. Expects two <c>let</c>-bound
+    /// inputs upstream: <c>startup</c> (rows where <c>Quilt4NetStartup=true</c>) and <c>fallback</c>
+    /// (rows from any of AppTraces/AppExceptions/AppRequests).
+    ///
+    /// Previously the implementation was <c>union startup, fallback | summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment</c>,
+    /// which sorts every row by timestamp regardless of source. Any regular log entry emitted *after*
+    /// <c>Quilt4NetStartupHostedService.StartAsync</c> wins the <c>arg_max</c> — and apps log
+    /// continuously, so the <c>Source = "Startup"</c> row was effectively unreachable. The doc/XML
+    /// promised a "Startup fast path" but the implementation gave no preference.
+    ///
+    /// New shape: pick the latest row per source first, then <c>leftanti</c>-join Log against Startup
+    /// to keep Log rows only where no Startup row exists for that (App, Env). The result is that any
+    /// Startup row beats any Log row for the same (App, Env) pair, regardless of timestamps.
+    /// </summary>
+    internal const string VersionMatrixPickStartupPreferred = @"let startup_pick = startup
+| extend Environment = iff(isempty(Environment), ""(unknown)"", Environment)
+| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment;
+let log_pick = fallback
+| extend Environment = iff(isempty(Environment), ""(unknown)"", Environment)
+| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment;
+union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationName, Environment)
+| order by ApplicationName asc, Environment asc";
     private readonly ConcurrentDictionary<ClientKey, LogsQueryClient> _clientCache = new();
     private readonly ITimeToLiveCache _timeToLiveCache;
     private readonly ApplicationInsightsOptions _options;
@@ -1041,10 +1065,7 @@ let fallback = union AppTraces, AppExceptions, AppRequests
     Version = coalesce(tostring(_p[""application_Version""]), tostring(_p[""service.version""]), tostring(AppVersion))
 | where isnotempty(ApplicationName) and isnotempty(Version)
 | project TimeGenerated, ApplicationName, Environment, Version, Source = ""Log"";
-union startup, fallback
-| extend Environment = iff(isempty(Environment), ""(unknown)"", Environment)
-| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment
-| order by ApplicationName asc, Environment asc";
+{VersionMatrixPickStartupPreferred}";
 
         var range = lookback.HasValue
             ? new LogsQueryTimeRange(DateTimeOffset.UtcNow - lookback.Value, DateTimeOffset.UtcNow)
