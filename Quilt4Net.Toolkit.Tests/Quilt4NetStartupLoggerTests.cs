@@ -2,6 +2,8 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Logs;
 using Quilt4Net.Toolkit.Features.Logging;
 using Xunit;
 
@@ -31,17 +33,50 @@ public class Quilt4NetStartupLoggerTests
     }
 
     [Fact]
-    public void Log_attaches_Quilt4NetStartup_marker_in_scope()
+    public void Log_emits_Quilt4NetStartup_as_a_structured_property_not_a_scope()
     {
+        // Regression guard for the previous BeginScope-based implementation: OpenTelemetry's
+        // Microsoft.Extensions.Logging bridge does NOT copy scope state into LogRecord.Attributes
+        // unless the consumer sets OpenTelemetryLoggerOptions.IncludeScopes = true. The Azure
+        // Monitor exporter (the toolkit's recommended ingestion path) defaults that to false, so
+        // a scope-based emission of "Quilt4NetStartup=true" never reached App Insights — making
+        // the VersionMatrix "Startup" fast path unreachable for every consumer. Pin the new
+        // contract: the property goes into the message template's structured state, not a scope.
         var capture = new CapturingLogger();
         var options = new Quilt4NetLoggingOptions { ApplicationName = "x" };
 
         Quilt4NetStartupLogger.Log(capture, options);
 
         capture.Entries.Should().ContainSingle();
-        capture.Entries[0].Scopes.Should().ContainSingle()
-            .Which.Should().BeAssignableTo<IDictionary<string, object>>()
-            .Which["Quilt4NetStartup"].Should().Be("true");
+        capture.Entries[0].State.Should().Contain(kv => kv.Key == "Quilt4NetStartup" && kv.Value!.Equals("true"));
+        capture.Entries[0].Scopes.Should().BeEmpty("Quilt4NetStartup must NOT be emitted via BeginScope");
+    }
+
+    [Fact]
+    public void Log_emits_Quilt4NetStartup_into_OTel_LogRecord_Attributes_without_IncludeScopes()
+    {
+        // End-to-end regression guard for the actual reported bug: build a real OTel pipeline
+        // with IncludeScopes left at its `false` default, route ILogger through it, and assert
+        // the captured LogRecord.Attributes contains ("Quilt4NetStartup", "true"). If anyone
+        // ever reverts to scope-based emission, this test fails immediately — proving the
+        // property would have been dropped before reaching the Azure Monitor exporter.
+        LogRecord captured = null!;
+        using var loggerFactory = LoggerFactory.Create(b =>
+        {
+            b.AddOpenTelemetry(o => o.AddProcessor(new CaptureLogRecordProcessor(r => captured = r)));
+        });
+        var logger = loggerFactory.CreateLogger<Quilt4NetStartupLoggerTests>();
+        var options = new Quilt4NetLoggingOptions
+        {
+            ApplicationName = "florida-client",
+            Version = "1.4.7",
+            Environment = "Development"
+        };
+
+        Quilt4NetStartupLogger.Log(logger, options);
+
+        captured.Should().NotBeNull();
+        captured.Attributes.Should().Contain(kv => kv.Key == "Quilt4NetStartup" && kv.Value!.Equals("true"));
     }
 
     [Fact]
@@ -73,7 +108,7 @@ public class Quilt4NetStartupLoggerTests
         Quilt4NetStartupLogger.Log(capture, options);
 
         capture.Entries[0].FormattedMessage
-            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server [Thargelion] v1.2.9.0 in CI");
+            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server [Thargelion] v1.2.9.0 in CI (true)");
     }
 
     [Fact]
@@ -93,7 +128,7 @@ public class Quilt4NetStartupLoggerTests
         Quilt4NetStartupLogger.Log(capture, options);
 
         capture.Entries[0].FormattedMessage
-            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server v1.2.9.0 in CI")
+            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server v1.2.9.0 in CI (true)")
             .And.NotContain("[");
     }
 
@@ -135,7 +170,7 @@ public class Quilt4NetStartupLoggerTests
             && d.ImplementationType == typeof(Quilt4NetStartupHostedService));
     }
 
-    private sealed record LogEntry(LogLevel Level, string FormattedMessage, List<object> Scopes);
+    private sealed record LogEntry(LogLevel Level, string FormattedMessage, List<object> Scopes, IReadOnlyList<KeyValuePair<string, object>> State);
 
     private sealed class CapturingLogger : ILogger
     {
@@ -152,7 +187,13 @@ public class Quilt4NetStartupLoggerTests
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
         {
-            Entries.Add(new LogEntry(logLevel, formatter(state, exception), new List<object>(_activeScopes)));
+            // ILogger's structured state is conventionally an IReadOnlyList<KeyValuePair<string, object>>
+            // when callers use the message-template overloads (LogInformation("{Foo}", value)). Capturing
+            // it lets the tests assert on per-property structured data without spinning up an OTel
+            // pipeline for every assertion.
+            var stateList = state as IReadOnlyList<KeyValuePair<string, object>>
+                ?? new List<KeyValuePair<string, object>>();
+            Entries.Add(new LogEntry(logLevel, formatter(state, exception), new List<object>(_activeScopes), stateList));
         }
 
         private sealed class Pop : IDisposable
@@ -179,5 +220,12 @@ public class Quilt4NetStartupLoggerTests
         public ILogger CreateLogger(string categoryName) => _logger;
         public void AddProvider(ILoggerProvider provider) { }
         public void Dispose() { }
+    }
+
+    private sealed class CaptureLogRecordProcessor : BaseProcessor<LogRecord>
+    {
+        private readonly Action<LogRecord> _capture;
+        public CaptureLogRecordProcessor(Action<LogRecord> capture) => _capture = capture;
+        public override void OnEnd(LogRecord data) => _capture(data);
     }
 }
