@@ -204,9 +204,12 @@ union
         }
     }
 
-    public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
+    public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"search|{context.ToKey()}|{environment}|{text}|{timeSpan}|{minSeverityLevel}";
+        // CancellationToken.None inside the cache factory: a cancel from one caller must not poison
+        // the cached load for other concurrent callers (the network call continues; the cancelling
+        // caller short-circuits below at the yield-loop check).
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             var list = await SearchInternalAsync(context, environment, text, timeSpan, minSeverityLevel).ToArrayAsync();
@@ -214,6 +217,7 @@ union
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }
@@ -458,7 +462,7 @@ AppRequests
         }
     }
 
-    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"measure|{context.ToKey()}|{environment}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
@@ -468,6 +472,7 @@ AppRequests
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }
@@ -563,7 +568,7 @@ AppTraces
         }
     }
 
-    public async IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    public async IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"count|{context.ToKey()}|{environment}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
@@ -573,6 +578,7 @@ AppTraces
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }
@@ -790,13 +796,15 @@ AppRequests
         };
     }
 
-    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
+    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems = 100)
     {
-        var cacheKey = $"summary|{context.ToKey()}|{fingerprint}|{source}|{environment}|{timeSpan}";
-        return await _timeToLiveCache.GetAsync(cacheKey, () => GetSummaryInternalAsync(context, fingerprint, source, environment, timeSpan));
+        if (maxItems <= 0) throw new ArgumentOutOfRangeException(nameof(maxItems), "maxItems must be positive.");
+
+        var cacheKey = $"summary|{context.ToKey()}|{fingerprint}|{source}|{environment}|{timeSpan}|{maxItems}";
+        return await _timeToLiveCache.GetAsync(cacheKey, () => GetSummaryInternalAsync(context, fingerprint, source, environment, timeSpan, maxItems));
     }
 
-    private async Task<SummaryData> GetSummaryInternalAsync(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
+    private async Task<SummaryData> GetSummaryInternalAsync(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems)
     {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
@@ -814,7 +822,8 @@ AppExceptions
     Id = _ItemId
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
-| order by TimeGenerated desc",
+| order by TimeGenerated desc
+| take {maxItems}",
 
             LogSource.Trace => $@"
 AppTraces
@@ -831,7 +840,8 @@ AppTraces
     Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
-| order by TimeGenerated desc",
+| order by TimeGenerated desc
+| take {maxItems}",
 
             LogSource.Request => $@"
 AppRequests
@@ -845,7 +855,8 @@ AppRequests
     Id = _ItemId
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
-| order by TimeGenerated desc",
+| order by TimeGenerated desc
+| take {maxItems}",
 
             _ => throw new ArgumentOutOfRangeException(nameof(source))
         };
@@ -892,7 +903,7 @@ AppRequests
         };
     }
 
-    public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"summaries|{context.ToKey()}|{environment}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
@@ -902,6 +913,7 @@ AppRequests
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }

@@ -7,7 +7,7 @@
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
 }
-else if (Model == null)
+else if (_loading || Model == null)
 {
     <Loading />
 }
@@ -67,11 +67,15 @@ else
     </RadzenTabs>
 }
 
+@implements IDisposable
+
 @code {
     private CountData[] Model { get; set; }
     private IReadOnlyList<ActionSeries> Series { get; set; } = Array.Empty<ActionSeries>();
     private string _configError;
     private IApplicationInsightsService _ais;
+    private CancellationTokenSource _cts;
+    private bool _loading;
 
     protected override void OnInitialized()
     {
@@ -80,6 +84,12 @@ else
         {
             _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
         }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 
     [Parameter]
@@ -100,34 +110,60 @@ else
     {
         if (_configError != null) return;
 
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        _loading = true;
         Model = null;
-        Model = await _ais
-            .GetCountAsync(Context, Environment, Range)
-            .ToArrayAsync();
+        StateHasChanged();
 
-        var model = Model.Select(x => new MeasurePoint
+        try
         {
-            Action = x.Action,
-            Environment = x.Environment,
-            TimeGenerated = x.TimeGenerated,
-            Count = x.Count
-        }).ToArray();
+            var loaded = await _ais
+                .GetCountAsync(Context, Environment, Range, token)
+                .ToArrayAsync(token);
 
-        if (model.GroupBy(x => x.Environment).Count() == 1)
-        {
-            Series = model
-                .GroupBy(x => x.Action)
-                .OrderBy(g => g.Key)
-                .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
-                .ToArray();
+            if (token.IsCancellationRequested) return;
+
+            Model = loaded;
+
+            var model = Model.Select(x => new MeasurePoint
+            {
+                Action = x.Action,
+                Environment = x.Environment,
+                TimeGenerated = x.TimeGenerated,
+                Count = x.Count
+            }).ToArray();
+
+            if (model.GroupBy(x => x.Environment).Count() == 1)
+            {
+                Series = model
+                    .GroupBy(x => x.Action)
+                    .OrderBy(g => g.Key)
+                    .Select(g => new ActionSeries(g.Key, g.OrderBy(p => p.TimeGenerated).ToArray()))
+                    .ToArray();
+            }
+            else
+            {
+                Series = model
+                    .GroupBy(x => (x.Action, x.Environment))
+                    .OrderBy(g => g.Key)
+                    .Select(g => new ActionSeries($"{g.Key.Environment}.{g.Key.Action}", g.OrderBy(p => p.TimeGenerated).ToArray()))
+                    .ToArray();
+            }
         }
-        else
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            Series = model
-                .GroupBy(x => (x.Action, x.Environment))
-                .OrderBy(g => g.Key)
-                .Select(g => new ActionSeries($"{g.Key.Environment}.{g.Key.Action}", g.OrderBy(p => p.TimeGenerated).ToArray()))
-                .ToArray();
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _loading = false;
+                StateHasChanged();
+            }
         }
     }
 

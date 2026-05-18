@@ -7,7 +7,7 @@
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
 }
-else if (Model == null)
+else if (_loading || Model == null)
 {
     <Loading />
 }
@@ -44,6 +44,8 @@ else
     </RadzenDataGrid>
 }
 
+@implements IDisposable
+
 @code {
     private SummarySubset[] Model { get; set; }
     private SummarySubset[] _filtered = [];
@@ -52,6 +54,8 @@ else
     private LogFilters _filters = LogFilters.Empty;
     private string _configError;
     private IApplicationInsightsService _ais;
+    private CancellationTokenSource _cts;
+    private bool _loading;
 
     protected override void OnInitialized()
     {
@@ -60,6 +64,12 @@ else
         {
             _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
         }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 
     [CascadingParameter]
@@ -90,13 +100,40 @@ else
     {
         if (_configError != null) return;
 
-        Model = null;
-        Model = await _ais
-            .GetSummaries(Context, Environment, Range)
-            .ToArrayAsync();
+        // Cancel any in-flight load whose parameters were superseded by this call.
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
 
-        RecomputeDistincts();
-        ApplyFilters();
+        _loading = true;
+        Model = null;
+        StateHasChanged();
+
+        try
+        {
+            var loaded = await _ais
+                .GetSummaries(Context, Environment, Range, token)
+                .ToArrayAsync(token);
+
+            if (token.IsCancellationRequested) return;
+
+            Model = loaded;
+            RecomputeDistincts();
+            ApplyFilters();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Superseded by a newer parameter change; drop this result silently.
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _loading = false;
+                StateHasChanged();
+            }
+        }
     }
 
     private Task OnFiltersChanged(LogFilters next)
