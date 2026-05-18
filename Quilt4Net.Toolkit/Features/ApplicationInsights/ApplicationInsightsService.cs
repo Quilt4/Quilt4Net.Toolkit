@@ -204,9 +204,12 @@ union
         }
     }
 
-    public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose)
+    public async IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"search|{context.ToKey()}|{environment}|{text}|{timeSpan}|{minSeverityLevel}";
+        // CancellationToken.None inside the cache factory: a cancel from one caller must not poison
+        // the cached load for other concurrent callers (the network call continues; the cancelling
+        // caller short-circuits below at the yield-loop check).
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             var list = await SearchInternalAsync(context, environment, text, timeSpan, minSeverityLevel).ToArrayAsync();
@@ -214,6 +217,7 @@ union
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }
@@ -458,7 +462,7 @@ AppRequests
         }
     }
 
-    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    public async IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"measure|{context.ToKey()}|{environment}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
@@ -468,6 +472,7 @@ AppRequests
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }
@@ -563,7 +568,7 @@ AppTraces
         }
     }
 
-    public async IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    public async IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"count|{context.ToKey()}|{environment}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
@@ -573,6 +578,7 @@ AppTraces
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }
@@ -897,7 +903,7 @@ AppRequests
         };
     }
 
-    public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan)
+    public async IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var cacheKey = $"summaries|{context.ToKey()}|{environment}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
@@ -907,6 +913,7 @@ AppRequests
         });
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
     }

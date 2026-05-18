@@ -64,11 +64,14 @@ else if (Model != null)
     </RadzenDataGrid>
 }
 
+@implements IDisposable
+
 @code {
     private bool _loading;
     private string _searchText;
     private string _configError;
     private IApplicationInsightsService _ais;
+    private CancellationTokenSource _cts;
     private LogItem[] Model { get; set; }
     private LogItem[] _filtered = [];
     private string[] _distinctApps = [];
@@ -82,6 +85,12 @@ else if (Model != null)
         {
             _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
         }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 
     [CascadingParameter]
@@ -110,17 +119,37 @@ else if (Model != null)
 
     private async Task Search()
     {
+        // Cancel any in-flight search whose result we no longer want.
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
         _loading = true;
         StateHasChanged();
 
-        var searchText = _searchText ?? string.Empty;
-        Model = await _ais.SearchAsync(Context, Environment, searchText, Range).ToArrayAsync();
+        try
+        {
+            var searchText = _searchText ?? string.Empty;
+            var loaded = await _ais.SearchAsync(Context, Environment, searchText, Range, SeverityLevel.Verbose, token).ToArrayAsync(token);
 
-        RecomputeDistincts();
-        ApplyFilters();
+            if (token.IsCancellationRequested) return;
 
-        _loading = false;
-        StateHasChanged();
+            Model = loaded;
+            RecomputeDistincts();
+            ApplyFilters();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _loading = false;
+                StateHasChanged();
+            }
+        }
     }
 
     private Task OnFiltersChanged(LogFilters next)
