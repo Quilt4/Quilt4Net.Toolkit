@@ -8,7 +8,13 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan);
     IAsyncEnumerable<CountData> GetCountAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan);
     Task<LogDetails> GetDetail(IApplicationInsightsContext context, string id, LogSource source, string environment, TimeSpan timeSpan);
-    Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan);
+    /// <summary>
+    /// Get the latest items for a single fingerprint. Capped at <paramref name="maxItems"/>
+    /// (default 100) — a fingerprint can match 100k+ rows over the lookback window, and
+    /// returning all of them is what made detail/summary navigation hang. Items are ordered
+    /// newest-first; only the top <paramref name="maxItems"/> are returned.
+    /// </summary>
+    Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems = 100);
     IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan);
 
     /// <summary>

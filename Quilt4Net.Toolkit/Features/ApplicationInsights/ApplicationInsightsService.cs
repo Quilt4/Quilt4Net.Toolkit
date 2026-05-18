@@ -790,13 +790,15 @@ AppRequests
         };
     }
 
-    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
+    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems = 100)
     {
-        var cacheKey = $"summary|{context.ToKey()}|{fingerprint}|{source}|{environment}|{timeSpan}";
-        return await _timeToLiveCache.GetAsync(cacheKey, () => GetSummaryInternalAsync(context, fingerprint, source, environment, timeSpan));
+        if (maxItems <= 0) throw new ArgumentOutOfRangeException(nameof(maxItems), "maxItems must be positive.");
+
+        var cacheKey = $"summary|{context.ToKey()}|{fingerprint}|{source}|{environment}|{timeSpan}|{maxItems}";
+        return await _timeToLiveCache.GetAsync(cacheKey, () => GetSummaryInternalAsync(context, fingerprint, source, environment, timeSpan, maxItems));
     }
 
-    private async Task<SummaryData> GetSummaryInternalAsync(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan)
+    private async Task<SummaryData> GetSummaryInternalAsync(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems)
     {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
@@ -814,7 +816,8 @@ AppExceptions
     Id = _ItemId
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
-| order by TimeGenerated desc",
+| order by TimeGenerated desc
+| take {maxItems}",
 
             LogSource.Trace => $@"
 AppTraces
@@ -831,7 +834,8 @@ AppTraces
     Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
-| order by TimeGenerated desc",
+| order by TimeGenerated desc
+| take {maxItems}",
 
             LogSource.Request => $@"
 AppRequests
@@ -845,7 +849,8 @@ AppRequests
     Id = _ItemId
 | where Fingerprint == ""{fingerprint}""
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
-| order by TimeGenerated desc",
+| order by TimeGenerated desc
+| take {maxItems}",
 
             _ => throw new ArgumentOutOfRangeException(nameof(source))
         };
