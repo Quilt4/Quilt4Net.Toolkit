@@ -1,13 +1,21 @@
+@using Microsoft.Extensions.DependencyInjection
 @using Quilt4Net.Toolkit
+@using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
 @using Quilt4Net.Toolkit.Blazor.Features.Log
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Microsoft.Extensions.Logging
 @using Microsoft.Extensions.Options
 @inject IVersionMatrixService VersionMatrixService
 @inject IOptions<ApplicationInsightsOptions> Options
+@inject IServiceProvider ServiceProvider
 @inject ILogger<VersionMatrixDisplay> Logger
+@implements IDisposable
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    @if (_selector != null && _selector.Available.Count > 1)
+    {
+        <ApplicationInsightsConfigurationDropdown />
+    }
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
         <RadzenButton Icon="refresh" Text="Refresh" Click="OnRefreshAsync" Disabled="@_loading" ButtonStyle="ButtonStyle.Secondary" />
         @if (_view != null)
@@ -105,8 +113,13 @@
 </style>
 
 @code {
-    [Parameter, EditorRequired]
-    public IApplicationInsightsContext Context { get; set; } = default!;
+    /// <summary>
+    /// Application Insights configuration to query against. Optional when the consumer registered
+    /// <see cref="BlazorApplicationInsightsRegistration.AddQuilt4NetBlazorApplicationInsightsClientRemote"/> —
+    /// the selector then resolves the configuration (and renders a dropdown when there is more than one).
+    /// </summary>
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
 
     [Parameter]
     public TimeSpan? Lookback { get; set; }
@@ -141,10 +154,33 @@
     private bool _loading;
     private string _error;
     private bool _errorIsAuthFailure;
+    private IApplicationInsightsConfigurationSelector _selector;
+
+    private IApplicationInsightsContext EffectiveContext => Context ?? _selector?.Selected;
 
     protected override async Task OnInitializedAsync()
     {
+        if (Context == null)
+        {
+            _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+            if (_selector != null)
+            {
+                _selector.OnChanged += HandleSelectorChanged;
+                await _selector.LoadAsync();
+            }
+        }
+
         await LoadAsync(forceRefresh: false);
+    }
+
+    private async void HandleSelectorChanged()
+    {
+        await LoadAsync(forceRefresh: false);
+    }
+
+    public void Dispose()
+    {
+        if (_selector != null) _selector.OnChanged -= HandleSelectorChanged;
     }
 
     private async Task OnRefreshAsync()
@@ -162,8 +198,8 @@
         try
         {
             var raw = forceRefresh
-                ? await VersionMatrixService.RefreshAsync(Context, Lookback)
-                : await VersionMatrixService.GetAsync(Context, Lookback);
+                ? await VersionMatrixService.RefreshAsync(EffectiveContext, Lookback)
+                : await VersionMatrixService.GetAsync(EffectiveContext, Lookback);
 
             VersionMatrixView folded;
             if (AliasFolder != null)
@@ -186,7 +222,7 @@
         catch (Exception ex)
         {
             _error = LogIncidentLogger.LogAndFormat(Logger, ex, nameof(VersionMatrixDisplay),
-                "Failed to load version matrix.", Context);
+                "Failed to load version matrix.", EffectiveContext);
             _errorIsAuthFailure = ApplicationInsightsErrorMessage.IsAuthenticationFailure(ex);
         }
         finally

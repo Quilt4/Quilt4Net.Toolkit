@@ -2,10 +2,12 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using Quilt4Net.Toolkit
+@using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Tharga.Blazor.Features.BreadCrumbs
 @inject NavigationManager NavigationManager
 @inject IServiceProvider ServiceProvider
+@implements IDisposable
 
 @if (_configError != null)
 {
@@ -19,7 +21,13 @@
 <CascadingValue Name="ApplicationAliasMap" Value="@_effectiveAliasMap">
 <CascadingValue Name="FilterStorageScope" Value="@FilterStorageScope">
 <CascadingValue Name="SourcePathRoots" Value="@SourcePathRoots">
-    <RadzenRow Style="margin-bottom: 6px;" Visible="@(ShowRangeSelector || ShowEnvironmentSelector)">
+    <RadzenRow Style="margin-bottom: 6px;" Visible="@(_selector != null || ShowRangeSelector || ShowEnvironmentSelector)">
+        @if (_selector != null && _selector.Available.Count > 1)
+        {
+            <RadzenColumn>
+                <ApplicationInsightsConfigurationDropdown />
+            </RadzenColumn>
+        }
         <RadzenColumn Visible="@ShowRangeSelector">
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                 <RadzenText TextStyle="TextStyle.Caption" Text="Range"/>
@@ -29,7 +37,7 @@
         <RadzenColumn Visible="@ShowEnvironmentSelector">
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                 <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
-                <LogEnvironmentSelector OnSelected="OnEnvironmentSelected" Context="@Context" />
+                <LogEnvironmentSelector OnSelected="OnEnvironmentSelected" Context="@EffectiveContext" />
             </RadzenStack>
         </RadzenColumn>
     </RadzenRow>
@@ -39,19 +47,19 @@
             <RadzenTabs SelectedIndex="@_tabIndex" Change="@OnTabChange">
                 <Tabs>
                     <RadzenTabsItem Text="Search">
-                        <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                        <LogSearchView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="EffectiveContext" />
                     </RadzenTabsItem>
                     <RadzenTabsItem Text="Summary">
-                        <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                        <LogSummaryListView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="EffectiveContext" />
                     </RadzenTabsItem>
                     <RadzenTabsItem Text="Measure">
-                        <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                        <LogMeasureView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="EffectiveContext" />
                     </RadzenTabsItem>
                     <RadzenTabsItem Text="Count">
-                        <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="Context" />
+                        <LogCountView Range="@RangeToUse" Environment="@EnvironmentToUse" Context="EffectiveContext" />
                     </RadzenTabsItem>
                     <RadzenTabsItem Text="Test" Visible="@ShowTestTab">
-                        <LogTriggerView Context="Context" />
+                        <LogTriggerView Context="EffectiveContext" />
                     </RadzenTabsItem>
                 </Tabs>
             </RadzenTabs>
@@ -81,6 +89,10 @@
     private int _tabIndex;
     private string _configError;
     private LoggingErrorBoundary _errorBoundary;
+    private IApplicationInsightsConfigurationSelector _selector;
+
+    private IApplicationInsightsContext EffectiveContext
+        => Context ?? _selector?.Selected;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
@@ -181,7 +193,7 @@
         ? _environment
         : Environment;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         if (LogConfigurationGuard.TryResolve(ServiceProvider) == null)
         {
@@ -191,20 +203,44 @@
 
         if (Context == null)
         {
-            var options = ServiceProvider.GetService<IOptions<ApplicationInsightsOptions>>()?.Value;
-            if (options == null
-                || string.IsNullOrEmpty(options.TenantId)
-                || string.IsNullOrEmpty(options.WorkspaceId)
-                || string.IsNullOrEmpty(options.ClientId)
-                || string.IsNullOrEmpty(options.ClientSecret))
+            _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+            if (_selector != null)
             {
-                _configError = "Application Insights is not configured. Set TenantId, WorkspaceId, ClientId, and ClientSecret in appsettings.json under Quilt4Net:ApplicationInsights.";
-                return;
+                _selector.OnChanged += HandleSelectorChanged;
+                await _selector.LoadAsync(FilterStorageScope);
+                if (_selector.Available.Count == 0)
+                {
+                    _configError = "No Application Insights configurations are available for this team on the Quilt4Net server. Add one under the team's monitoring settings, or grant the API key the 'monitor:read' scope.";
+                    return;
+                }
+            }
+            else
+            {
+                var options = ServiceProvider.GetService<IOptions<ApplicationInsightsOptions>>()?.Value;
+                if (options == null
+                    || string.IsNullOrEmpty(options.TenantId)
+                    || string.IsNullOrEmpty(options.WorkspaceId)
+                    || string.IsNullOrEmpty(options.ClientId)
+                    || string.IsNullOrEmpty(options.ClientSecret))
+                {
+                    _configError = "Application Insights is not configured. Set TenantId, WorkspaceId, ClientId, and ClientSecret in appsettings.json under Quilt4Net:ApplicationInsights, or register the remote provider with AddQuilt4NetBlazorApplicationInsightsClientRemote.";
+                    return;
+                }
             }
         }
 
         var breadCrumbService = ServiceProvider.GetService<BreadCrumbService>();
         breadCrumbService?.RegisterVirtualSegmentQueryParam("tab");
+    }
+
+    private void HandleSelectorChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        if (_selector != null) _selector.OnChanged -= HandleSelectorChanged;
     }
 
     protected override void OnParametersSet()
