@@ -3,6 +3,8 @@ using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights;
 using Quilt4Net.Toolkit.Features.ApplicationInsights;
 using Xunit;
 
+#pragma warning disable xUnit1051
+
 namespace Quilt4Net.Toolkit.Blazor.Tests;
 
 public class ApplicationInsightsConfigurationSelectorTests

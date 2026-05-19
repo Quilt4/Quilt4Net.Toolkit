@@ -5,6 +5,10 @@ using Microsoft.Extensions.Hosting;
 using Quilt4Net.Toolkit.Features.ApplicationInsights;
 using Xunit;
 
+// Matches the surrounding test files (FeatureToggleTests etc.) — these HttpListener-backed
+// tests are short-lived and don't need TestContext-driven cancellation.
+#pragma warning disable xUnit1051
+
 namespace Quilt4Net.Toolkit.Tests;
 
 public class RemoteApplicationInsightsConfigurationProviderTests
