@@ -1,0 +1,41 @@
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IApplicationInsightsConfigurationSelector Selector
+@implements IDisposable
+
+@if (Selector.Available.Count > 1)
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+        <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
+        <RadzenDropDown Data="@Selector.Available"
+                        TValue="string"
+                        Value="@Selector.Selected?.Id"
+                        TextProperty="Name"
+                        ValueProperty="Id"
+                        Change="@OnChangeAsync" />
+    </RadzenStack>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Selector.OnChanged += HandleChanged;
+    }
+
+    private void HandleChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnChangeAsync(object value)
+    {
+        if (value is string id)
+        {
+            await Selector.SelectAsync(id);
+        }
+    }
+
+    public void Dispose()
+    {
+        Selector.OnChanged -= HandleChanged;
+    }
+}

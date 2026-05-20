@@ -124,11 +124,18 @@ Configuration path: `Quilt4Net:HealthClient`
 
 ## Application Insights client
 
-Client for querying Application Insights data (logs, metrics, exceptions).
+Client for querying Application Insights data (logs, metrics, exceptions). The toolkit supports two mutually exclusive registration modes:
 
+**Local mode** — credentials in the consumer's `appsettings.json`:
 ```csharp
 builder.AddQuilt4NetApplicationInsightsClient();
 ```
+
+**Remote mode** — credentials fetched from Quilt4Net.Server at runtime using an API key with the `monitor:read` scope. Consumers no longer need to keep `TenantId` / `WorkspaceId` / `ClientId` / `ClientSecret` in their own configuration:
+```csharp
+builder.AddQuilt4NetApplicationInsightsClientRemote();
+```
+The remote provider caches the configuration list per the `RemoteConfigurationOptions.Ttl` (default 5 min) with stale-while-revalidate, so transient server outages don't break the consuming page. When more than one workspace is configured on the server for the team, every workspace is reachable; the Blazor `LogView` / `VersionMatrixDisplay` components render an in-component dropdown to switch between them (see [Quilt4Net.Toolkit.Blazor README](https://github.com/Quilt4/Quilt4Net.Toolkit/blob/master/Quilt4Net.Toolkit.Blazor/README.md)).
 
 ### ApplicationInsightsOptions
 

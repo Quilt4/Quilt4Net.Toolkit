@@ -202,7 +202,18 @@ The component displays a data grid with editors for boolean, integer, and string
 
 ## Log viewer
 
-View and search Application Insights logs with the `LogView` component. Requires [Quilt4Net.Toolkit](https://github.com/Quilt4/Quilt4Net.Toolkit/tree/master/Quilt4Net.Toolkit) Application Insights client to be configured.
+View and search Application Insights logs with the `LogView` component. Requires the Application Insights client to be configured in one of two modes (mutually exclusive):
+
+**Local mode** — credentials live in the consumer's `appsettings.json` under `Quilt4Net:ApplicationInsights`:
+```csharp
+builder.AddQuilt4NetApplicationInsightsClient();
+```
+
+**Remote mode** — credentials are pulled from Quilt4Net.Server using an API key that carries the `monitor:read` scope:
+```csharp
+builder.AddQuilt4NetBlazorApplicationInsightsClientRemote();
+```
+The host then stops needing any `Quilt4Net:ApplicationInsights` block; only `Quilt4Net:ApiKey` (or `Quilt4Net:RemoteConfiguration:ApiKey`) is required. When the team has more than one configured workspace on the server, `LogView` and `VersionMatrixDisplay` render a built-in configuration dropdown — selection persists in `localStorage` under `Quilt4Net.Monitor.SelectedConfig.{FilterStorageScope}`.
 
 ```razor
 <LogView />
