@@ -15,4 +15,5 @@ public record ValueGroupBundle
     public DateTime FetchedAtUtc { get; init; }
     public ConfigurationResponse[] FeatureToggles { get; init; } = [];
     public ApplicationInsightsConfigurationResponse[] ApplicationInsightsConfigurations { get; init; } = [];
+    public KeyValueEntry[] KeyValues { get; init; } = [];
 }
