@@ -194,6 +194,56 @@ Typical setup:
 
 > **Trade-off**: `DefaultAzureCredential` masks *which* underlying credential succeeded. If authentication fails, the error chain is less specific than the explicit modes. For diagnosis, switch to `ClientSecret` or `ManagedIdentity` to isolate the issue.
 
+## Value Groups
+
+A **Value Group** is a server-curated bundle of references to existing values across multiple stores (today: feature toggles and Application Insights configurations; KV pairs and Atlas credentials come in later features). An external agent uses one HTTP call with its own group-scoped API key to receive a typed bundle containing only the values the operator allowlisted.
+
+Use this when an agent needs least-privilege access to a specific deployment's configuration without exposing the team-wide scope.
+
+```csharp
+builder.AddQuilt4NetValueGroupClient(o =>
+{
+    o.GroupId = "507f1f77bcf86cd799439011";  // the group's ObjectId from the admin UI
+    o.ApiKey = builder.Configuration["Quilt4Net:ValueGroup:ApiKey"];
+});
+```
+
+Then inject and call:
+
+```csharp
+public class MyAgent(IValueGroupClient client)
+{
+    public async Task DoWorkAsync(CancellationToken ct)
+    {
+        var bundle = await client.GetAsync(ct);
+        foreach (var toggle in bundle.FeatureToggles) { /* ... */ }
+        foreach (var ai in bundle.ApplicationInsightsConfigurations) { /* ... */ }
+    }
+}
+```
+
+### ValueGroupClientOptions
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Quilt4NetAddress` | `https://quilt4net.com/` | Server base URL. |
+| `ApiKey` | — *(required)* | The API key minted for this Value Group in the server's admin UI. Must carry the `valuegroup:read` scope and be tag-bound to `GroupId`. |
+| `GroupId` | — *(required)* | The id of the Value Group this client fetches. |
+| `Ttl` | `5 min` | Cache freshness window. Subsequent calls within the window serve the cached bundle. |
+| `HttpTimeout` | `5 s` | HTTP timeout. On timeout the cached bundle is served if available. |
+
+Configuration path: `Quilt4Net:ValueGroup` (or top-level `Quilt4Net:ApiKey` + `Quilt4Net:Quilt4NetAddress` for shared keys).
+
+### Behaviour and contract
+
+- **Stale-while-revalidate**: returning a fresh bundle is the default. Stale-cache fallback applies on transient HTTP errors *and* on timeout.
+- **`ValueGroupAuthorizationException` on 401/403**: a revoked key or wrong-binding response *throws*, by design. Unlike `IRemoteConfigurationService` (which silently serves fallback values), Value Groups carry secret-bearing data, so the consumer must learn it has been revoked rather than continue using cached secrets.
+- **One client = one group**: register multiple clients via keyed services if the consumer needs more than one group.
+
+### Minting a key
+
+In the Quilt4Net.Server admin UI under **Value Groups**: select the group → API Keys panel → **Mint new key**. The raw key is shown exactly once — save it immediately. The key carries only the `valuegroup:read` scope and is tag-bound on the server side to this one group; it cannot reach any other team data.
+
 ## Universal telemetry identity
 
 `AddQuilt4NetLogging()` configures OpenTelemetry resource attributes **and** registers two `BaseProcessor`s — one for `LogRecord`, one for `Activity` — that copy a fixed set of identity attributes onto every per-record Properties bag. Works for all app types; the Azure Monitor exporter forwards the per-record attributes into `customDimensions`, where KQL can read them.
