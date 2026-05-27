@@ -438,6 +438,87 @@ protected override async Task OnInitializedAsync()
 }
 ```
 
+## Version matrix
+
+`VersionMatrixDisplay` shows the latest version of each application per environment, scanned from Application Insights. It uses the same Application Insights client (local or remote) as `LogView`.
+
+```razor
+<VersionMatrixDisplay />
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `Context` | `null` | AI context. Leave `null` to use the built-in workspace selector (remote mode) or the configured options (local mode). |
+| `Lookback` | toolkit default | How far back to scan for version entries. |
+| `EnvironmentOrder` | `ApplicationInsightsOptions.EnvironmentOrder` | Column (environment) ordering. |
+| `AliasFolder` | `null` | Optional `raw → logical` folding delegate. When `null`, falls back to `ApplicationInsightsOptions.ApplicationAlias`. |
+| `ConfigurationPath` | `null` | When set, an "Edit configuration" link is shown on authentication-failure alerts. |
+
+Like `LogView`, when the team has more than one configured workspace (remote mode) it renders a built-in configuration dropdown to switch between them.
+
+## Developer monitoring pages
+
+The usual convention is to expose the log and version views on developer-only pages at `/developer/log` and `/developer/version`, gated by a `Developer` role:
+
+```razor
+@* Components/Developer/Log.razor *@
+@page "/developer/log"
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+@attribute [Authorize(Roles = "Developer")]
+
+<LogView Tab="@Tab" DetailPath="/developer/log/detail" SummaryPath="/developer/log/summary" ShowTestTab="true" />
+
+@code {
+    [Parameter, SupplyParameterFromQuery] public string Tab { get; set; }
+}
+```
+
+```razor
+@* Components/Developer/VersionMatrix.razor *@
+@page "/developer/version"
+@using Quilt4Net.Toolkit.Blazor.Features.VersionMatrix
+@attribute [Authorize(Roles = "Developer")]
+
+<VersionMatrixDisplay />
+```
+
+Register the Application Insights client once in `Program.cs`, in **either** local or remote mode (they are mutually exclusive):
+
+**Local** — credentials in `appsettings.json`:
+```csharp
+builder.AddQuilt4NetApplicationInsightsClient();
+```
+```json
+{
+  "Quilt4Net": {
+    "ApplicationInsights": {
+      "TenantId": "...",
+      "WorkspaceId": "...",
+      "ClientId": "...",
+      "ClientSecret": "..."
+    }
+  }
+}
+```
+
+**Remote** — credentials fetched from Quilt4Net.Server with an API key that carries the `monitor:read` scope:
+```csharp
+builder.AddQuilt4NetBlazorApplicationInsightsClientRemote();
+```
+```json
+{
+  "Quilt4Net": {
+    "RemoteConfiguration": {
+      "Quilt4NetAddress": "https://quilt4net.com/",
+      "ApiKey": "<monitor:read API key>"
+    }
+  }
+}
+```
+Keep the API key out of source control (user-secrets / environment variables). In remote mode the host needs no `Quilt4Net:ApplicationInsights` block. **Configuring both modes is ambiguous** — the remote source wins and the local block is silently ignored, so pick one.
+
+> Use the Blazor `AddQuilt4NetBlazorApplicationInsightsClientRemote()` (not the core `AddQuilt4NetApplicationInsightsClientRemote()`) so the in-component workspace selector and its `localStorage` persistence are wired up.
+
 ## Configuration
 
 All options can be set via code or `appsettings.json`. Code takes priority.
