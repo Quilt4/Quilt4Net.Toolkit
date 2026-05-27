@@ -135,7 +135,21 @@ builder.AddQuilt4NetApplicationInsightsClient();
 ```csharp
 builder.AddQuilt4NetApplicationInsightsClientRemote();
 ```
+```json
+{
+  "Quilt4Net": {
+    "RemoteConfiguration": {
+      "Quilt4NetAddress": "https://quilt4net.com/",
+      "ApiKey": "<monitor:read API key>"
+    }
+  }
+}
+```
+Configuration path: `Quilt4Net:RemoteConfiguration` (the API key is also accepted at the top-level `Quilt4Net:ApiKey`). Keep the key in user-secrets or environment variables, not in committed config.
+
 The remote provider caches the configuration list per the `RemoteConfigurationOptions.Ttl` (default 5 min) with stale-while-revalidate, so transient server outages don't break the consuming page. When more than one workspace is configured on the server for the team, every workspace is reachable; the Blazor `LogView` / `VersionMatrixDisplay` components render an in-component dropdown to switch between them (see [Quilt4Net.Toolkit.Blazor README](https://github.com/Quilt4/Quilt4Net.Toolkit/blob/master/Quilt4Net.Toolkit.Blazor/README.md)).
+
+> **Local and remote are mutually exclusive.** Register one or the other. If both a `Quilt4Net:ApplicationInsights` block and a remote `Quilt4Net:RemoteConfiguration` API key are configured, the remote source wins and the local block is silently ignored. In a Blazor host, use `AddQuilt4NetBlazorApplicationInsightsClientRemote()` so the workspace selector is wired up.
 
 ### ApplicationInsightsOptions
 
