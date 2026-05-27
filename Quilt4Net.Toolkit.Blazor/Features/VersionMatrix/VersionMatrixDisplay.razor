@@ -14,7 +14,12 @@
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
     @if (_selector != null && _selector.Available.Count > 1)
     {
-        <ApplicationInsightsConfigurationDropdown />
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Configurations" />
+            <RadzenSelectBar Data="@_selector.Available" @bind-Value="_selectedIds"
+                             Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, _ => LoadAsync(false)))"
+                             TextProperty="Name" ValueProperty="Id" Multiple="true" AllowSelectAll="false" />
+        </RadzenStack>
     }
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
         <RadzenButton Icon="refresh" Text="Refresh" Click="OnRefreshAsync" Disabled="@_loading" ButtonStyle="ButtonStyle.Secondary" />
@@ -155,8 +160,25 @@
     private string _error;
     private bool _errorIsAuthFailure;
     private IApplicationInsightsConfigurationSelector _selector;
+    private IEnumerable<string> _selectedIds = [];
 
-    private IApplicationInsightsContext EffectiveContext => Context ?? _selector?.Selected;
+    /// <summary>
+    /// The configurations to query and merge into one matrix: the explicit <see cref="Context"/> when
+    /// given; otherwise the selected configurations — or <b>all</b> of them when none are selected
+    /// (the default); otherwise a single <c>null</c> context so the service falls back to the locally
+    /// configured options.
+    /// </summary>
+    private IReadOnlyList<IApplicationInsightsContext> SelectedContexts()
+    {
+        if (Context != null) return [Context];
+        if (_selector == null || _selector.Available.Count == 0) return [null];
+
+        var ids = _selectedIds?.ToArray() ?? [];
+        IEnumerable<ApplicationInsightsConfigurationResponse> chosen = ids.Length == 0
+            ? _selector.Available
+            : _selector.Available.Where(c => ids.Contains(c.Id));
+        return chosen.Cast<IApplicationInsightsContext>().ToArray();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -195,11 +217,21 @@
         _errorIsAuthFailure = false;
         StateHasChanged();
 
+        IApplicationInsightsContext current = null;
         try
         {
-            var raw = forceRefresh
-                ? await VersionMatrixService.RefreshAsync(EffectiveContext, Lookback)
-                : await VersionMatrixService.GetAsync(EffectiveContext, Lookback);
+            var cells = new List<VersionMatrixCell>();
+            foreach (var context in SelectedContexts())
+            {
+                current = context;
+                var view = forceRefresh
+                    ? await VersionMatrixService.RefreshAsync(context, Lookback)
+                    : await VersionMatrixService.GetAsync(context, Lookback);
+                cells.AddRange(view.Cells.Values);
+            }
+            current = null;
+
+            var raw = VersionMatrixView.FromCells(cells);
 
             VersionMatrixView folded;
             if (AliasFolder != null)
@@ -222,7 +254,7 @@
         catch (Exception ex)
         {
             _error = LogIncidentLogger.LogAndFormat(Logger, ex, nameof(VersionMatrixDisplay),
-                "Failed to load version matrix.", EffectiveContext);
+                "Failed to load version matrix.", current);
             _errorIsAuthFailure = ApplicationInsightsErrorMessage.IsAuthenticationFailure(ex);
         }
         finally
