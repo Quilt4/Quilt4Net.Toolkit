@@ -213,7 +213,7 @@ builder.AddQuilt4NetApplicationInsightsClient();
 ```csharp
 builder.AddQuilt4NetBlazorApplicationInsightsClientRemote();
 ```
-The host then stops needing any `Quilt4Net:ApplicationInsights` block; only `Quilt4Net:ApiKey` (or `Quilt4Net:RemoteConfiguration:ApiKey`) is required. When the team has more than one configured workspace on the server, `LogView` and `VersionMatrixDisplay` render a built-in configuration dropdown — selection persists in `localStorage` under `Quilt4Net.Monitor.SelectedConfig.{FilterStorageScope}`.
+The host then stops needing any `Quilt4Net:ApplicationInsights` block; only `Quilt4Net:ApiKey` (or `Quilt4Net:RemoteConfiguration:ApiKey`) is required. When the team has more than one configured workspace on the server, `LogView` renders a built-in configuration **dropdown** (one workspace; selection persists in `localStorage` under `Quilt4Net.Monitor.SelectedConfig.{FilterStorageScope}`) and `VersionMatrixDisplay` renders a **multi-select radio bar** that merges the version matrix across the selected workspaces (selecting none shows all).
 
 ```razor
 <LogView />
@@ -454,7 +454,7 @@ protected override async Task OnInitializedAsync()
 | `AliasFolder` | `null` | Optional `raw → logical` folding delegate. When `null`, falls back to `ApplicationInsightsOptions.ApplicationAlias`. |
 | `ConfigurationPath` | `null` | When set, an "Edit configuration" link is shown on authentication-failure alerts. |
 
-Like `LogView`, when the team has more than one configured workspace (remote mode) it renders a built-in configuration dropdown to switch between them.
+When the team has more than one configured workspace (remote mode) it renders a built-in **multi-select radio bar**: toggle one or more workspaces and their version data is merged into a single matrix; selecting none shows all. (`LogView` uses a single-select dropdown for the same purpose.)
 
 ## Developer monitoring pages
 
