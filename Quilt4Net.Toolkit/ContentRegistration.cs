@@ -32,15 +32,16 @@ public static class ContentRegistration
         var apiKey = configuration?.GetSection("Quilt4Net").GetSection("ApiKey").Value;
         var address = configuration?.GetSection("Quilt4Net").GetSection("Quilt4NetAddress").Value;
 
+        // Bind the whole section so EVERY appsettings field flows through (HttpTimeout, Ttl,
+        // FailureCacheDuration, Application, StaleWhileRevalidate, …). Only ApiKey / Quilt4NetAddress
+        // keep their special fallback to the top-level Quilt4Net:ApiKey / :Quilt4NetAddress (and the
+        // default address). Referencing the nullable `config` (not the bound object's defaulted
+        // properties) preserves the exact original precedence — incl. top-level address when no
+        // Quilt4Net:Content section is present.
         var config = configuration?.GetSection("Quilt4Net:Content").Get<ContentOptions>();
-        var o = new ContentOptions
-        {
-            ApiKey = config?.ApiKey.NullIfEmpty() ?? apiKey,
-            Quilt4NetAddress = config?.Quilt4NetAddress.NullIfEmpty()
-                               ?? address.NullIfEmpty()
-                               ?? "https://quilt4net.com/",
-            StaleWhileRevalidate = config?.StaleWhileRevalidate ?? new ContentOptions().StaleWhileRevalidate
-        };
+        var o = config ?? new ContentOptions();
+        o.ApiKey = config?.ApiKey.NullIfEmpty() ?? apiKey;
+        o.Quilt4NetAddress = config?.Quilt4NetAddress.NullIfEmpty() ?? address.NullIfEmpty() ?? "https://quilt4net.com/";
 
         if (!Uri.TryCreate(o.Quilt4NetAddress, UriKind.Absolute, out _)) throw new InvalidOperationException($"Configuration {nameof(o.Quilt4NetAddress)} with value '{o.Quilt4NetAddress}' cannot be parsed to an absolute uri.");
 

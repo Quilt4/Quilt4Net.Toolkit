@@ -1,39 +1,32 @@
-# Feature: Configurable StaleWhileRevalidate flag
+# Feature: Easy cleanups (config-binding gap + minor logging items)
 
 ## Goal
-Let consumers of the Quilt4Net content + remote-configuration clients choose between
-stale-while-revalidate (fast, default) and always-fresh (synchronous refresh) behaviour for
-expired cache entries.
+Knock out the small, low-risk Toolkit backlog items in one batch.
 
-## Current behaviour
-Both `RemoteContentCallService` and `RemoteConfigCallService` always do stale-while-revalidate:
-an expired-but-present cache entry is returned immediately and refreshed in the background. There
-is no way to opt out and always wait for a fresh value.
-
-## Design
-- Add `bool StaleWhileRevalidate` (default `true`) to `ContentOptions` and `RemoteConfigurationOptions`.
-- In both clients, gate the "return stale + background refresh" branch on the flag. When disabled,
-  an expired entry falls through to the existing synchronous fetch-with-timeout path (which still
-  falls back to any stale value on error via the catch). No-cache behaviour is unchanged.
-- Honour the flag from appsettings: the registrations hand-construct the options object, so carry
-  `config?.StaleWhileRevalidate` through (see backlog note re: the broader binding gap).
-
-## Scope
-1. `StaleWhileRevalidate` on both options (XML docs cross-referencing `HttpTimeout`).
-2. Gate the SWR branch in both clients.
-3. Flow the flag from config in both registrations.
-4. Tests: default true; disabled → synchronous refresh returns fresh value; enabled → stale returned.
-5. README rows for both options.
+## Items
+1. **Config-binding gap (Important/Easy).** `AddQuilt4NetContent` / `AddQuilt4NetRemoteConfiguration`
+   constructed the options object by cherry-picking only ApiKey + Quilt4NetAddress from bound config,
+   silently ignoring HttpTimeout / FailureCacheDuration / Ttl / Application / StaleWhileRevalidate set
+   in appsettings. Fix: bind the whole section, then apply the special ApiKey/Address fallback to the
+   top-level Quilt4Net:ApiKey / :Quilt4NetAddress. Original precedence (incl. top-level address when no
+   subsection) preserved by referencing the nullable bound `config`, not the defaulted object.
+2. **Cache-TTL notice (Nice/Easy).** After a successful SetContentAsync, log an informational hint that
+   other clients won't see the change until their cache TTL expires. (Was a vague //TODO; a log line is
+   the least-surprising interpretation — no API/return-shape change.)
+3. **ContentFormat null (Nice/Easy) — already done.** The client already does
+   `DefaultValue = contentType == null ? null : ...`. Removed the stale backlog item; no code.
+4. **Pass-through stream (Nice) — partial.** Removed the redundant double-read of chunked request
+   bodies (buffer once, decode that buffer). The full tee-stream rearchitecture is deferred (real
+   streaming-semantics risk; re-filed on the backlog as Hard).
 
 ## Out of scope
-- Fixing the broader config-binding gap (registrations only copy ApiKey/Address) — logged to backlog.
-- ValueGroupClient (separate caching model; its README already documents fresh-by-default).
+- Full tee-stream request-body capture (deferred; backlog).
+- Deeper address-precedence nuance (a bound subsection's defaulted address still shadows the
+  top-level address — pre-existing behaviour, preserved unchanged).
 
 ## Acceptance criteria
-- Default unchanged (SWR on). `StaleWhileRevalidate=false` → expired entry refreshed synchronously,
-  caller sees the fresh value; on failure still falls back to stale.
-- Configurable via code and appsettings.
-- Build + tests green; warnings under the CI ratchet.
+- Content/RemoteConfiguration options bind every appsettings field; ApiKey/Address fallback preserved.
+- Build + tests green; warnings under ratchet.
 
 ## Done condition
-Criteria met, tests green, README updated, user confirms. `plan/` removed at composite-PR close-out.
+Criteria met, tests green, backlog updated, user confirms. `plan/` removed at composite-PR close-out.
