@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
@@ -24,10 +25,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private DateTime _languagesValidTo;
     private TimeSpan _lastKnownLanguageTtl;
 
-    public RemoteContentCallService(EnvironmentName environmentName, IOptions<ContentOptions> contentOptions, ILogger<RemoteContentCallService> logger)
+    /// <summary>Named <see cref="IHttpClientFactory"/> client for content calls to Quilt4Net.Server.</summary>
+    public const string HttpClientName = "Quilt4Net.Content";
+
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public RemoteContentCallService(EnvironmentName environmentName, IOptions<ContentOptions> contentOptions, IHttpClientFactory httpClientFactory, ILogger<RemoteContentCallService> logger)
     {
         _environmentName = environmentName;
         _contentOptions = contentOptions.Value;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -319,20 +326,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
         return payload;
     }
 
-    private HttpClient GetHttpClient()
-    {
-        HttpClient client = null;
-        try
-        {
-            client = new HttpClient();
-            client.DefaultRequestHeaders.Add("X-API-KEY", _contentOptions.ApiKey);
-            client.BaseAddress = new Uri(_contentOptions.Quilt4NetAddress);
-            return client;
-        }
-        catch
-        {
-            client?.Dispose();
-            throw;
-        }
-    }
+    // Factory-created named client: BaseAddress + X-API-KEY are configured once at registration,
+    // and the correlation-id handler is attached there. Disposing a factory client is the intended
+    // usage (it returns the pooled handler), so existing `using var client = GetHttpClient();`
+    // call sites stay correct.
+    private HttpClient GetHttpClient() => _httpClientFactory.CreateClient(HttpClientName);
 }

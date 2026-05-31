@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Logging;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api.Framework;
 
 public class CorrelationIdMiddleware
 {
-    private const string HeaderName = "X-Correlation-ID";
+    private const string HeaderName = CorrelationConstants.HeaderName;
 
     private readonly RequestDelegate _next;
     private readonly ILogger<CorrelationIdMiddleware> _logger;
@@ -24,7 +25,7 @@ public class CorrelationIdMiddleware
 
         var correlationId = headerValue.ToString();
         context.Response.Headers[HeaderName] = correlationId;
-        context.Items["CorrelationId"] = correlationId;
+        context.Items[CorrelationConstants.ItemKey] = correlationId;
 
         // Push CorrelationId into a logging scope so every ILogger call made during this
         // request inherits it as a structured property. The Azure Monitor exporter then

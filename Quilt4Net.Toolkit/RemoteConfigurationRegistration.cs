@@ -44,6 +44,16 @@ public static class RemoteConfigurationRegistration
         options?.Invoke(o);
         services.AddSingleton(Options.Create(o));
 
+        // Named factory client: BaseAddress + X-API-KEY once, correlation-id forwarded to
+        // Quilt4Net.Server. Replaces the previous per-call `new HttpClient()`.
+        services.AddQuilt4NetCorrelationId();
+        services.AddHttpClient(Features.FeatureToggle.RemoteConfigCallService.HttpClientName, client =>
+            {
+                client.BaseAddress = new Uri(o.Quilt4NetAddress);
+                if (!string.IsNullOrEmpty(o.ApiKey)) client.DefaultRequestHeaders.Add("X-API-KEY", o.ApiKey);
+            })
+            .AddQuilt4NetCorrelationId();
+
         //NOTE: Holds cached content.
         services.AddSingleton<IRemoteConfigCallService>(s =>
         {
