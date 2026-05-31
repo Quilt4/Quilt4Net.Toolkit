@@ -130,7 +130,6 @@ else
         {
             var loaded = await _ais
                 .GetMeasureAsync(Context, Environment, Range, token)
-                .Where(x => x.Elapsed < TimeSpan.FromHours(10)) // Temporary: hides one bad Neurolito measure entry. Tracked in backlog for removal once that log is clean.
                 .ToArrayAsync(token);
 
             if (token.IsCancellationRequested) return;
