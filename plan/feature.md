@@ -13,7 +13,19 @@ is configured (the common default), the fallback path:
 
 So an app using the default logging emits its own/upstream secrets into telemetry.
 
-## Design
+## Design revision (final)
+First cut added a dedicated masking path (`MaskSensitiveHeaders` bool + `SensitiveHeaders` array +
+`CompiledLoggingOptions.MaskHeaderValue`). Per review, that duplicated the existing `Interceptor`
+hook. **Final design folds masking into `Interceptor`:**
+- `Interceptor` now **defaults** to `LoggingOptions.MaskSensitiveHeadersInterceptor` (masks the
+  values of `SensitiveHeaders`, request + response, case-insensitive, key kept / value `***`).
+- `Interceptor = null` → log verbatim (the opt-out; no separate bool needed).
+- Custom `Interceptor` → full control; can call `MaskSensitiveHeadersInterceptor` to compose masking.
+- `SensitiveHeaders` stays (appsettings-configurable, feeds the default interceptor).
+- `MaskSensitiveHeaders` bool and the `CompiledLoggingOptions` masking helper are **removed** — no
+  second delegate, one redaction hook.
+
+## Design (original — superseded by the revision above)
 1. **`LoggingOptions.SensitiveHeaders`** — `string[]` of header names whose values are masked.
    Default set: `Authorization`, `X-API-KEY`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`.
    Case-insensitive. Consumers can replace/extend the list.

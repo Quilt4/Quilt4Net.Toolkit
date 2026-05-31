@@ -6,61 +6,89 @@ namespace Quilt4Net.Toolkit.Api.Tests;
 
 public class SensitiveHeaderMaskingTests
 {
+    private static Request RequestWith(params (string Key, string Value)[] headers) => new()
+    {
+        Method = "GET",
+        Path = "/api/x",
+        Headers = headers.ToDictionary(h => h.Key, h => h.Value),
+        Query = new Dictionary<string, string>(),
+        Body = "",
+        ClientIp = "127.0.0.1",
+    };
+
+    private static Response ResponseWith(params (string Key, string Value)[] headers) => new()
+    {
+        StatusCode = 200,
+        Headers = headers.ToDictionary(h => h.Key, h => h.Value),
+        Body = "",
+    };
+
+    private static async Task<(Request Req, Response Res)> RunDefault(LoggingOptions options, Request request, Response response)
+    {
+        var (req, res, _) = await options.Interceptor.Invoke(request, response, new Dictionary<string, string>(), null);
+        return (req, res);
+    }
+
+    [Fact]
+    public void Default_interceptor_is_the_header_masker()
+    {
+        new LoggingOptions().Interceptor.Should().NotBeNull("masking is the default; set it to null to log verbatim");
+    }
+
     [Theory]
     [InlineData("Authorization")]
     [InlineData("X-API-KEY")]
     [InlineData("Proxy-Authorization")]
     [InlineData("Cookie")]
-    [InlineData("Set-Cookie")]
-    public void Default_set_is_masked(string header)
+    public async Task Default_masks_sensitive_request_header_values(string header)
     {
-        var compiled = new CompiledLoggingOptions(new LoggingOptions());
+        var (req, _) = await RunDefault(new LoggingOptions(), RequestWith((header, "secret")), ResponseWith());
 
-        compiled.MaskHeaderValue(header, "secret-value").Should().Be(CompiledLoggingOptions.Mask);
+        req.Headers[header].Should().Be(LoggingOptions.HeaderMask);
     }
 
     [Fact]
-    public void Matching_is_case_insensitive()
+    public async Task Default_masks_sensitive_response_header_values()
     {
-        var compiled = new CompiledLoggingOptions(new LoggingOptions());
+        var (_, res) = await RunDefault(new LoggingOptions(), RequestWith(), ResponseWith(("Set-Cookie", "sid=abc")));
 
-        compiled.MaskHeaderValue("authorization", "Bearer abc").Should().Be(CompiledLoggingOptions.Mask);
-        compiled.MaskHeaderValue("x-api-key", "k").Should().Be(CompiledLoggingOptions.Mask);
+        res.Headers["Set-Cookie"].Should().Be(LoggingOptions.HeaderMask);
     }
 
     [Fact]
-    public void Non_sensitive_headers_pass_through_unchanged()
+    public async Task Matching_is_case_insensitive()
     {
-        var compiled = new CompiledLoggingOptions(new LoggingOptions());
+        var (req, _) = await RunDefault(new LoggingOptions(), RequestWith(("authorization", "Bearer abc"), ("x-api-key", "k")), ResponseWith());
 
-        compiled.MaskHeaderValue("Content-Type", "application/json").Should().Be("application/json");
-        compiled.MaskHeaderValue("X-Correlation-ID", "abc-123").Should().Be("abc-123");
+        req.Headers["authorization"].Should().Be(LoggingOptions.HeaderMask);
+        req.Headers["x-api-key"].Should().Be(LoggingOptions.HeaderMask);
     }
 
     [Fact]
-    public void Opt_out_logs_values_verbatim()
+    public async Task Non_sensitive_headers_pass_through_and_key_is_kept()
     {
-        var compiled = new CompiledLoggingOptions(new LoggingOptions { MaskSensitiveHeaders = false });
+        var (req, _) = await RunDefault(new LoggingOptions(),
+            RequestWith(("Content-Type", "application/json"), ("Authorization", "Bearer abc")), ResponseWith());
 
-        compiled.MaskHeaderValue("Authorization", "Bearer abc").Should().Be("Bearer abc");
+        req.Headers["Content-Type"].Should().Be("application/json");
+        req.Headers.Should().ContainKey("Authorization", "the key is retained; only the value is masked");
     }
 
     [Fact]
-    public void Custom_list_replaces_the_default_set()
+    public async Task Custom_sensitive_list_changes_what_is_masked()
     {
-        var compiled = new CompiledLoggingOptions(new LoggingOptions { SensitiveHeaders = ["X-Secret"] });
+        var options = new LoggingOptions { SensitiveHeaders = ["X-Secret"] };
+        var (req, _) = await RunDefault(options, RequestWith(("X-Secret", "shh"), ("Authorization", "Bearer abc")), ResponseWith());
 
-        // The custom header is masked...
-        compiled.MaskHeaderValue("X-Secret", "shh").Should().Be(CompiledLoggingOptions.Mask);
-        // ...and a previous default that is no longer listed is NOT masked.
-        compiled.MaskHeaderValue("Authorization", "Bearer abc").Should().Be("Bearer abc");
+        req.Headers["X-Secret"].Should().Be(LoggingOptions.HeaderMask);
+        req.Headers["Authorization"].Should().Be("Bearer abc", "no longer in the sensitive list");
     }
 
     [Fact]
-    public void Empty_sensitive_list_masks_nothing()
+    public void Interceptor_can_be_disabled_for_verbatim_logging()
     {
-        var compiled = new CompiledLoggingOptions(new LoggingOptions { SensitiveHeaders = [] });
-
-        compiled.MaskHeaderValue("Authorization", "Bearer abc").Should().Be("Bearer abc");
+        // The escape hatch: null interceptor => middleware logs request/response exactly as captured.
+        var options = new LoggingOptions { Interceptor = null };
+        options.Interceptor.Should().BeNull();
     }
 }

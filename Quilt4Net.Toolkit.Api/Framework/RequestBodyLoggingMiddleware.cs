@@ -91,7 +91,10 @@ public class RequestResponseLoggingMiddleware
 
             var responseDetails = await CaptureResponseDetailsAsync(context, logResponseBody, _options?.MaxBodySize ?? Constants.MaxBodySize);
 
-            //NOTE: Intercept the request, response and details, so that it can be modified and cleaned from secrets.
+            //NOTE: Intercept the request, response and details, so that it can be modified and cleaned
+            // from secrets. The interceptor defaults to LoggingOptions.MaskSensitiveHeadersInterceptor
+            // (masks credential-bearing header values); set Interceptor = null to log verbatim, or
+            // supply your own. When null, headers/body are logged exactly as captured.
             if (_options?.Interceptor != null)
             {
                 try
@@ -102,25 +105,6 @@ public class RequestResponseLoggingMiddleware
                 {
                     throw new InvalidOperationException($"Log {nameof(_options.Interceptor)} Exception. {e.Message}", e);
                 }
-            }
-            else
-            {
-                // Default redaction path (no custom interceptor): mask credential-bearing header
-                // values so secrets never reach the logs, while the header key stays visible.
-                // Sensitive headers (Cookie, Authorization, X-API-KEY, …) are configurable via
-                // LoggingOptions.SensitiveHeaders / MaskSensitiveHeaders.
-                requestDetails = requestDetails with
-                {
-                    Headers = requestDetails.Headers
-                        .Where(x => !string.IsNullOrEmpty(x.Value))
-                        .ToDictionary(x => x.Key, x => _compiledLoggingOptions.MaskHeaderValue(x.Key, x.Value))
-                };
-                responseDetails = responseDetails with
-                {
-                    Headers = responseDetails.Headers
-                        .Where(x => !string.IsNullOrEmpty(x.Value))
-                        .ToDictionary(x => x.Key, x => _compiledLoggingOptions.MaskHeaderValue(x.Key, x.Value))
-                };
             }
 
             var detailsJsonString = BuildDetailsString(details);

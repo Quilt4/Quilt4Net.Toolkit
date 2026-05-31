@@ -128,39 +128,35 @@ The `[Logging]` attribute can be applied to methods or classes.
 
 ## Interceptor
 
-Use an interceptor to modify or filter logged data before it is written. This is useful for removing sensitive information such as passwords or API keys.
+The `Interceptor` modifies or filters the captured request/response before it is logged — the single
+hook for removing secrets (headers, body, …).
+
+**By default it masks sensitive header values.** `Interceptor` is pre-set to
+`MaskSensitiveHeadersInterceptor`, which replaces the values of `SensitiveHeaders` with `***` on both
+request and response (case-insensitive name match), keeping the header key so its presence stays
+visible without leaking the value. Default masked headers: `Authorization`, `X-API-KEY`,
+`Proxy-Authorization`, `Cookie`, `Set-Cookie`.
+
+Configure the masked set, log everything verbatim, or take full control:
 
 ```csharp
 builder.AddQuilt4NetLogging()
     .AddHttpRequestLogging(o =>
     {
+        // (a) tweak which headers the default interceptor masks:
+        o.SensitiveHeaders = ["Authorization", "X-API-KEY", "X-My-Secret"];
+
+        // (b) OR disable filtering entirely — log request/response verbatim:
+        o.Interceptor = null;
+
+        // (c) OR supply your own (optionally composing the built-in masking):
         o.Interceptor = async (request, response, properties, serviceProvider) =>
         {
-            // Remove sensitive headers
-            request.Headers.Remove("Authorization");
-            return (request, response, properties);
+            request.Headers.Remove("X-Internal-Token");
+            return await o.MaskSensitiveHeadersInterceptor(request, response, properties, serviceProvider);
         };
     });
 ```
-
-## Sensitive header masking
-
-By default the logger masks credential-bearing header **values** (replacing them with `***`) so
-secrets never reach your logs, while the header key stays visible (handy for confirming whether,
-say, an API key was actually sent). Default masked headers: `Authorization`, `X-API-KEY`,
-`Proxy-Authorization`, `Cookie`, `Set-Cookie` (case-insensitive), on both request and response.
-
-```csharp
-builder.AddQuilt4NetLogging()
-    .AddHttpRequestLogging(o =>
-    {
-        o.SensitiveHeaders = ["Authorization", "X-API-KEY", "X-My-Secret"]; // replace the default set
-        o.MaskSensitiveHeaders = false;                                     // or disable masking entirely
-    });
-```
-
-Masking applies to the built-in logging path. If you supply a custom `Interceptor` (above), that
-interceptor owns redaction and this masking does not run.
 
 ## Configuration
 
@@ -194,7 +190,6 @@ builder.AddQuilt4NetLogging()
       "IncludePaths": ["^/Api"],
       "LogRequestBodyByDefault": true,
       "LogResponseBodyByDefault": false,
-      "MaskSensitiveHeaders": true,
       "SensitiveHeaders": ["Authorization", "X-API-KEY", "Proxy-Authorization", "Cookie", "Set-Cookie"]
     }
   }
@@ -214,9 +209,8 @@ Configuration path: `Quilt4Net:ApiLogging`
 | `IncludePaths` | `["^/Api"]` | Regex patterns (case-insensitive) for paths to include. |
 | `LogRequestBodyByDefault` | `true` | Log request body by default. Override per endpoint with `[Logging]`. |
 | `LogResponseBodyByDefault` | `false` | Log response body by default. Override per endpoint with `[Logging]`. |
-| `MaskSensitiveHeaders` | `true` | Mask the values of `SensitiveHeaders` in logged headers. |
-| `SensitiveHeaders` | `Authorization`, `X-API-KEY`, `Proxy-Authorization`, `Cookie`, `Set-Cookie` | Header names (case-insensitive) whose values are masked. |
-| `Interceptor` | `null` | Callback to modify or filter logged data before writing. |
+| `SensitiveHeaders` | `Authorization`, `X-API-KEY`, `Proxy-Authorization`, `Cookie`, `Set-Cookie` | Header names (case-insensitive) whose values the default interceptor masks. |
+| `Interceptor` | masks `SensitiveHeaders` | Callback to modify/filter logged data. Defaults to header masking; set to `null` to log verbatim. |
 
 ## Logged data
 
