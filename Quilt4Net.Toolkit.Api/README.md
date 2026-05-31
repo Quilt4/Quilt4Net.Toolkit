@@ -143,6 +143,25 @@ builder.AddQuilt4NetLogging()
     });
 ```
 
+## Sensitive header masking
+
+By default the logger masks credential-bearing header **values** (replacing them with `***`) so
+secrets never reach your logs, while the header key stays visible (handy for confirming whether,
+say, an API key was actually sent). Default masked headers: `Authorization`, `X-API-KEY`,
+`Proxy-Authorization`, `Cookie`, `Set-Cookie` (case-insensitive), on both request and response.
+
+```csharp
+builder.AddQuilt4NetLogging()
+    .AddHttpRequestLogging(o =>
+    {
+        o.SensitiveHeaders = ["Authorization", "X-API-KEY", "X-My-Secret"]; // replace the default set
+        o.MaskSensitiveHeaders = false;                                     // or disable masking entirely
+    });
+```
+
+Masking applies to the built-in logging path. If you supply a custom `Interceptor` (above), that
+interceptor owns redaction and this masking does not run.
+
 ## Configuration
 
 All options can be set via code or `appsettings.json`. Code takes priority over `appsettings.json`, which takes priority over defaults.
@@ -174,7 +193,9 @@ builder.AddQuilt4NetLogging()
       "MaxBodySize": 1000000,
       "IncludePaths": ["^/Api"],
       "LogRequestBodyByDefault": true,
-      "LogResponseBodyByDefault": false
+      "LogResponseBodyByDefault": false,
+      "MaskSensitiveHeaders": true,
+      "SensitiveHeaders": ["Authorization", "X-API-KEY", "Proxy-Authorization", "Cookie", "Set-Cookie"]
     }
   }
 }
@@ -193,6 +214,8 @@ Configuration path: `Quilt4Net:ApiLogging`
 | `IncludePaths` | `["^/Api"]` | Regex patterns (case-insensitive) for paths to include. |
 | `LogRequestBodyByDefault` | `true` | Log request body by default. Override per endpoint with `[Logging]`. |
 | `LogResponseBodyByDefault` | `false` | Log response body by default. Override per endpoint with `[Logging]`. |
+| `MaskSensitiveHeaders` | `true` | Mask the values of `SensitiveHeaders` in logged headers. |
+| `SensitiveHeaders` | `Authorization`, `X-API-KEY`, `Proxy-Authorization`, `Cookie`, `Set-Cookie` | Header names (case-insensitive) whose values are masked. |
 | `Interceptor` | `null` | Callback to modify or filter logged data before writing. |
 
 ## Logged data
@@ -203,7 +226,7 @@ Configuration path: `Quilt4Net:ApiLogging`
 |-------|-------------|
 | `Method` | HTTP method (GET, POST, etc.). |
 | `Path` | Request path. |
-| `Headers` | Request headers (cookies are automatically filtered). |
+| `Headers` | Request headers (sensitive header values are masked by default — see Sensitive header masking). |
 | `Query` | Query string parameters. |
 | `Body` | Request body (respects `MaxBodySize` limit). |
 | `ClientIp` | Client IP address. |

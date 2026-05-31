@@ -105,18 +105,21 @@ public class RequestResponseLoggingMiddleware
             }
             else
             {
+                // Default redaction path (no custom interceptor): mask credential-bearing header
+                // values so secrets never reach the logs, while the header key stays visible.
+                // Sensitive headers (Cookie, Authorization, X-API-KEY, …) are configurable via
+                // LoggingOptions.SensitiveHeaders / MaskSensitiveHeaders.
                 requestDetails = requestDetails with
                 {
                     Headers = requestDetails.Headers
-                        .Where(x => x.Key != "Cookie")
                         .Where(x => !string.IsNullOrEmpty(x.Value))
-                        .ToDictionary(x => x.Key, x => x.Value)
+                        .ToDictionary(x => x.Key, x => _compiledLoggingOptions.MaskHeaderValue(x.Key, x.Value))
                 };
                 responseDetails = responseDetails with
                 {
                     Headers = responseDetails.Headers
                         .Where(x => !string.IsNullOrEmpty(x.Value))
-                        .ToDictionary(x => x.Key, x => x.Value)
+                        .ToDictionary(x => x.Key, x => _compiledLoggingOptions.MaskHeaderValue(x.Key, x.Value))
                 };
             }
 

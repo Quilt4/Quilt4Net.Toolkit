@@ -64,6 +64,25 @@ public record LoggingOptions
     public bool LogResponseBodyByDefault { get; set; } = false;
 
     /// <summary>
+    /// When <c>true</c> (default), the values of <see cref="SensitiveHeaders"/> are replaced with a
+    /// mask placeholder in logged request/response headers, so secrets never reach the logs while
+    /// the header's presence stays visible. Set to <c>false</c> to log header values verbatim.
+    /// </summary>
+    /// <remarks>
+    /// Applies to the built-in default logging path. When a custom <see cref="Interceptor"/> is
+    /// supplied, that interceptor owns redaction and this masking does not run.
+    /// </remarks>
+    public bool MaskSensitiveHeaders { get; set; } = true;
+
+    /// <summary>
+    /// Header names whose values are masked when <see cref="MaskSensitiveHeaders"/> is enabled.
+    /// Matching is case-insensitive. Defaults to common credential-bearing headers; replace or
+    /// extend to suit. Configurable via appsettings at <c>Quilt4Net:ApiLogging:SensitiveHeaders</c>.
+    /// </summary>
+    public string[] SensitiveHeaders { get; set; } =
+        ["Authorization", "X-API-KEY", "Proxy-Authorization", "Cookie", "Set-Cookie"];
+
+    /// <summary>
     /// Create interceptor for the logger so that information can be modified.
     /// This can be used to remove secrets from logging.
     /// </summary>
