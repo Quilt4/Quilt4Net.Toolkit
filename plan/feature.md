@@ -1,65 +1,39 @@
-# Feature: Mask sensitive headers in request/response logging
+# Feature: Configurable StaleWhileRevalidate flag
 
 ## Goal
-Stop the Quilt4Net.Toolkit.Api request/response logger from writing secret-bearing headers
-(`Authorization`, `X-API-KEY`, cookies, …) in clear text to Application Insights / logs. Mask
-their values by default, with consumer-configurable header names and an opt-out.
+Let consumers of the Quilt4Net content + remote-configuration clients choose between
+stale-while-revalidate (fast, default) and always-fresh (synchronous refresh) behaviour for
+expired cache entries.
 
-## Current behaviour (the gap)
-`RequestResponseLoggingMiddleware` captures all headers via `BuildHeaders`. When no `Interceptor`
-is configured (the common default), the fallback path:
-- drops `Cookie` from the request entirely,
-- logs **every other header verbatim**, including `Authorization`, `X-API-KEY`, `Proxy-Authorization`, etc.
+## Current behaviour
+Both `RemoteContentCallService` and `RemoteConfigCallService` always do stale-while-revalidate:
+an expired-but-present cache entry is returned immediately and refreshed in the background. There
+is no way to opt out and always wait for a fresh value.
 
-So an app using the default logging emits its own/upstream secrets into telemetry.
+## Design
+- Add `bool StaleWhileRevalidate` (default `true`) to `ContentOptions` and `RemoteConfigurationOptions`.
+- In both clients, gate the "return stale + background refresh" branch on the flag. When disabled,
+  an expired entry falls through to the existing synchronous fetch-with-timeout path (which still
+  falls back to any stale value on error via the catch). No-cache behaviour is unchanged.
+- Honour the flag from appsettings: the registrations hand-construct the options object, so carry
+  `config?.StaleWhileRevalidate` through (see backlog note re: the broader binding gap).
 
-## Design revision (final)
-First cut added a dedicated masking path (`MaskSensitiveHeaders` bool + `SensitiveHeaders` array +
-`CompiledLoggingOptions.MaskHeaderValue`). Per review, that duplicated the existing `Interceptor`
-hook. **Final design folds masking into `Interceptor`:**
-- `Interceptor` now **defaults** to `LoggingOptions.MaskSensitiveHeadersInterceptor` (masks the
-  values of `SensitiveHeaders`, request + response, case-insensitive, key kept / value `***`).
-- `Interceptor = null` → log verbatim (the opt-out; no separate bool needed).
-- Custom `Interceptor` → full control; can call `MaskSensitiveHeadersInterceptor` to compose masking.
-- `SensitiveHeaders` stays (appsettings-configurable, feeds the default interceptor).
-- `MaskSensitiveHeaders` bool and the `CompiledLoggingOptions` masking helper are **removed** — no
-  second delegate, one redaction hook.
-
-## Design (original — superseded by the revision above)
-1. **`LoggingOptions.SensitiveHeaders`** — `string[]` of header names whose values are masked.
-   Default set: `Authorization`, `X-API-KEY`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`.
-   Case-insensitive. Consumers can replace/extend the list.
-2. **`LoggingOptions.MaskSensitiveHeaders`** — `bool`, default `true`. Opt-out escape hatch.
-3. **Mask value** — replace with placeholder `"***"` rather than dropping the key, so logs still
-   show the header was present (useful for "was an API key sent?") without leaking the value.
-   (`Cookie` previously dropped — now masked, so its presence is visible.)
-4. **Where:** apply in the default (no-interceptor) masking branch for BOTH request and response
-   headers. Pre-compile the name set into `CompiledLoggingOptions` as a case-insensitive HashSet so
-   the per-request path is allocation-light, mirroring the existing `IncludePathRegex` pattern.
-5. **Interceptor precedence unchanged:** a consumer-supplied `Interceptor` runs instead (they own
-   redaction). Masking applies only to the built-in default path — same shape as today's Cookie drop.
-
-## Scope (this feature)
-1. `LoggingOptions.SensitiveHeaders` + `MaskSensitiveHeaders` (XML docs + appsettings note).
-2. Pre-compiled lookup in `CompiledLoggingOptions`.
-3. Apply masking to request + response headers in the default branch of the middleware.
-4. Tests: default masks Authorization/X-API-KEY (request + response); custom list; opt-out;
-   non-sensitive untouched; case-insensitive; key retained / value `***`.
-5. README (Api): document the masking default + how to configure/opt out.
+## Scope
+1. `StaleWhileRevalidate` on both options (XML docs cross-referencing `HttpTimeout`).
+2. Gate the SWR branch in both clients.
+3. Flow the flag from config in both registrations.
+4. Tests: default true; disabled → synchronous refresh returns fresh value; enabled → stale returned.
+5. README rows for both options.
 
 ## Out of scope
-- Body redaction (the `Interceptor` already covers arbitrary body/secret scrubbing).
-- Masking in the Toolkit's outbound clients (they don't log their own request headers).
-- Query-string secret masking (possible follow-up).
+- Fixing the broader config-binding gap (registrations only copy ApiKey/Address) — logged to backlog.
+- ValueGroupClient (separate caching model; its README already documents fresh-by-default).
 
 ## Acceptance criteria
-- With defaults, `Authorization` and `X-API-KEY` values are `***` in both request and response logs;
-  the header key remains present.
-- A consumer can set their own `SensitiveHeaders` or disable via `MaskSensitiveHeaders=false`.
-- Matching is case-insensitive.
-- A configured `Interceptor` still fully controls redaction (masking is default-path only).
-- Build + tests pass; warning count under the CI ratchet baseline.
+- Default unchanged (SWR on). `StaleWhileRevalidate=false` → expired entry refreshed synchronously,
+  caller sees the fresh value; on failure still falls back to stale.
+- Configurable via code and appsettings.
+- Build + tests green; warnings under the CI ratchet.
 
 ## Done condition
-All criteria met, tests green, README updated, user confirms. `plan/` removed at composite-PR
-close-out (repo batches features on `develop`).
+Criteria met, tests green, README updated, user confirms. `plan/` removed at composite-PR close-out.

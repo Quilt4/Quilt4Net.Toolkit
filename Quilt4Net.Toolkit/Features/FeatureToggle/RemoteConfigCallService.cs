@@ -62,8 +62,9 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             }
 
             // Stale-while-revalidate: if we have a stale cached value, return it immediately
-            // and refresh in the background.
-            if (cached != null)
+            // and refresh in the background. Disabled via options → fall through to a synchronous
+            // fetch so the caller gets a fresh value.
+            if (cached != null && _options.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, ttl, effectiveApplication);
                 var staleValue = GetCachedOrDefault(cached, defaultValue);
@@ -72,7 +73,8 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 return staleValue;
             }
 
-            // No cache at all — must fetch with timeout.
+            // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
+            // still falls back to any stale cached value on failure.
             return await FetchWithTimeout(key, cacheKey, defaultValue, ttl, sw, effectiveApplication);
         }
         catch (Exception e)
