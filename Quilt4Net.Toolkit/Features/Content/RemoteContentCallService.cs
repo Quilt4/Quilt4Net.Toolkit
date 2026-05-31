@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
@@ -24,10 +25,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private DateTime _languagesValidTo;
     private TimeSpan _lastKnownLanguageTtl;
 
-    public RemoteContentCallService(EnvironmentName environmentName, IOptions<ContentOptions> contentOptions, ILogger<RemoteContentCallService> logger)
+    /// <summary>Named <see cref="IHttpClientFactory"/> client for content calls to Quilt4Net.Server.</summary>
+    public const string HttpClientName = "Quilt4Net.Content";
+
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public RemoteContentCallService(EnvironmentName environmentName, IOptions<ContentOptions> contentOptions, IHttpClientFactory httpClientFactory, ILogger<RemoteContentCallService> logger)
     {
         _environmentName = environmentName;
         _contentOptions = contentOptions.Value;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -59,7 +66,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
             }
 
             // Stale-while-revalidate: return stale value immediately, refresh in background.
-            if (cached != null)
+            // Disabled via options → fall through to a synchronous fetch so the caller gets a fresh value.
+            if (cached != null && _contentOptions.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication);
                 _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
@@ -67,7 +75,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 return (cached.Value ?? defaultValue, true);
             }
 
-            // No cache — must fetch with timeout.
+            // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
+            // still falls back to any stale cached value on failure.
             return await FetchContentWithTimeout(key, cacheKey, defaultValue, languageKey, contentType, sw, effectiveApplication);
         }
         catch (Exception e)
@@ -105,9 +114,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var response = await client.PostAsJsonAsync(address, setContentRequest);
             response.EnsureSuccessStatusCode();
 
+            // This instance's cache is cleared immediately, but OTHER clients keep serving their
+            // cached value until their own TTL expires (or StaleWhileRevalidate refreshes it) — so a
+            // write is not instantly visible fleet-wide. Surface that as an informational hint.
             _localCache.TryRemove(BuildCacheKey(key, languageKey, effectiveApplication), out _);
-
-            //TODO: Notify the user that this content will be updated after this long time on all clients, because of cache.
+            _logger.LogInformation(
+                "Content '{Key}' updated. This client's cache was cleared; other clients will pick up the change after their cache TTL expires.",
+                key);
         }
         catch (Exception e)
         {
@@ -321,20 +334,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
         return payload;
     }
 
-    private HttpClient GetHttpClient()
-    {
-        HttpClient client = null;
-        try
-        {
-            client = new HttpClient();
-            client.DefaultRequestHeaders.Add("X-API-KEY", _contentOptions.ApiKey);
-            client.BaseAddress = new Uri(_contentOptions.Quilt4NetAddress);
-            return client;
-        }
-        catch
-        {
-            client?.Dispose();
-            throw;
-        }
-    }
+    // Factory-created named client: BaseAddress + X-API-KEY are configured once at registration,
+    // and the correlation-id handler is attached there. Disposing a factory client is the intended
+    // usage (it returns the pooled handler), so existing `using var client = GetHttpClient();`
+    // call sites stay correct.
+    private HttpClient GetHttpClient() => _httpClientFactory.CreateClient(HttpClientName);
 }

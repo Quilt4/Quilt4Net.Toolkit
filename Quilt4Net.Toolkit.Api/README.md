@@ -44,6 +44,33 @@ union AppTraces, AppExceptions, AppRequests
 
 Or, in the toolkit's `LogView` Search tab, paste the id into the search box (it filters on both `Message` and `CorrelationId`). The Search tab's CorrelationId column also has a click-to-self-search shortcut — click any row's correlation chip and the grid re-runs scoped to that id.
 
+### Forwarding the correlation id on outbound calls
+
+The middleware gives the *current* request an id. To keep that id flowing when your app calls
+**other services** over HTTP — so one id spans your app, the services it calls, and Quilt4Net.Server —
+opt the relevant `HttpClient`s into propagation:
+
+```csharp
+// One-time registration (implied by AddQuilt4NetLogging().AddHttpRequestLogging(), but safe to call directly):
+builder.Services.AddQuilt4NetCorrelationId();
+
+// Opt in each client that calls a correlation-aware (typically your own internal) service:
+builder.Services.AddHttpClient("internal-api")
+    .AddQuilt4NetCorrelationId();
+```
+
+Any request sent through that client carries the current request's `X-Correlation-ID`. If the
+receiving service also runs `CorrelationIdMiddleware`, it continues the same id instead of minting a
+new one — so a single id ties the whole chain together in Application Insights.
+
+Notes:
+- **Opt-in per client by design.** Don't attach it to clients calling third-party APIs (Fortnox,
+  Stripe, Azure, …) — leaking an internal id to endpoints that don't read it is pointless and noisy.
+- **No ambient id → no header.** Outside a request (background work, non-ASP.NET hosts) nothing is
+  added; an explicitly-set `X-Correlation-ID` on the request is never overwritten.
+- Quilt4Net.Toolkit's own clients (`Content`, `RemoteConfiguration`/feature toggles, `ValueGroup`)
+  already forward the id to Quilt4Net.Server automatically once `AddHttpRequestLogging()` is wired up.
+
 ## Logging mode
 
 Control where logs are sent using `HttpRequestLogMode`.
@@ -101,17 +128,32 @@ The `[Logging]` attribute can be applied to methods or classes.
 
 ## Interceptor
 
-Use an interceptor to modify or filter logged data before it is written. This is useful for removing sensitive information such as passwords or API keys.
+The `Interceptor` modifies or filters the captured request/response before it is logged — the single
+hook for removing secrets (headers, body, …).
+
+**By default it masks sensitive header values.** `Interceptor` is pre-set to
+`MaskSensitiveHeadersInterceptor`, which replaces the values of `SensitiveHeaders` with `***` on both
+request and response (case-insensitive name match), keeping the header key so its presence stays
+visible without leaking the value. Default masked headers: `Authorization`, `X-API-KEY`,
+`Proxy-Authorization`, `Cookie`, `Set-Cookie`.
+
+Configure the masked set, log everything verbatim, or take full control:
 
 ```csharp
 builder.AddQuilt4NetLogging()
     .AddHttpRequestLogging(o =>
     {
+        // (a) tweak which headers the default interceptor masks:
+        o.SensitiveHeaders = ["Authorization", "X-API-KEY", "X-My-Secret"];
+
+        // (b) OR disable filtering entirely — log request/response verbatim:
+        o.Interceptor = null;
+
+        // (c) OR supply your own (optionally composing the built-in masking):
         o.Interceptor = async (request, response, properties, serviceProvider) =>
         {
-            // Remove sensitive headers
-            request.Headers.Remove("Authorization");
-            return (request, response, properties);
+            request.Headers.Remove("X-Internal-Token");
+            return await o.MaskSensitiveHeadersInterceptor(request, response, properties, serviceProvider);
         };
     });
 ```
@@ -147,7 +189,8 @@ builder.AddQuilt4NetLogging()
       "MaxBodySize": 1000000,
       "IncludePaths": ["^/Api"],
       "LogRequestBodyByDefault": true,
-      "LogResponseBodyByDefault": false
+      "LogResponseBodyByDefault": false,
+      "SensitiveHeaders": ["Authorization", "X-API-KEY", "Proxy-Authorization", "Cookie", "Set-Cookie"]
     }
   }
 }
@@ -166,7 +209,8 @@ Configuration path: `Quilt4Net:ApiLogging`
 | `IncludePaths` | `["^/Api"]` | Regex patterns (case-insensitive) for paths to include. |
 | `LogRequestBodyByDefault` | `true` | Log request body by default. Override per endpoint with `[Logging]`. |
 | `LogResponseBodyByDefault` | `false` | Log response body by default. Override per endpoint with `[Logging]`. |
-| `Interceptor` | `null` | Callback to modify or filter logged data before writing. |
+| `SensitiveHeaders` | `Authorization`, `X-API-KEY`, `Proxy-Authorization`, `Cookie`, `Set-Cookie` | Header names (case-insensitive) whose values the default interceptor masks. |
+| `Interceptor` | masks `SensitiveHeaders` | Callback to modify/filter logged data. Defaults to header masking; set to `null` to log verbatim. |
 
 ## Logged data
 
@@ -176,7 +220,7 @@ Configuration path: `Quilt4Net:ApiLogging`
 |-------|-------------|
 | `Method` | HTTP method (GET, POST, etc.). |
 | `Path` | Request path. |
-| `Headers` | Request headers (cookies are automatically filtered). |
+| `Headers` | Request headers (sensitive header values are masked by default — see Sensitive header masking). |
 | `Query` | Query string parameters. |
 | `Body` | Request body (respects `MaxBodySize` limit). |
 | `ClientIp` | Client IP address. |

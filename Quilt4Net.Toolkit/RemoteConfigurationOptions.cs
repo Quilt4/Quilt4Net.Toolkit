@@ -22,9 +22,19 @@ public record RemoteConfigurationOptions
 
     /// <summary>
     /// Timeout for HTTP calls to the Quilt4Net server.
-    /// Default is 5 seconds. When a stale cached value exists, the caller
-    /// gets the stale value immediately and the refresh happens in the background.
-    /// This timeout only blocks when no cached value exists.
+    /// Default is 5 seconds. When a stale cached value exists and <see cref="StaleWhileRevalidate"/>
+    /// is enabled, the caller gets the stale value immediately and the refresh happens in the
+    /// background, so this timeout only blocks when no cached value exists. When
+    /// <see cref="StaleWhileRevalidate"/> is disabled, an expired entry is refreshed synchronously
+    /// and this timeout applies to that call.
     /// </summary>
     public TimeSpan HttpTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// When true (default), an expired cache entry is returned immediately and refreshed in the
+    /// background (stale-while-revalidate) — fast, but the caller may see one slightly stale value.
+    /// When false, an expired entry is refreshed synchronously so the caller always gets a fresh
+    /// value (subject to <see cref="HttpTimeout"/>), at the cost of blocking on the refresh.
+    /// </summary>
+    public bool StaleWhileRevalidate { get; set; } = true;
 }

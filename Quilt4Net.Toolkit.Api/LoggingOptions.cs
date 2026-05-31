@@ -8,6 +8,14 @@ namespace Quilt4Net.Toolkit.Api;
 /// </summary>
 public record LoggingOptions
 {
+    public LoggingOptions()
+    {
+        // Default interceptor masks the configured SensitiveHeaders on the logged request/response.
+        // Set in the constructor (not an initializer) so it can read this instance's SensitiveHeaders
+        // at invocation time. Set Interceptor = null to log everything verbatim, or assign your own.
+        Interceptor = MaskSensitiveHeadersInterceptor;
+    }
+
     /// <summary>
     /// Add logger for Http request and response with body, headers, query and results.
     /// Default is append to Application Insights requests.
@@ -63,9 +71,47 @@ public record LoggingOptions
     /// </summary>
     public bool LogResponseBodyByDefault { get; set; } = false;
 
+    /// <summary>Placeholder written in place of a sensitive header's value by the default interceptor.</summary>
+    public const string HeaderMask = "***";
+
     /// <summary>
-    /// Create interceptor for the logger so that information can be modified.
-    /// This can be used to remove secrets from logging.
+    /// Header names whose values the default interceptor (<see cref="MaskSensitiveHeadersInterceptor"/>)
+    /// masks. Matching is case-insensitive. Defaults to common credential-bearing headers; replace or
+    /// extend to suit. Configurable via appsettings at <c>Quilt4Net:ApiLogging:SensitiveHeaders</c>.
+    /// Has no effect if you replace <see cref="Interceptor"/> with your own (or set it to <c>null</c>).
+    /// </summary>
+    public string[] SensitiveHeaders { get; set; } =
+        ["Authorization", "X-API-KEY", "Proxy-Authorization", "Cookie", "Set-Cookie"];
+
+    /// <summary>
+    /// Modifies or filters the captured request/response before it is logged — the single hook for
+    /// removing secrets (headers, body, …). Runs on the built-in logging path.
+    /// <list type="bullet">
+    /// <item>Default: <see cref="MaskSensitiveHeadersInterceptor"/> — masks the values of <see cref="SensitiveHeaders"/>.</item>
+    /// <item><c>null</c>: no filtering — request/response are logged verbatim.</item>
+    /// <item>Custom: full control; call <see cref="MaskSensitiveHeadersInterceptor"/> yourself to keep header masking.</item>
+    /// </list>
     /// </summary>
     public Func<Request, Response, Dictionary<string, string>, IServiceProvider, Task<(Request, Response, Dictionary<string, string>)>> Interceptor;
+
+    /// <summary>
+    /// Default <see cref="Interceptor"/>: masks the values of <see cref="SensitiveHeaders"/> on both
+    /// request and response (case-insensitive name match), replacing each with <see cref="HeaderMask"/>
+    /// while keeping the key — so a header's presence stays visible without leaking its value. Empty
+    /// header values are dropped. Body and details pass through unchanged.
+    /// </summary>
+    public Task<(Request, Response, Dictionary<string, string>)> MaskSensitiveHeadersInterceptor(
+        Request request, Response response, Dictionary<string, string> details, IServiceProvider serviceProvider)
+    {
+        var sensitive = new HashSet<string>(SensitiveHeaders ?? [], StringComparer.OrdinalIgnoreCase);
+
+        Dictionary<string, string> Mask(Dictionary<string, string> headers) => headers
+            .Where(x => !string.IsNullOrEmpty(x.Value))
+            .ToDictionary(x => x.Key, x => sensitive.Contains(x.Key) ? HeaderMask : x.Value);
+
+        request = request with { Headers = Mask(request.Headers) };
+        if (response != null) response = response with { Headers = Mask(response.Headers) };
+
+        return Task.FromResult((request, response, details));
+    }
 }

@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -11,6 +12,9 @@ namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
 internal class RemoteConfigCallService : IRemoteConfigCallService
 {
+    /// <summary>Named <see cref="IHttpClientFactory"/> client for config/toggle calls to Quilt4Net.Server.</summary>
+    public const string HttpClientName = "Quilt4Net.RemoteConfiguration";
+
     private static readonly TimeSpan FallbackFailureCacheDuration = TimeSpan.FromMinutes(10);
 
     private readonly IServiceProvider _serviceProvider;
@@ -58,8 +62,9 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             }
 
             // Stale-while-revalidate: if we have a stale cached value, return it immediately
-            // and refresh in the background.
-            if (cached != null)
+            // and refresh in the background. Disabled via options → fall through to a synchronous
+            // fetch so the caller gets a fresh value.
+            if (cached != null && _options.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, ttl, effectiveApplication);
                 var staleValue = GetCachedOrDefault(cached, defaultValue);
@@ -68,7 +73,8 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 return staleValue;
             }
 
-            // No cache at all — must fetch with timeout.
+            // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
+            // still falls back to any stale cached value on failure.
             return await FetchWithTimeout(key, cacheKey, defaultValue, ttl, sw, effectiveApplication);
         }
         catch (Exception e)
@@ -328,20 +334,8 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         return payload;
     }
 
+    // Factory-created named client (BaseAddress + X-API-KEY + correlation handler configured at
+    // registration). Resolved via the existing IServiceProvider so no constructor change is needed.
     private HttpClient GetHttpClient()
-    {
-        HttpClient client = null;
-        try
-        {
-            client = new HttpClient();
-            client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
-            client.BaseAddress = new Uri(_options.Quilt4NetAddress);
-            return client;
-        }
-        catch
-        {
-            client?.Dispose();
-            throw;
-        }
-    }
+        => _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
 }

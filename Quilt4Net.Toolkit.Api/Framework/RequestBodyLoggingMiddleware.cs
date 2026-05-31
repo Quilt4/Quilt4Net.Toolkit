@@ -91,7 +91,10 @@ public class RequestResponseLoggingMiddleware
 
             var responseDetails = await CaptureResponseDetailsAsync(context, logResponseBody, _options?.MaxBodySize ?? Constants.MaxBodySize);
 
-            //NOTE: Intercept the request, response and details, so that it can be modified and cleaned from secrets.
+            //NOTE: Intercept the request, response and details, so that it can be modified and cleaned
+            // from secrets. The interceptor defaults to LoggingOptions.MaskSensitiveHeadersInterceptor
+            // (masks credential-bearing header values); set Interceptor = null to log verbatim, or
+            // supply your own. When null, headers/body are logged exactly as captured.
             if (_options?.Interceptor != null)
             {
                 try
@@ -102,22 +105,6 @@ public class RequestResponseLoggingMiddleware
                 {
                     throw new InvalidOperationException($"Log {nameof(_options.Interceptor)} Exception. {e.Message}", e);
                 }
-            }
-            else
-            {
-                requestDetails = requestDetails with
-                {
-                    Headers = requestDetails.Headers
-                        .Where(x => x.Key != "Cookie")
-                        .Where(x => !string.IsNullOrEmpty(x.Value))
-                        .ToDictionary(x => x.Key, x => x.Value)
-                };
-                responseDetails = responseDetails with
-                {
-                    Headers = responseDetails.Headers
-                        .Where(x => !string.IsNullOrEmpty(x.Value))
-                        .ToDictionary(x => x.Key, x => x.Value)
-                };
             }
 
             var detailsJsonString = BuildDetailsString(details);
@@ -186,18 +173,14 @@ public class RequestResponseLoggingMiddleware
             }
             else if (!context.Request.ContentLength.HasValue)
             {
-                // Read into buffer and cut off if too big
+                // Chunked/streamed request (no Content-Length): buffer once to measure size, then
+                // decode that same buffer — avoids a second full read of the request body. The body
+                // is rewound (Position = 0 below) so the downstream handler still reads it normally.
                 using var memStream = new MemoryStream();
-                await context.Request.Body.CopyToAsync(memStream); //TODO: Performance: Change to use a pass-through-stream. This will make the call halt, until the buffer here is complete.
-                if (memStream.Length <= maxBodySize)
-                {
-                    context.Request.Body.Position = 0;
-                    body = await new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true).ReadToEndAsync();
-                }
-                else
-                {
-                    body = $"[Skipped: Request body exceeds {maxBodySize} bytes]";
-                }
+                await context.Request.Body.CopyToAsync(memStream);
+                body = memStream.Length <= maxBodySize
+                    ? Encoding.UTF8.GetString(memStream.GetBuffer(), 0, (int)memStream.Length)
+                    : $"[Skipped: Request body exceeds {maxBodySize} bytes]";
             }
             else
             {

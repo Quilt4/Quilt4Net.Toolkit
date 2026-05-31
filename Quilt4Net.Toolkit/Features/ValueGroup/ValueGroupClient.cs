@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -7,9 +8,13 @@ namespace Quilt4Net.Toolkit.Features.ValueGroup;
 
 internal class ValueGroupClient : IValueGroupClient
 {
+    /// <summary>Named <see cref="IHttpClientFactory"/> client for value-group calls to Quilt4Net.Server.</summary>
+    public const string HttpClientName = "Quilt4Net.ValueGroup";
+
     private static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(5);
 
     private readonly ValueGroupClientOptions _options;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ValueGroupClient> _logger;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
 
@@ -17,9 +22,10 @@ internal class ValueGroupClient : IValueGroupClient
     private DateTime _cachedAt = DateTime.MinValue;
     private volatile bool _refreshInProgress;
 
-    public ValueGroupClient(IOptions<ValueGroupClientOptions> options, ILogger<ValueGroupClient> logger)
+    public ValueGroupClient(IOptions<ValueGroupClientOptions> options, IHttpClientFactory httpClientFactory, ILogger<ValueGroupClient> logger)
     {
         _options = options.Value;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
 
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
@@ -138,19 +144,7 @@ internal class ValueGroupClient : IValueGroupClient
         });
     }
 
-    private HttpClient CreateHttpClient()
-    {
-        HttpClient client = null;
-        try
-        {
-            client = new HttpClient { BaseAddress = new Uri(_options.Quilt4NetAddress) };
-            client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
-            return client;
-        }
-        catch
-        {
-            client?.Dispose();
-            throw;
-        }
-    }
+    // Factory-created named client (BaseAddress + X-API-KEY + correlation handler configured at
+    // registration). Replaces the previous per-call `new HttpClient()`.
+    private HttpClient CreateHttpClient() => _httpClientFactory.CreateClient(HttpClientName);
 }
