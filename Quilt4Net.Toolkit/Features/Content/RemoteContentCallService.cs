@@ -66,7 +66,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
             }
 
             // Stale-while-revalidate: return stale value immediately, refresh in background.
-            if (cached != null)
+            // Disabled via options → fall through to a synchronous fetch so the caller gets a fresh value.
+            if (cached != null && _contentOptions.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication);
                 _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
@@ -74,7 +75,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 return (cached.Value ?? defaultValue, true);
             }
 
-            // No cache — must fetch with timeout.
+            // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
+            // still falls back to any stale cached value on failure.
             return await FetchContentWithTimeout(key, cacheKey, defaultValue, languageKey, contentType, sw, effectiveApplication);
         }
         catch (Exception e)

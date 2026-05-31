@@ -68,6 +68,7 @@ var maxRetries = await _configService.GetValueAsync("MaxRetries", fallback: 3);
 | `ApiKey` | `null` | API key from [Quilt4Net Web](https://quilt4net.com). |
 | `Quilt4NetAddress` | `"https://quilt4net.com/"` | Quilt4Net server address. |
 | `Ttl` | `null` | Time-to-live for cached values. |
+| `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
 
 Configuration path: `Quilt4Net:RemoteConfiguration`
 
@@ -92,6 +93,7 @@ var (value, success) = await _contentService.GetContentAsync("welcome-message", 
 | `Application` | Assembly name | Application name. |
 | `Quilt4NetAddress` | `"https://quilt4net.com/"` | Quilt4Net server address. |
 | `ApiKey` | `null` | API key from [Quilt4Net Web](https://quilt4net.com). |
+| `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
 
 Configuration path: `Quilt4Net:Content`
 

@@ -36,7 +36,8 @@ public static class RemoteConfigurationRegistration
         var o = new RemoteConfigurationOptions
         {
             ApiKey = config?.ApiKey ?? apiKey,
-            Quilt4NetAddress = config?.Quilt4NetAddress ?? address ?? "https://quilt4net.com/"
+            Quilt4NetAddress = config?.Quilt4NetAddress ?? address ?? "https://quilt4net.com/",
+            StaleWhileRevalidate = config?.StaleWhileRevalidate ?? new RemoteConfigurationOptions().StaleWhileRevalidate
         };
 
         if (!Uri.TryCreate(o.Quilt4NetAddress, UriKind.Absolute, out _)) throw new InvalidOperationException($"Configuration {nameof(o.Quilt4NetAddress)} with value '{o.Quilt4NetAddress}' cannot be parsed to an absolute uri.");
