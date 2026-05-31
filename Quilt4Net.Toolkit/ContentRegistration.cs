@@ -49,14 +49,26 @@ public static class ContentRegistration
         services.AddTransient<ILanguageService, LanguageService>();
         services.AddTransient<IContentService, ContentService>();
 
+        // Named factory client: BaseAddress + X-API-KEY configured once, correlation-id forwarded
+        // to Quilt4Net.Server. Replaces the previous per-call `new HttpClient()` (socket-pooling +
+        // correlation propagation). Captures o directly — options are fixed at registration.
+        services.AddQuilt4NetCorrelationId();
+        services.AddHttpClient(RemoteContentCallService.HttpClientName, client =>
+            {
+                client.BaseAddress = new Uri(o.Quilt4NetAddress);
+                if (!string.IsNullOrEmpty(o.ApiKey)) client.DefaultRequestHeaders.Add("X-API-KEY", o.ApiKey);
+            })
+            .AddQuilt4NetCorrelationId();
+
         //NOTE: Holds cached content.
         services.AddSingleton<IRemoteContentCallService>(s =>
         {
             var env = s.GetService<IHostEnvironment>();
             var co = s.GetService<IOptions<ContentOptions>>();
             var environmentName = new Features.FeatureToggle.EnvironmentName { Name = env?.EnvironmentName ?? "Production" };
+            var httpClientFactory = s.GetRequiredService<IHttpClientFactory>();
             var logger = s.GetService<ILogger<RemoteContentCallService>>();
-            return new RemoteContentCallService(environmentName, co, logger);
+            return new RemoteContentCallService(environmentName, co, httpClientFactory, logger);
         });
     }
 }

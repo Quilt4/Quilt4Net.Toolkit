@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Api.Framework;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Api;
 
@@ -17,6 +19,13 @@ public static class HttpRequestLoggingRegistration
 
         builder.Services.AddSingleton(Options.Create(loggingOptions));
         builder.Services.AddSingleton(_ => new CompiledLoggingOptions(loggingOptions));
+
+        // The inbound middleware stamps HttpContext.Items[CorrelationId]; this accessor exposes it
+        // to outbound HttpClients (Toolkit's own + any consumer client opted in via
+        // AddQuilt4NetCorrelationId()). Replaces the base package's NullCorrelationIdAccessor.
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddQuilt4NetCorrelationId();
+        builder.Services.Replace(ServiceDescriptor.Singleton<ICorrelationIdAccessor, HttpContextCorrelationIdAccessor>());
 
         return builder;
     }
