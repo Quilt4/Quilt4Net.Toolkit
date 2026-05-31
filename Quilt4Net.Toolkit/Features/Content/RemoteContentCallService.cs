@@ -106,8 +106,6 @@ internal class RemoteContentCallService : IRemoteContentCallService
             response.EnsureSuccessStatusCode();
 
             _localCache.TryRemove(BuildCacheKey(key, languageKey, effectiveApplication), out _);
-
-            //TODO: Notify the user that this content will be updated after this long time on all clients, because of cache.
         }
         catch (Exception e)
         {
