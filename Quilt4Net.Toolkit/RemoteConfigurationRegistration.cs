@@ -32,13 +32,14 @@ public static class RemoteConfigurationRegistration
         var apiKey = configuration?.GetSection("Quilt4Net").GetSection("ApiKey").Value;
         var address = configuration?.GetSection("Quilt4Net").GetSection("Quilt4NetAddress").Value;
 
+        // Bind the whole section so EVERY appsettings field flows through (HttpTimeout, Ttl,
+        // Application, StaleWhileRevalidate, …). Only ApiKey / Quilt4NetAddress keep their special
+        // fallback to the top-level Quilt4Net:ApiKey / :Quilt4NetAddress. Reference the nullable
+        // `config` (not the bound object's defaulted Quilt4NetAddress) to preserve original precedence.
         var config = configuration?.GetSection("Quilt4Net:RemoteConfiguration").Get<RemoteConfigurationOptions>();
-        var o = new RemoteConfigurationOptions
-        {
-            ApiKey = config?.ApiKey ?? apiKey,
-            Quilt4NetAddress = config?.Quilt4NetAddress ?? address ?? "https://quilt4net.com/",
-            StaleWhileRevalidate = config?.StaleWhileRevalidate ?? new RemoteConfigurationOptions().StaleWhileRevalidate
-        };
+        var o = config ?? new RemoteConfigurationOptions();
+        o.ApiKey = config?.ApiKey ?? apiKey;
+        o.Quilt4NetAddress = config?.Quilt4NetAddress ?? address ?? "https://quilt4net.com/";
 
         if (!Uri.TryCreate(o.Quilt4NetAddress, UriKind.Absolute, out _)) throw new InvalidOperationException($"Configuration {nameof(o.Quilt4NetAddress)} with value '{o.Quilt4NetAddress}' cannot be parsed to an absolute uri.");
 

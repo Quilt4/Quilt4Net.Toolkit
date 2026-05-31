@@ -173,18 +173,14 @@ public class RequestResponseLoggingMiddleware
             }
             else if (!context.Request.ContentLength.HasValue)
             {
-                // Read into buffer and cut off if too big
+                // Chunked/streamed request (no Content-Length): buffer once to measure size, then
+                // decode that same buffer — avoids a second full read of the request body. The body
+                // is rewound (Position = 0 below) so the downstream handler still reads it normally.
                 using var memStream = new MemoryStream();
                 await context.Request.Body.CopyToAsync(memStream);
-                if (memStream.Length <= maxBodySize)
-                {
-                    context.Request.Body.Position = 0;
-                    body = await new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true).ReadToEndAsync();
-                }
-                else
-                {
-                    body = $"[Skipped: Request body exceeds {maxBodySize} bytes]";
-                }
+                body = memStream.Length <= maxBodySize
+                    ? Encoding.UTF8.GetString(memStream.GetBuffer(), 0, (int)memStream.Length)
+                    : $"[Skipped: Request body exceeds {maxBodySize} bytes]";
             }
             else
             {

@@ -114,7 +114,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var response = await client.PostAsJsonAsync(address, setContentRequest);
             response.EnsureSuccessStatusCode();
 
+            // This instance's cache is cleared immediately, but OTHER clients keep serving their
+            // cached value until their own TTL expires (or StaleWhileRevalidate refreshes it) — so a
+            // write is not instantly visible fleet-wide. Surface that as an informational hint.
             _localCache.TryRemove(BuildCacheKey(key, languageKey, effectiveApplication), out _);
+            _logger.LogInformation(
+                "Content '{Key}' updated. This client's cache was cleared; other clients will pick up the change after their cache TTL expires.",
+                key);
         }
         catch (Exception e)
         {
