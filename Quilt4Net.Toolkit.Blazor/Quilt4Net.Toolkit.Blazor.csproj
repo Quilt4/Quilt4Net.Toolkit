@@ -8,7 +8,7 @@
     <Authors>Thargelion AB</Authors>
     <Company>Thargelion AB</Company>
     <Product>Quilt4Net Blazor Toolkit</Product>
-    <PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
+    <PackageIconUrl>https://thargelion.net/assets/product-quilt4net.png</PackageIconUrl>
     <PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>

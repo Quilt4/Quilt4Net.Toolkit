@@ -10,7 +10,7 @@
 		<Product>Quilt4Net Toolkit Api</Product>
 		<Tag>Api health liveness readiness</Tag>
 		<Description>Support for API health, liveness, readiness, startup, metrics, version and dependencies.</Description>
-		<PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
+		<PackageIconUrl>https://thargelion.net/assets/product-quilt4net.png</PackageIconUrl>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>

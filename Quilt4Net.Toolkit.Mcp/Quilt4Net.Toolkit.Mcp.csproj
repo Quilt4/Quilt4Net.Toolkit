@@ -8,7 +8,7 @@
     <Product>Quilt4Net Toolkit MCP</Product>
     <Tag>MCP ApplicationInsights</Tag>
     <Description>MCP (Model Context Protocol) provider for Quilt4Net.Toolkit. Exposes Application Insights query operations as MCP tools and resources, plugging into the Tharga.Mcp ecosystem so AI agents can look up incidents and correlate logs.</Description>
-    <PackageIconUrl>https://quilt4net.com/quilt4net-48x48.png</PackageIconUrl>
+    <PackageIconUrl>https://thargelion.net/assets/product-quilt4net.png</PackageIconUrl>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/Quilt4/Quilt4Net.Toolkit</PackageProjectUrl>
