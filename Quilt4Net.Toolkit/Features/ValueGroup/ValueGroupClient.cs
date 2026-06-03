@@ -30,8 +30,6 @@ internal class ValueGroupClient : IValueGroupClient
 
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
             throw new InvalidOperationException("ValueGroupClientOptions.ApiKey is required.");
-        if (string.IsNullOrWhiteSpace(_options.GroupId))
-            throw new InvalidOperationException("ValueGroupClientOptions.GroupId is required.");
         if (!Uri.TryCreate(_options.Quilt4NetAddress, UriKind.Absolute, out _))
             throw new InvalidOperationException($"ValueGroupClientOptions.Quilt4NetAddress '{_options.Quilt4NetAddress}' is not an absolute URI.");
     }
@@ -68,26 +66,26 @@ internal class ValueGroupClient : IValueGroupClient
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
             using var client = CreateHttpClient();
 
-            var response = await client.GetAsync($"Api/ValueGroup/{_options.GroupId}", linkedCts.Token);
+            var response = await client.GetAsync("Api/ValueGroup", linkedCts.Token);
 
             if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
             {
                 // Revoked / unbound / wrong scope. Don't fall back to cached data — surface explicitly.
                 throw new ValueGroupAuthorizationException(
-                    $"Server returned {(int)response.StatusCode} {response.StatusCode} for value group '{_options.GroupId}'. The API key may have been revoked or is not bound to this group.");
+                    $"Server returned {(int)response.StatusCode} {response.StatusCode} for value group fetch. The API key may have been revoked, has no value-group tag, or is missing the valuegroup:read scope.");
             }
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError(
-                    "Unable to fetch value group '{GroupId}'. Response was {StatusCode} {ReasonPhrase}.",
-                    _options.GroupId, response.StatusCode, response.ReasonPhrase);
+                    "Unable to fetch value group bundle. Response was {StatusCode} {ReasonPhrase}.",
+                    response.StatusCode, response.ReasonPhrase);
                 if (cached != null) return cached;
                 response.EnsureSuccessStatusCode(); // throws
             }
 
             var bundle = await response.Content.ReadFromJsonAsync<ValueGroupBundle>(linkedCts.Token)
-                         ?? throw new InvalidOperationException($"Server returned an empty body for value group '{_options.GroupId}'.");
+                         ?? throw new InvalidOperationException("Server returned an empty body for the value group bundle.");
 
             _cached = bundle;
             _cachedAt = DateTime.UtcNow;
@@ -100,14 +98,14 @@ internal class ValueGroupClient : IValueGroupClient
         catch (OperationCanceledException)
         {
             _logger.LogWarning(
-                "Value group '{GroupId}' fetch timed out after {Timeout}ms.",
-                _options.GroupId, _options.HttpTimeout.TotalMilliseconds);
+                "Value group bundle fetch timed out after {Timeout}ms.",
+                _options.HttpTimeout.TotalMilliseconds);
             if (_cached != null) return _cached;
             throw;
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Failed to fetch value group '{GroupId}': {Message}.", _options.GroupId, e.Message);
+            _logger.LogError(e, "Failed to fetch value group bundle: {Message}.", e.Message);
             if (_cached != null) return _cached;
             throw;
         }
@@ -130,8 +128,7 @@ internal class ValueGroupClient : IValueGroupClient
             }
             catch (ValueGroupAuthorizationException ex)
             {
-                _logger.LogWarning(ex, "Background refresh for value group '{GroupId}' was denied; stale cache will continue serving until the next foreground fetch.",
-                    _options.GroupId);
+                _logger.LogWarning(ex, "Background refresh for value group bundle was denied; stale cache will continue serving until the next foreground fetch.");
             }
             catch
             {
