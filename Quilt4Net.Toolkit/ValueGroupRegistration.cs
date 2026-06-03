@@ -28,7 +28,6 @@ public static class ValueGroupRegistration
         {
             Quilt4NetAddress = fromConfig?.Quilt4NetAddress ?? topLevelAddress ?? "https://quilt4net.com/",
             ApiKey = fromConfig?.ApiKey ?? topLevelApiKey,
-            GroupId = fromConfig?.GroupId,
             Ttl = fromConfig?.Ttl,
             HttpTimeout = fromConfig?.HttpTimeout ?? TimeSpan.FromSeconds(5)
         };

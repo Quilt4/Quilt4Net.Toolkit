@@ -222,21 +222,20 @@ public class ValueGroupClientTests
     [Fact]
     public void Registration_Validates_Required_Options()
     {
-        // Missing GroupId
+        // Missing ApiKey
         var host = Host.CreateDefaultBuilder()
             .ConfigureServices(services =>
             {
                 services.AddQuilt4NetValueGroupClient(null, o =>
                 {
                     o.Quilt4NetAddress = "http://127.0.0.1:9999/";
-                    o.ApiKey = "test-key";
-                    o.GroupId = null;
+                    o.ApiKey = null;
                 });
             })
             .Build();
 
         var act = () => host.Services.GetRequiredService<IValueGroupClient>();
-        act.Should().Throw<InvalidOperationException>().WithMessage("*GroupId*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*ApiKey*");
     }
 
     private static IHost BuildHost(string address, TimeSpan? ttl = null)
@@ -247,7 +246,6 @@ public class ValueGroupClientTests
                 {
                     o.Quilt4NetAddress = address;
                     o.ApiKey = "test-key";
-                    o.GroupId = GroupId;
                     o.Ttl = ttl;
                     o.HttpTimeout = TimeSpan.FromSeconds(2);
                 });
