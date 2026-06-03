@@ -16,6 +16,6 @@ public record ValueGroupBundle
     public ConfigurationResponse[] FeatureToggles { get; init; } = [];
     public ApplicationInsightsConfigurationResponse[] ApplicationInsightsConfigurations { get; init; } = [];
     public KeyValueEntry[] KeyValues { get; init; } = [];
-    public AtlasReadOnlyAccessEntry[] AtlasReadOnlyAccesses { get; init; } = [];
+    public AtlasDatabaseAccessEntry[] AtlasDatabaseAccesses { get; init; } = [];
     public AtlasFirewallCredentialEntry[] AtlasFirewallCredentials { get; init; } = [];
 }
