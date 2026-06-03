@@ -219,7 +219,6 @@ Use this when an agent needs least-privilege access to a specific deployment's c
 ```csharp
 builder.AddQuilt4NetValueGroupClient(o =>
 {
-    o.GroupId = "507f1f77bcf86cd799439011";  // the group's ObjectId from the admin UI
     o.ApiKey = builder.Configuration["Quilt4Net:ValueGroup:ApiKey"];
 });
 ```
@@ -243,8 +242,7 @@ public class MyAgent(IValueGroupClient client)
 | Property | Default | Description |
 |----------|---------|-------------|
 | `Quilt4NetAddress` | `https://quilt4net.com/` | Server base URL. |
-| `ApiKey` | — *(required)* | The API key minted for this Value Group in the server's admin UI. Must carry the `valuegroup:read` scope and be tag-bound to `GroupId`. |
-| `GroupId` | — *(required)* | The id of the Value Group this client fetches. |
+| `ApiKey` | — *(required)* | The API key minted for this Value Group in the server's admin UI. Must carry the `valuegroup:read` scope. The key is tag-bound server-side to exactly one Value Group; the server resolves which group from the key, so the client never names a group id. |
 | `Ttl` | `5 min` | Cache freshness window. Subsequent calls within the window serve the cached bundle. |
 | `HttpTimeout` | `5 s` | HTTP timeout. On timeout the cached bundle is served if available. |
 
