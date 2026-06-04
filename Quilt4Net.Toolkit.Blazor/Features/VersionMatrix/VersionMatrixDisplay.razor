@@ -27,6 +27,14 @@
         {
             <RadzenText TextStyle="TextStyle.Caption" Text="@($"Updated {_view.LastRefreshedUtc:u}")" />
         }
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_showDevelopment" TValue="bool" Name="showDevelopment" />
+            <RadzenLabel Component="showDevelopment" Text="Show Development" />
+        </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_showUnknown" TValue="bool" Name="showUnknown" />
+            <RadzenLabel Component="showUnknown" Text="Show Unknown" />
+        </RadzenStack>
     </RadzenStack>
 
     @if (_loading)
@@ -49,22 +57,24 @@
     }
     else
     {
+        var visibleEnvironments = VisibleEnvironments();
+        var visibleApplications = VisibleApplications(visibleEnvironments);
         <table class="version-matrix">
             <thead>
                 <tr>
                     <th>Application</th>
-                    @foreach (var env in _orderedEnvironments)
+                    @foreach (var env in visibleEnvironments)
                     {
                         <th>@env</th>
                     }
                 </tr>
             </thead>
             <tbody>
-                @foreach (var app in _view.Applications)
+                @foreach (var app in visibleApplications)
                 {
                     <tr>
                         <td><strong>@app</strong></td>
-                        @foreach (var env in _orderedEnvironments)
+                        @foreach (var env in visibleEnvironments)
                         {
                             <td>
                                 @if (_view.TryGetCell(app, env, out var cell))
@@ -162,6 +172,15 @@
     private IApplicationInsightsConfigurationSelector _selector;
     private IEnumerable<string> _selectedIds = [];
 
+    // Column toggles (off by default). When off, the matching environment column is hidden, and any
+    // application row left with no values in the remaining columns is hidden too.
+    private bool _showDevelopment;
+    private bool _showUnknown;
+
+    // EnvironmentOrdering maps a null/blank environment to this sentinel (internal there, so matched literally).
+    private const string DevelopmentEnvironment = "Development";
+    private const string UnknownEnvironment = "(unknown)";
+
     /// <summary>
     /// The configurations to query and merge into one matrix: the explicit <see cref="Context"/> when
     /// given; otherwise the selected configurations — or <b>all</b> of them when none are selected
@@ -209,6 +228,23 @@
     {
         await LoadAsync(forceRefresh: true);
     }
+
+    /// <summary>The ordered environments minus the columns hidden by the toggles.</summary>
+    private IReadOnlyList<string> VisibleEnvironments()
+        => _orderedEnvironments.Where(IsEnvironmentVisible).ToList();
+
+    private bool IsEnvironmentVisible(string environment)
+    {
+        if (!_showDevelopment && string.Equals(environment, DevelopmentEnvironment, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!_showUnknown && string.Equals(environment, UnknownEnvironment, StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    }
+
+    /// <summary>Applications that still have at least one value once the hidden columns are removed.</summary>
+    private IReadOnlyList<string> VisibleApplications(IReadOnlyList<string> visibleEnvironments)
+        => _view.Applications
+            .Where(app => visibleEnvironments.Any(env => _view.TryGetCell(app, env, out _)))
+            .ToList();
 
     private async Task LoadAsync(bool forceRefresh)
     {
