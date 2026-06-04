@@ -226,6 +226,7 @@ The host then stops needing any `Quilt4Net:ApplicationInsights` block; only `Qui
 | `ShowEnvironmentSelector` | `true` | Show environment dropdown. |
 | `Environment` | `null` | Override the environment. |
 | `Context` | `null` | Application Insights context. |
+| `Configs` | `null` | Explicit list of `ApplicationInsightsConfigurationResponse` to choose from (e.g. a team's workspaces). When more than one is supplied, `LogView` shows a dropdown and queries the selected one — so a host that already holds the workspaces can render `LogView` directly instead of wrapping it in a custom picker. Precedence: `Context` > selected `Configs` entry > built-in remote selector. |
 | `DetailPath` | `null` | Path for the detail page (see below). |
 | `SummaryPath` | `null` | Path for the summary page (see below). |
 | `Tab` | `null` | Initially selected tab name (e.g. `"summary"`). Typically bound from a `?tab=` query parameter. |
@@ -449,12 +450,15 @@ protected override async Task OnInitializedAsync()
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `Context` | `null` | AI context. Leave `null` to use the built-in workspace selector (remote mode) or the configured options (local mode). |
+| `Configs` | `null` | Explicit list of `ApplicationInsightsConfigurationResponse` to merge (e.g. a team's workspaces), with a multi-select bar (none selected = all). Lets a host that already holds the workspaces reuse this component instead of duplicating the grid. Precedence: `Context` > `Configs` > built-in remote selector. |
 | `Lookback` | toolkit default | How far back to scan for version entries. |
 | `EnvironmentOrder` | `ApplicationInsightsOptions.EnvironmentOrder` | Column (environment) ordering. |
 | `AliasFolder` | `null` | Optional `raw → logical` folding delegate. When `null`, falls back to `ApplicationInsightsOptions.ApplicationAlias`. |
 | `ConfigurationPath` | `null` | When set, an "Edit configuration" link is shown on authentication-failure alerts. |
 
-When the team has more than one configured workspace (remote mode) it renders a built-in **multi-select radio bar**: toggle one or more workspaces and their version data is merged into a single matrix; selecting none shows all. (`LogView` uses a single-select dropdown for the same purpose.)
+When the team has more than one configured workspace (remote mode, or an explicit `Configs` list) it renders a built-in **multi-select radio bar**: toggle one or more workspaces and their version data is merged into a single matrix; selecting none shows all. (`LogView` uses a single-select dropdown for the same purpose.)
+
+Two column toggles — **Show Development** and **Show Unknown** — are off by default. Each hides its environment column (`Development` / `(unknown)`) and drops any application row left without values in the remaining columns, so dev-only / unknown-only apps stay out of the default view. Toggling is instant (no re-query).
 
 ## Developer monitoring pages
 

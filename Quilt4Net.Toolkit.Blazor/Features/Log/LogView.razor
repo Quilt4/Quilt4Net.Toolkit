@@ -21,11 +21,21 @@
 <CascadingValue Name="ApplicationAliasMap" Value="@_effectiveAliasMap">
 <CascadingValue Name="FilterStorageScope" Value="@FilterStorageScope">
 <CascadingValue Name="SourcePathRoots" Value="@SourcePathRoots">
-    <RadzenRow Style="margin-bottom: 6px;" Visible="@(_selector != null || ShowRangeSelector || ShowEnvironmentSelector)">
+    <RadzenRow Style="margin-bottom: 6px;" Visible="@(_selector != null || Configs is { Count: > 1 } || ShowRangeSelector || ShowEnvironmentSelector)">
         @if (_selector != null && _selector.Available.Count > 1)
         {
             <RadzenColumn>
                 <ApplicationInsightsConfigurationDropdown />
+            </RadzenColumn>
+        }
+        else if (Configs is { Count: > 1 })
+        {
+            <RadzenColumn>
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
+                    <RadzenDropDown Data="@Configs" @bind-Value="_selectedConfig" TValue="ApplicationInsightsConfigurationResponse"
+                                    TextProperty="Name" Change="@(_ => OnConfigChanged())" />
+                </RadzenStack>
             </RadzenColumn>
         }
         <RadzenColumn Visible="@ShowRangeSelector">
@@ -90,9 +100,10 @@
     private string _configError;
     private LoggingErrorBoundary _errorBoundary;
     private IApplicationInsightsConfigurationSelector _selector;
+    private ApplicationInsightsConfigurationResponse _selectedConfig;
 
     private IApplicationInsightsContext EffectiveContext
-        => Context ?? _selector?.Selected;
+        => Context ?? _selectedConfig ?? _selector?.Selected;
 
     [Parameter]
     public bool ShowRangeSelector { get; set; } = true;
@@ -108,6 +119,16 @@
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
+
+    /// <summary>
+    /// Explicit set of configurations to choose from, each carrying its own credentials. Use this when
+    /// the host already has the configurations in hand (e.g. a team's workspaces) rather than via the
+    /// DI <see cref="IApplicationInsightsConfigurationSelector"/>. A dropdown is shown when more than
+    /// one is supplied; the selected one is queried. Ignored when <see cref="Context"/> is set; takes
+    /// precedence over the DI selector.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ApplicationInsightsConfigurationResponse> Configs { get; set; }
 
     /// <summary>
     /// Optional path for the log detail page, e.g. "/log/detail".
@@ -201,7 +222,8 @@
             return;
         }
 
-        if (Context == null)
+        // Explicit Configs (or a single Context) bypass the DI selector entirely.
+        if (Context == null && Configs is not { Count: > 0 })
         {
             _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
             if (_selector != null)
@@ -245,6 +267,10 @@
 
     protected override void OnParametersSet()
     {
+        // Default to the first explicit config (when supplied) before the first render.
+        if (_selectedConfig == null && Configs is { Count: > 0 })
+            _selectedConfig = Configs[0];
+
         _navOptions = new LogNavigationOptions
         {
             DetailPath = DetailPath,
@@ -276,6 +302,14 @@
 
         if (OnTabChanged.HasDelegate)
             await OnTabChanged.InvokeAsync(tabName);
+    }
+
+    private void OnConfigChanged()
+    {
+        // New workspace selected: drop the environment chosen for the previous one (the environment
+        // selector re-resolves for the new Context), then re-query.
+        _environment = null;
+        StateHasChanged();
     }
 
     private void OnRangeSelected(LogRangeSelector.TimeRangeOption range)

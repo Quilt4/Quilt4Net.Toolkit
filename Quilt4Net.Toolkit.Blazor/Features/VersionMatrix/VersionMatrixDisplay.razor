@@ -12,11 +12,11 @@
 @implements IDisposable
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-    @if (_selector != null && _selector.Available.Count > 1)
+    @if (Context == null && AvailableConfigs().Count > 1)
     {
         <RadzenStack Orientation="Orientation.Vertical" Gap="0">
             <RadzenText TextStyle="TextStyle.Caption" Text="Configurations" />
-            <RadzenSelectBar Data="@_selector.Available" @bind-Value="_selectedIds"
+            <RadzenSelectBar Data="@AvailableConfigs()" @bind-Value="_selectedIds"
                              Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, _ => LoadAsync(false)))"
                              TextProperty="Name" ValueProperty="Id" Multiple="true" AllowSelectAll="false" />
         </RadzenStack>
@@ -27,6 +27,14 @@
         {
             <RadzenText TextStyle="TextStyle.Caption" Text="@($"Updated {_view.LastRefreshedUtc:u}")" />
         }
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_showDevelopment" TValue="bool" Name="showDevelopment" />
+            <RadzenLabel Component="showDevelopment" Text="Show Development" />
+        </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_showUnknown" TValue="bool" Name="showUnknown" />
+            <RadzenLabel Component="showUnknown" Text="Show Unknown" />
+        </RadzenStack>
     </RadzenStack>
 
     @if (_loading)
@@ -49,22 +57,24 @@
     }
     else
     {
+        var visibleEnvironments = VisibleEnvironments();
+        var visibleApplications = VisibleApplications(visibleEnvironments);
         <table class="version-matrix">
             <thead>
                 <tr>
                     <th>Application</th>
-                    @foreach (var env in _orderedEnvironments)
+                    @foreach (var env in visibleEnvironments)
                     {
                         <th>@env</th>
                     }
                 </tr>
             </thead>
             <tbody>
-                @foreach (var app in _view.Applications)
+                @foreach (var app in visibleApplications)
                 {
                     <tr>
                         <td><strong>@app</strong></td>
-                        @foreach (var env in _orderedEnvironments)
+                        @foreach (var env in visibleEnvironments)
                         {
                             <td>
                                 @if (_view.TryGetCell(app, env, out var cell))
@@ -126,6 +136,16 @@
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
+    /// <summary>
+    /// Explicit set of configurations to query and merge, each carrying its own credentials. Use this
+    /// when the host already has the configurations in hand (e.g. a team's workspaces) rather than via
+    /// the DI <see cref="IApplicationInsightsConfigurationSelector"/>. When more than one is supplied,
+    /// a select-bar lets the user choose which to include (none selected = all). Ignored when
+    /// <see cref="Context"/> is set; takes precedence over the DI selector when both are available.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ApplicationInsightsConfigurationResponse> Configs { get; set; }
+
     [Parameter]
     public TimeSpan? Lookback { get; set; }
 
@@ -162,27 +182,46 @@
     private IApplicationInsightsConfigurationSelector _selector;
     private IEnumerable<string> _selectedIds = [];
 
+    // Column toggles (off by default). When off, the matching environment column is hidden, and any
+    // application row left with no values in the remaining columns is hidden too.
+    private bool _showDevelopment;
+    private bool _showUnknown;
+
+    // EnvironmentOrdering maps a null/blank environment to this sentinel (internal there, so matched literally).
+    private const string DevelopmentEnvironment = "Development";
+    private const string UnknownEnvironment = "(unknown)";
+
+    /// <summary>
+    /// The available configurations: the explicit <see cref="Configs"/> when supplied, otherwise the
+    /// DI selector's list (empty when neither is present).
+    /// </summary>
+    private IReadOnlyList<ApplicationInsightsConfigurationResponse> AvailableConfigs()
+        => Configs is { Count: > 0 } ? Configs : (_selector?.Available ?? []);
+
     /// <summary>
     /// The configurations to query and merge into one matrix: the explicit <see cref="Context"/> when
-    /// given; otherwise the selected configurations — or <b>all</b> of them when none are selected
-    /// (the default); otherwise a single <c>null</c> context so the service falls back to the locally
-    /// configured options.
+    /// given; otherwise the selected entries from <see cref="AvailableConfigs"/> — or <b>all</b> of
+    /// them when none are selected (the default); otherwise a single <c>null</c> context so the service
+    /// falls back to the locally configured options.
     /// </summary>
     private IReadOnlyList<IApplicationInsightsContext> SelectedContexts()
     {
         if (Context != null) return [Context];
-        if (_selector == null || _selector.Available.Count == 0) return [null];
+
+        var available = AvailableConfigs();
+        if (available.Count == 0) return [null];
 
         var ids = _selectedIds?.ToArray() ?? [];
         IEnumerable<ApplicationInsightsConfigurationResponse> chosen = ids.Length == 0
-            ? _selector.Available
-            : _selector.Available.Where(c => ids.Contains(c.Id));
+            ? available
+            : available.Where(c => ids.Contains(c.Id));
         return chosen.Cast<IApplicationInsightsContext>().ToArray();
     }
 
     protected override async Task OnInitializedAsync()
     {
-        if (Context == null)
+        // Only engage the DI selector when neither an explicit Context nor explicit Configs are given.
+        if (Context == null && Configs is not { Count: > 0 })
         {
             _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
             if (_selector != null)
@@ -209,6 +248,23 @@
     {
         await LoadAsync(forceRefresh: true);
     }
+
+    /// <summary>The ordered environments minus the columns hidden by the toggles.</summary>
+    private IReadOnlyList<string> VisibleEnvironments()
+        => _orderedEnvironments.Where(IsEnvironmentVisible).ToList();
+
+    private bool IsEnvironmentVisible(string environment)
+    {
+        if (!_showDevelopment && string.Equals(environment, DevelopmentEnvironment, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!_showUnknown && string.Equals(environment, UnknownEnvironment, StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    }
+
+    /// <summary>Applications that still have at least one value once the hidden columns are removed.</summary>
+    private IReadOnlyList<string> VisibleApplications(IReadOnlyList<string> visibleEnvironments)
+        => _view.Applications
+            .Where(app => visibleEnvironments.Any(env => _view.TryGetCell(app, env, out _)))
+            .ToList();
 
     private async Task LoadAsync(bool forceRefresh)
     {
