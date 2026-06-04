@@ -12,6 +12,24 @@ Drop-in Blazor components that render Application Insights data fetched via `IAp
 
 Renders the Search / Summary / Measure / Count tabs against the AI workspace configured by `AddQuilt4NetApplicationInsightsClient`. Detail and Summary drill-downs open in a Radzen dialog.
 
+## Supplying configurations
+
+`LogView` queries one workspace at a time. Point it at one, in precedence order:
+
+| Source | Use when |
+|---|---|
+| `Context` | A single workspace (or the locally configured one). |
+| `Configs` | You already hold an explicit set (e.g. a team's). `LogView` renders a dropdown to pick one when more than one is supplied. |
+| DI selector | You registered `AddQuilt4NetBlazorApplicationInsightsClientRemote`; the built-in dropdown is driven by it. |
+
+`Configs` is an `IReadOnlyList<ApplicationInsightsConfigurationResponse>`, so a host that already has the team's workspaces in hand can render `LogView` directly instead of wrapping it in a custom picker:
+
+```razor
+<LogView Configs="@_workspaces" FilterStorageScope="@team.Key" />
+```
+
+Precedence: `Context` > selected `Configs` entry > DI selector.
+
 ## Dedicated detail / summary pages
 
 ```razor
