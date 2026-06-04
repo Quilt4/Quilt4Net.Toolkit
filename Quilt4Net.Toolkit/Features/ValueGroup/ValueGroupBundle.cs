@@ -18,4 +18,5 @@ public record ValueGroupBundle
     public KeyValueEntry[] KeyValues { get; init; } = [];
     public AtlasDatabaseAccessEntry[] AtlasDatabaseAccesses { get; init; } = [];
     public AtlasFirewallCredentialEntry[] AtlasFirewallCredentials { get; init; } = [];
+    public AtlasFirewallProxyKeyEntry[] AtlasFirewallProxyKeys { get; init; } = [];
 }
