@@ -37,6 +37,17 @@
         </RadzenStack>
     </RadzenStack>
 
+    @if (_warning != null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Some configurations were skipped" AllowClose="false">
+            @_warning
+            @if (_warningIsAuthFailure && !string.IsNullOrEmpty(ConfigurationPath))
+            {
+                <text> </text><RadzenLink Path="@ConfigurationPath" Text="Edit configuration" />
+            }
+        </RadzenAlert>
+    }
+
     @if (_loading)
     {
         <RadzenText Text="Loading..." />
@@ -179,6 +190,9 @@
     private bool _loading;
     private string _error;
     private bool _errorIsAuthFailure;
+    // Non-fatal: set when some (but not all) configurations failed — the grid still renders for the rest.
+    private string _warning;
+    private bool _warningIsAuthFailure;
     private IApplicationInsightsConfigurationSelector _selector;
     private IEnumerable<string> _selectedIds = [];
 
@@ -271,21 +285,53 @@
         _loading = true;
         _error = null;
         _errorIsAuthFailure = false;
+        _warning = null;
+        _warningIsAuthFailure = false;
         StateHasChanged();
 
-        IApplicationInsightsContext current = null;
         try
         {
+            var contexts = SelectedContexts();
             var cells = new List<VersionMatrixCell>();
-            foreach (var context in SelectedContexts())
+            var failures = new List<(IApplicationInsightsContext Context, Exception Exception, string Message)>();
+
+            // Query each configuration independently. A single broken configuration (e.g. a stale
+            // ClientSecret on one workspace) must not blank the whole matrix — collect its failure and
+            // carry on so the remaining workspaces still render, then surface the skipped ones as a
+            // non-fatal warning. Only when *every* configuration fails do we fall back to a page error.
+            foreach (var context in contexts)
             {
-                current = context;
-                var view = forceRefresh
-                    ? await VersionMatrixService.RefreshAsync(context, Lookback)
-                    : await VersionMatrixService.GetAsync(context, Lookback);
-                cells.AddRange(view.Cells.Values);
+                try
+                {
+                    var view = forceRefresh
+                        ? await VersionMatrixService.RefreshAsync(context, Lookback)
+                        : await VersionMatrixService.GetAsync(context, Lookback);
+                    cells.AddRange(view.Cells.Values);
+                }
+                catch (Exception ex)
+                {
+                    var message = LogIncidentLogger.LogAndFormat(Logger, ex, nameof(VersionMatrixDisplay),
+                        "Failed to load version matrix.", context);
+                    failures.Add((context, ex, message));
+                }
             }
-            current = null;
+
+            if (failures.Count > 0 && failures.Count == contexts.Count)
+            {
+                // Nothing loaded — surface the first failure (incident-tagged) as the page error.
+                _error = failures[0].Message;
+                _errorIsAuthFailure = ApplicationInsightsErrorMessage.IsAuthenticationFailure(failures[0].Exception);
+                return;
+            }
+
+            if (failures.Count > 0)
+            {
+                var skipped = string.Join(", ", failures.Select(f => DescribeContext(f.Context)));
+                _warning = failures.Count == 1
+                    ? $"One configuration could not be loaded and was skipped: {skipped}."
+                    : $"{failures.Count} configurations could not be loaded and were skipped: {skipped}.";
+                _warningIsAuthFailure = failures.Any(f => ApplicationInsightsErrorMessage.IsAuthenticationFailure(f.Exception));
+            }
 
             var raw = VersionMatrixView.FromCells(cells);
 
@@ -309,8 +355,10 @@
         }
         catch (Exception ex)
         {
+            // Safety net for the post-query steps (alias folding / ordering); per-configuration query
+            // failures are already handled above and never reach here.
             _error = LogIncidentLogger.LogAndFormat(Logger, ex, nameof(VersionMatrixDisplay),
-                "Failed to load version matrix.", current);
+                "Failed to load version matrix.");
             _errorIsAuthFailure = ApplicationInsightsErrorMessage.IsAuthenticationFailure(ex);
         }
         finally
@@ -318,5 +366,13 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    /// <summary>A short label for a configuration, used in the "skipped" warning: its name when known,
+    /// otherwise the workspace id.</summary>
+    private static string DescribeContext(IApplicationInsightsContext context)
+    {
+        if (context is ApplicationInsightsConfigurationResponse { Name: { Length: > 0 } name }) return name;
+        return string.IsNullOrEmpty(context?.WorkspaceId) ? "the configured workspace" : $"workspace {context.WorkspaceId}";
     }
 }
