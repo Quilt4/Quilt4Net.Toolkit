@@ -40,14 +40,11 @@ public class DataSampleController : ControllerBase
 
         if (toggle) return Unauthorized();
 
-        var intValue = await _remoteConfigurationService.GetValueAsync("MyInt", 42);
-        var stringValue = await _remoteConfigurationService.GetValueAsync("MyString", "yeee");
-        var myDateValue = await _remoteConfigurationService.GetValueAsync("MyDate", DateTime.UtcNow);
-        //var myTimeSpanValue = await _featureToggleService.GetValueAsync("MyTimeSpanX", TimeSpan.FromSeconds(10));
-        var myDecimalValue = await _remoteConfigurationService.GetValueAsync("MyDecimal", 1.2M);
-        var mySingleValue = await _remoteConfigurationService.GetValueAsync("MySingle", 1.2F);
-        //var myNBool = await _featureToggleService.GetValueAsync<bool?>("MyNBool", false);
-        //var mySampleData = await _remoteConfigurationService.GetValueAsync("MySampleData", new SampleData { SomeDate = myDateValue, SomeInt = 123 });
+        var intValue = await _remoteConfigurationService.GetAsync("MyInt", 42);
+        var stringValue = await _remoteConfigurationService.GetAsync("MyString", "yeee");
+        var myDateValue = await _remoteConfigurationService.GetAsync("MyDate", DateTime.UtcNow);
+        var myDecimalValue = await _remoteConfigurationService.GetAsync("MyDecimal", 1.2M);
+        var mySingleValue = await _remoteConfigurationService.GetAsync("MySingle", 1.2F);
 
         _logger.LogInformation("{Method} {Function} called with header {Header} and query {Query}.", "HttpGet", nameof(GetPayload), header, query);
         var data = new SampleData { SomeInt = intValue, SomeDate = myDateValue };

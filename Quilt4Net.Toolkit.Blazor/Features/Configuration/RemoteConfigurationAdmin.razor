@@ -106,7 +106,7 @@
 
     private async Task ReloadDataAsync()
     {
-        var model = await RemoteConfigurationService.GetTogglesAsync();
+        var model = await RemoteConfigurationService.GetAsync();
         _model = model.Where(x => !TogglesOnly || x.ValueType == "Boolean").ToArray();
         StateHasChanged();
     }
@@ -125,13 +125,13 @@
         var response = await DialogService.Confirm($"The toggle '{context.Key}' will be reset to default value '{context.DefaultValue}'.", "Confirm reset");
         if (response != true) return;
 
-        await RemoteConfigurationService.SetValueAsync(context.Key, context.Application, context.Environment, context.Instance, context.DefaultValue);
+        await RemoteConfigurationService.SetAsync(context.Key, context.Application, context.Environment, context.Instance, context.DefaultValue);
         await ReloadDataAsync();
     }
 
     private async Task SaveAsync(ConfigurationResponse model, string newValue)
     {
-        await RemoteConfigurationService.SetValueAsync(model.Key, model.Application, model.Environment, model.Instance, newValue);
+        await RemoteConfigurationService.SetAsync(model.Key, model.Application, model.Environment, model.Instance, newValue);
         await ReloadDataAsync();
     }
 }

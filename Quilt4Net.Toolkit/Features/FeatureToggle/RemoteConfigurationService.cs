@@ -9,44 +9,31 @@ internal class RemoteConfigurationService : IRemoteConfigurationService
         _remoteConfigCallService = remoteConfigCallService;
     }
 
-    [Obsolete($"Use {nameof(GetAsync)} instead.")]
-    public ValueTask<T> GetValueAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = null)
-    {
-        return GetAsync(key, fallback, ttl, application);
-    }
-
-    public async ValueTask<T> GetAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = null)
+    /// <inheritdoc />
+    public async ValueTask<T> GetAsync<T>(string key, T fallback = default, TimeSpan? ttl = null, string application = "")
     {
         return await _remoteConfigCallService.MakeCallAsync(key, fallback, ttl, application);
     }
 
-    public ValueTask<bool> GetToggleAsync(string key, bool fallback = default, TimeSpan? ttl = null, string application = null)
+    /// <inheritdoc />
+    public ValueTask<bool> GetToggleAsync(string key, bool fallback = default, TimeSpan? ttl = null, string application = "")
     {
         return GetAsync(key, fallback, ttl, application);
     }
 
-    [Obsolete($"Use {nameof(GetAsync)} instead.")]
-    public Task<ConfigurationResponse[]> GetTogglesAsync()
-    {
-        return GetAsync();
-    }
-
+    /// <inheritdoc />
     public Task<ConfigurationResponse[]> GetAsync()
     {
         return _remoteConfigCallService.GetAllAsync();
     }
 
+    /// <inheritdoc />
     public Task DeleteAsync(string key, string application, string environment, string instance)
     {
         return _remoteConfigCallService.DeleteAsync(key, application, environment, instance);
     }
 
-    [Obsolete($"Use {nameof(SetAsync)} instead.")]
-    public Task SetValueAsync(string key, string application, string environment, string instance, string value)
-    {
-        return SetAsync(key, application, environment, instance, value);
-    }
-
+    /// <inheritdoc />
     public Task SetAsync(string key, string application, string environment, string instance, string value)
     {
         return _remoteConfigCallService.SetValueAsync(key, application, environment, instance, value);
