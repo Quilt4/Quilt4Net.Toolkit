@@ -1,38 +1,23 @@
 @inherits LayoutComponentBase
 
-<RadzenLayout Style="grid-template-areas: 'rz-header rz-header' 'rz-sidebar rz-body'; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr;">
-    <RadzenHeader>
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Style="padding: 0 1rem; height: 100%;">
-            <RadzenSidebarToggle Click="@(() => _sidebarExpanded = !_sidebarExpanded)" />
-            <RadzenText TextStyle="TextStyle.H6" Text="Quilt4Net Blazor Sample" Style="margin: 0;" />
-            <div style="flex: 1;"></div>
-            <LanguageSelector />
-        </RadzenStack>
-    </RadzenHeader>
+@* RadzenComponents bundles DialogService / NotificationService / TooltipService / ContextMenuService
+   visual hosts into a single component. Match Quilt4Net.Server's setup. *@
+<RadzenComponents @rendermode="InteractiveAuto" />
 
-    <RadzenSidebar @bind-Expanded="_sidebarExpanded" Style="width: 250px;">
-        <NavMenu />
-    </RadzenSidebar>
-
+<RadzenLayout>
+    <NavMenu />
     <RadzenBody>
         <article class="content" style="padding: 1.5rem;">
             @Body
         </article>
     </RadzenBody>
+    <RadzenFooter>
+        Quilt4Net Blazor Sample
+    </RadzenFooter>
 </RadzenLayout>
-
-@* Radzen service hosts — required for DialogService / NotificationService / TooltipService / ContextMenuService to render their popups. *@
-<RadzenDialog />
-<RadzenNotification />
-<RadzenTooltip />
-<RadzenContextMenu />
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
-
-@code {
-    private bool _sidebarExpanded = true;
-}
