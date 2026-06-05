@@ -250,12 +250,12 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 return [];
             }
 
-            var assemblyName = Assembly.GetEntryAssembly()?.GetName();
-            var application = _options.Application ?? assemblyName?.Name;
-            var environment = _environmentName.Name;
-
-            var data = await response.Content.ReadFromJsonAsync<ConfigurationResponse[]>();
-            return data.Where(x => x.Environment == environment && x.Application == application).ToArray();
+            // No client-side filtering: this method backs RemoteConfigurationAdmin's full-list view,
+            // which is meant to surface every entry the team's API key can read. Filtering down to
+            // the current app + environment hides shared (Application=null) entries and cross-app
+            // entries the operator may need to manage. Callers wanting a narrower slice can apply
+            // their own Where().
+            return await response.Content.ReadFromJsonAsync<ConfigurationResponse[]>() ?? [];
         }
         catch (Exception e)
         {
