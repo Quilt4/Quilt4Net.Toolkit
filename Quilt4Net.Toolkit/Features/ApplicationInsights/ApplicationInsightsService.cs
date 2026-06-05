@@ -1182,17 +1182,24 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
         }
     }
 
+    // All four metric queries target the workspace-based AppMetrics table (the classic
+    // customMetrics table doesn't exist on Log Analytics workspaces). Per-row "average value"
+    // is computed from Sum/ItemCount because AppMetrics doesn't carry a Value column — Sum/Min/
+    // Max/ItemCount are the pre-aggregated columns the OpenTelemetry → Azure Monitor exporter
+    // writes. For aggregating across multiple rows we use sum(Sum)/sum(ItemCount), the weighted
+    // average that matches what classic `avg(value)` produced.
+
     public IAsyncEnumerable<MetricSample> GetCpuUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var bin = MetricsBinSelector.PickBin(timeSpan);
         var query = $@"
-customMetrics
-| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
-| where name == 'system.cpu.utilization'
-| where tostring(customDimensions.state) == 'idle'
-| summarize avg_idle = avg(value) by cloud_RoleInstance, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name == 'system.cpu.utilization'
+| where tostring(Properties.state) == 'idle'
+| summarize avg_idle = sum(Sum) / todouble(sum(ItemCount)) by AppRoleInstance, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | extend cpu_busy_pct = 100.0 * (1 - avg_idle)
-| project Series = cloud_RoleInstance, Timestamp = timestamp, Value = cpu_busy_pct";
+| project Series = AppRoleInstance, Timestamp = TimeGenerated, Value = cpu_busy_pct";
         return RunMetricQueryAsync(context, query, timeSpan, $"cpu|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
@@ -1200,12 +1207,12 @@ customMetrics
     {
         var bin = MetricsBinSelector.PickBin(timeSpan);
         var query = $@"
-customMetrics
-| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
-| where name == 'system.memory.utilization'
-| where tostring(customDimensions.state) == 'used'
-| summarize mem_used_pct = 100.0 * avg(value) by cloud_RoleInstance, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
-| project Series = cloud_RoleInstance, Timestamp = timestamp, Value = mem_used_pct";
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name == 'system.memory.utilization'
+| where tostring(Properties.state) == 'used'
+| summarize mem_used_pct = 100.0 * sum(Sum) / todouble(sum(ItemCount)) by AppRoleInstance, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| project Series = AppRoleInstance, Timestamp = TimeGenerated, Value = mem_used_pct";
         return RunMetricQueryAsync(context, query, timeSpan, $"mem|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
@@ -1216,30 +1223,33 @@ customMetrics
         var bin = MetricsBinSelector.PickBin(timeSpan);
         if (bin < TimeSpan.FromMinutes(5)) bin = TimeSpan.FromMinutes(5);
         var query = $@"
-customMetrics
-| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
-| where name == 'system.filesystem.usage'
-| where tostring(customDimensions.state) == 'used'
-| extend volume = strcat(cloud_RoleInstance, ' ', tostring(customDimensions.device))
-| summarize used_gb = avg(value) / 1073741824.0 by volume, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
-| project Series = volume, Timestamp = timestamp, Value = used_gb";
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name == 'system.filesystem.usage'
+| where tostring(Properties.state) == 'used'
+| extend volume = strcat(AppRoleInstance, ' ', tostring(Properties.device))
+| summarize used_gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| project Series = volume, Timestamp = TimeGenerated, Value = used_gb";
         return RunMetricQueryAsync(context, query, timeSpan, $"disk|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
     public IAsyncEnumerable<MetricSample> GetNetworkThroughputAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // system.network.io is a counter — bytes since process start. Take sum(Sum) per bin so
+        // the prev()-delta below measures the host's progress across bins; negative deltas
+        // (process restart / counter reset) are filtered out so the chart doesn't draw a dip.
         var bin = MetricsBinSelector.PickBin(timeSpan);
         var query = $@"
-customMetrics
-| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
-| where name == 'system.network.io'
-| summarize total_bytes = sum(value) by cloud_RoleInstance, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
-| order by cloud_RoleInstance asc, timestamp asc
-| extend prev_bytes = prev(total_bytes), prev_host = prev(cloud_RoleInstance), prev_t = prev(timestamp)
-| where cloud_RoleInstance == prev_host
-| extend mb_per_sec = (total_bytes - prev_bytes) / 1048576.0 / datetime_diff('second', timestamp, prev_t)
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name == 'system.network.io'
+| summarize total_bytes = sum(Sum) by AppRoleInstance, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| order by AppRoleInstance asc, TimeGenerated asc
+| extend prev_bytes = prev(total_bytes), prev_host = prev(AppRoleInstance), prev_t = prev(TimeGenerated)
+| where AppRoleInstance == prev_host
+| extend mb_per_sec = (total_bytes - prev_bytes) / 1048576.0 / datetime_diff('second', TimeGenerated, prev_t)
 | where mb_per_sec >= 0
-| project Series = cloud_RoleInstance, Timestamp = timestamp, Value = mb_per_sec";
+| project Series = AppRoleInstance, Timestamp = TimeGenerated, Value = mb_per_sec";
         return RunMetricQueryAsync(context, query, timeSpan, $"net|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
