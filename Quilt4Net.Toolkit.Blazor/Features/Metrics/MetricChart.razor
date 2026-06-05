@@ -1,0 +1,53 @@
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+
+@* One RadzenChart per metric. Samples are grouped by Series so each host (and, for disk, each
+   filesystem) renders as its own line. Empty/loading states share the same card shell so the
+   grid doesn't reflow when data arrives. *@
+<RadzenCard Style="padding: 1rem; min-height: 320px; display: flex; flex-direction: column;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Style="margin-bottom: 0.5rem;">
+        <RadzenText TextStyle="TextStyle.H6" Text="@Title" Style="margin: 0;" />
+        @if (Loading)
+        {
+            <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Primary" Size="ProgressBarCircularSize.Small" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        }
+    </RadzenStack>
+
+    @if (_series.Count == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Caption"
+                    Text="@(Loading ? "Loading…" : "No data in the selected range.")"
+                    Style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--rz-text-tertiary-color);" />
+    }
+    else
+    {
+        <RadzenChart Style="flex: 1; min-height: 240px;">
+            @foreach (var (label, points) in _series)
+            {
+                <RadzenLineSeries Data="@points" CategoryProperty="@nameof(MetricSample.Timestamp)" ValueProperty="@nameof(MetricSample.Value)" Title="@label" Smooth="true" />
+            }
+            <RadzenCategoryAxis FormatString="{0:HH:mm}" />
+            <RadzenValueAxis FormatString="@($"{{0:0.##}} {Unit}")" />
+            <RadzenLegend Position="LegendPosition.Bottom" />
+        </RadzenChart>
+    }
+</RadzenCard>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; }
+    [Parameter] public string Unit { get; set; }
+    [Parameter] public MetricSample[] Samples { get; set; } = [];
+    [Parameter] public bool Loading { get; set; }
+
+    private IReadOnlyList<(string Label, MetricSample[] Points)> _series = [];
+
+    protected override void OnParametersSet()
+    {
+        // Group the flat samples by Series so each line is one host (or host+device). Order by
+        // label for stable legend order across reloads.
+        _series = (Samples ?? [])
+            .GroupBy(s => s.Series ?? "")
+            .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Label: g.Key, Points: g.OrderBy(s => s.Timestamp).ToArray()))
+            .ToList();
+    }
+}

@@ -42,4 +42,33 @@ public interface IApplicationInsightsService
     /// lookback window.
     /// </summary>
     IAsyncEnumerable<LogItem> SearchByCorrelationIdAsync(IApplicationInsightsContext context, string correlationId, TimeSpan timeSpan);
+
+    /// <summary>
+    /// CPU-busy percentage per host (<c>cloud_RoleInstance</c>) over <paramref name="timeSpan"/>.
+    /// Derived from the OpenTelemetry <c>system.cpu.utilization</c> idle reading:
+    /// <c>100 * (1 - avg(idle))</c>. Bin size scales with the window (see <see cref="MetricsBinSelector"/>).
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetCpuUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Memory-used percentage per host (<c>cloud_RoleInstance</c>) over <paramref name="timeSpan"/>.
+    /// Source: OpenTelemetry <c>system.memory.utilization</c> with state=used. Bin size scales with
+    /// the window (see <see cref="MetricsBinSelector"/>).
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetMemoryUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Filesystem used (GB) per host+device over <paramref name="timeSpan"/>. Source: OpenTelemetry
+    /// <c>system.filesystem.usage</c> with state=used. Series label is
+    /// <c>{cloud_RoleInstance} {device}</c> so multiple volumes on one host show as separate lines.
+    /// Bin size scales with the window.
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetDiskUsageAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Network throughput (MB/s) per host (<c>cloud_RoleInstance</c>) over <paramref name="timeSpan"/>.
+    /// Computed as the per-bin delta of <c>system.network.io</c> divided by the bin duration; negative
+    /// deltas (host restart / counter reset) are dropped. Bin size scales with the window.
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetNetworkThroughputAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 }

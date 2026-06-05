@@ -1182,6 +1182,110 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
         }
     }
 
+    public IAsyncEnumerable<MetricSample> GetCpuUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var bin = MetricsBinSelector.PickBin(timeSpan);
+        var query = $@"
+customMetrics
+| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where name == 'system.cpu.utilization'
+| where tostring(customDimensions.state) == 'idle'
+| summarize avg_idle = avg(value) by cloud_RoleInstance, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
+| extend cpu_busy_pct = 100.0 * (1 - avg_idle)
+| project Series = cloud_RoleInstance, Timestamp = timestamp, Value = cpu_busy_pct";
+        return RunMetricQueryAsync(context, query, timeSpan, $"cpu|{context.ToKey()}|{timeSpan}", cancellationToken);
+    }
+
+    public IAsyncEnumerable<MetricSample> GetMemoryUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var bin = MetricsBinSelector.PickBin(timeSpan);
+        var query = $@"
+customMetrics
+| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where name == 'system.memory.utilization'
+| where tostring(customDimensions.state) == 'used'
+| summarize mem_used_pct = 100.0 * avg(value) by cloud_RoleInstance, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
+| project Series = cloud_RoleInstance, Timestamp = timestamp, Value = mem_used_pct";
+        return RunMetricQueryAsync(context, query, timeSpan, $"mem|{context.ToKey()}|{timeSpan}", cancellationToken);
+    }
+
+    public IAsyncEnumerable<MetricSample> GetDiskUsageAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // Disk is binned a step coarser than CPU/mem because the underlying signal moves slowly
+        // and we'd otherwise duplicate a near-constant value across the chart.
+        var bin = MetricsBinSelector.PickBin(timeSpan);
+        if (bin < TimeSpan.FromMinutes(5)) bin = TimeSpan.FromMinutes(5);
+        var query = $@"
+customMetrics
+| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where name == 'system.filesystem.usage'
+| where tostring(customDimensions.state) == 'used'
+| extend volume = strcat(cloud_RoleInstance, ' ', tostring(customDimensions.device))
+| summarize used_gb = avg(value) / 1073741824.0 by volume, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
+| project Series = volume, Timestamp = timestamp, Value = used_gb";
+        return RunMetricQueryAsync(context, query, timeSpan, $"disk|{context.ToKey()}|{timeSpan}", cancellationToken);
+    }
+
+    public IAsyncEnumerable<MetricSample> GetNetworkThroughputAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var bin = MetricsBinSelector.PickBin(timeSpan);
+        var query = $@"
+customMetrics
+| where timestamp > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where name == 'system.network.io'
+| summarize total_bytes = sum(value) by cloud_RoleInstance, bin(timestamp, {MetricsBinSelector.ToKqlLiteral(bin)})
+| order by cloud_RoleInstance asc, timestamp asc
+| extend prev_bytes = prev(total_bytes), prev_host = prev(cloud_RoleInstance), prev_t = prev(timestamp)
+| where cloud_RoleInstance == prev_host
+| extend mb_per_sec = (total_bytes - prev_bytes) / 1048576.0 / datetime_diff('second', timestamp, prev_t)
+| where mb_per_sec >= 0
+| project Series = cloud_RoleInstance, Timestamp = timestamp, Value = mb_per_sec";
+        return RunMetricQueryAsync(context, query, timeSpan, $"net|{context.ToKey()}|{timeSpan}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Shared executor for the four metric queries. Each query is required to project columns
+    /// named exactly <c>Series</c> / <c>Timestamp</c> / <c>Value</c> so the row mapping below is
+    /// reusable. Results are cached with the same TTL as other AI queries.
+    /// </summary>
+    private async IAsyncEnumerable<MetricSample> RunMetricQueryAsync(
+        IApplicationInsightsContext context,
+        string query,
+        TimeSpan timeSpan,
+        string cacheKey,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            var list = new List<MetricSample>();
+            var client = GetClient(context);
+            var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+            var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
+            foreach (var table in response.Value.AllTables)
+            {
+                var seriesIdx = GetColumnIndex(table, "Series");
+                var tsIdx = GetColumnIndex(table, "Timestamp");
+                var valIdx = GetColumnIndex(table, "Value");
+                foreach (var row in table.Rows)
+                {
+                    var raw = row[valIdx];
+                    if (raw is null) continue;
+                    var value = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
+                    list.Add(new MetricSample(
+                        row[seriesIdx]?.ToString() ?? "",
+                        GetDateTime(row, tsIdx),
+                        value));
+                }
+            }
+            return list.ToArray();
+        });
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
     private static string EscapeKqlSingleQuoted(string value)
     {
         if (value is null) return string.Empty;
