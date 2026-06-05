@@ -13,10 +13,13 @@ public record RemoteConfigurationOptions
     public string ApiKey { get; set; }
 
     /// <summary>
-    /// Application name sent to the server when requesting toggle values.
-    /// If null (default), the entry assembly name is used.
-    /// Set to an empty string to always request shared (cross-application) values.
-    /// Set to a specific name to impersonate another application.
+    /// Application name used when a read passes <c>application: null</c> (i.e. "this application").
+    /// When <c>null</c> (the default), the entry assembly name is used. Set to an empty string to resolve
+    /// such calls to shared (cross-application) values, or to a specific name to impersonate another application.
+    /// <para>
+    /// Note: the read methods' own <c>application</c> parameter defaults to an empty string (shared), so
+    /// this option only takes effect for calls that explicitly pass <c>null</c>.
+    /// </para>
     /// </summary>
     public string Application { get; set; }
 

@@ -58,8 +58,31 @@ public class MyService
 Inject `IRemoteConfigurationService` for typed configuration values.
 
 ```csharp
-var maxRetries = await _configService.GetValueAsync("MaxRetries", fallback: 3);
+var maxRetries = await _configService.GetAsync("MaxRetries", fallback: 3);
 ```
+
+### Application scoping (shared by default)
+
+Toggles and configuration are **shared across applications by default** — a call with just a key reads
+the team's shared value, so one flag controls every application that asks for it:
+
+```csharp
+// Shared (default): every application sees the same value.
+await _featureToggle.GetToggleAsync("new-feature");
+```
+
+To read a value specific to **one application**, pass its name explicitly:
+
+```csharp
+await _featureToggle.GetToggleAsync("new-feature", application: "billing-service");
+```
+
+Passing `application: null` resolves to the configured `RemoteConfigurationOptions.Application`, falling
+back to the entry assembly name — i.e. "this application".
+
+> **Changed in 0.8.0:** the default scope is now **shared** (`application: ""`). Previously a bare call
+> resolved to the current application. Pass `application: null` (or set `RemoteConfigurationOptions.Application`)
+> for the previous per-application behavior.
 
 ### RemoteConfigurationOptions
 
@@ -67,7 +90,9 @@ var maxRetries = await _configService.GetValueAsync("MaxRetries", fallback: 3);
 |----------|---------|-------------|
 | `ApiKey` | `null` | API key from [Quilt4Net Web](https://quilt4net.com). |
 | `Quilt4NetAddress` | `"https://quilt4net.com/"` | Quilt4Net server address. |
-| `Ttl` | `null` | Time-to-live for cached values. |
+| `Application` | `null` | Application used when a read passes `application: null`. When `null`, the entry assembly name is used; set to `""` to read shared values. The read methods' own `application` parameter defaults to `""` (shared), so this option only takes effect when a call explicitly passes `null`. |
+| `Ttl` | `null` | Client-requested time-to-live for cached values. When `null`, the team/server-configured default applies. |
+| `HttpTimeout` | `5s` | Timeout for HTTP calls to the server. |
 | `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
 
 Configuration path: `Quilt4Net:RemoteConfiguration`
@@ -149,7 +174,7 @@ builder.AddQuilt4NetApplicationInsightsClientRemote();
 ```
 Configuration path: `Quilt4Net:RemoteConfiguration` (the API key is also accepted at the top-level `Quilt4Net:ApiKey`). Keep the key in user-secrets or environment variables, not in committed config.
 
-The remote provider caches the configuration list per the `RemoteConfigurationOptions.Ttl` (default 5 min) with stale-while-revalidate, so transient server outages don't break the consuming page. When more than one workspace is configured on the server for the team, every workspace is reachable; the Blazor `LogView` renders an in-component **dropdown** (one workspace) and `VersionMatrixDisplay` a **multi-select radio bar** that merges the matrix across the selected workspaces — selecting none shows all (see [Quilt4Net.Toolkit.Blazor README](https://github.com/Quilt4/Quilt4Net.Toolkit/blob/master/Quilt4Net.Toolkit.Blazor/README.md)).
+The remote provider caches the configuration list per its configured TTL (`RemoteConfigurationOptions.Ttl`, or the server default when unset) with stale-while-revalidate, so transient server outages don't break the consuming page. When more than one workspace is configured on the server for the team, every workspace is reachable; the Blazor `LogView` renders an in-component **dropdown** (one workspace) and `VersionMatrixDisplay` a **multi-select radio bar** that merges the matrix across the selected workspaces — selecting none shows all (see [Quilt4Net.Toolkit.Blazor README](https://github.com/Quilt4/Quilt4Net.Toolkit/blob/master/Quilt4Net.Toolkit.Blazor/README.md)).
 
 > **Local and remote are mutually exclusive.** Register one or the other. If both a `Quilt4Net:ApplicationInsights` block and a remote `Quilt4Net:RemoteConfiguration` API key are configured, the remote source wins and the local block is silently ignored. In a Blazor host, use `AddQuilt4NetBlazorApplicationInsightsClientRemote()` so the workspace selector is wired up.
 
