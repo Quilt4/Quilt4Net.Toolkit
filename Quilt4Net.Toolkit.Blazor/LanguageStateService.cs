@@ -1,4 +1,5 @@
 ﻿using Blazored.LocalStorage;
+using Microsoft.JSInterop;
 using Quilt4Net.Toolkit.Features.Content;
 
 namespace Quilt4Net.Toolkit.Blazor;
@@ -27,7 +28,12 @@ internal class LanguageStateService : ILanguageStateService
             }
             catch (InvalidOperationException)
             {
-                // ignored
+                // JS interop not yet available (e.g. static prerender) — keep the default Selected.
+            }
+            catch (JSDisconnectedException)
+            {
+                // The Blazor circuit was disposed before this fire-and-forget task got to call JS
+                // (browser closed, navigation away, hot reload). Nothing to restore to — drop it.
             }
         });
 
@@ -105,7 +111,12 @@ internal class LanguageStateService : ILanguageStateService
                 _selected = value;
                 Task.Run(async () =>
                 {
-                    await _localStorageService.SetItemAsync("Language.Selected", _selected.Key);
+                    try
+                    {
+                        await _localStorageService.SetItemAsync("Language.Selected", _selected.Key);
+                    }
+                    catch (InvalidOperationException) { /* JS interop unavailable — selection persists for the lifetime of this session only. */ }
+                    catch (JSDisconnectedException) { /* Circuit disposed mid-call — nowhere to persist. */ }
                 });
                 LanguageChangedEvent?.Invoke(this, new LanguageChangedEventArgs());
             }
