@@ -76,6 +76,13 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(5);
             });
+            // Host metrics (CPU / memory / disk / network). Operators iterate quickly when
+            // investigating, but each refresh runs four KQL queries — 1 minute matches the
+            // other aggregation queries above.
+            s.RegisterType<MetricSample[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+            });
         });
     }
 
@@ -136,6 +143,7 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<SummaryData, IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
             s.RegisterType<SummarySubset[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
             s.RegisterType<VersionMatrixCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(5); });
+            s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
         });
     }
 }
