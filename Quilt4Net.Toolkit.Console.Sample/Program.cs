@@ -30,10 +30,10 @@ Console.WriteLine($"beta-features: {betaFeatures}");
 // Remote configuration
 Console.WriteLine();
 Console.WriteLine("=== Remote Configuration ===");
-var maxRetries = await configService.GetValueAsync("max-retries", fallback: 3);
+var maxRetries = await configService.GetAsync("max-retries", fallback: 3);
 Console.WriteLine($"max-retries: {maxRetries}");
 
-var welcomeMessage = await configService.GetValueAsync("welcome-message", fallback: "Hello!");
+var welcomeMessage = await configService.GetAsync("welcome-message", fallback: "Hello!");
 Console.WriteLine($"welcome-message: {welcomeMessage}");
 
 // Health client

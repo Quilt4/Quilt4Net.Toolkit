@@ -33,7 +33,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _val = await RemoteConfigurationService.GetValueAsync<bool>("A");
+        _val = await RemoteConfigurationService.GetAsync<bool>("A");
         await base.OnInitializedAsync();
     }
 
