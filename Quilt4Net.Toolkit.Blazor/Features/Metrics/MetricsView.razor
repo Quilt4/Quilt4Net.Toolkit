@@ -58,7 +58,7 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
         <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" />
         <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" />
-        <MetricChart Title="Disk used (GB)" Unit="GB" Samples="@_disk" Loading="@_busy" />
+        <MetricChart Title="Disk free (GB)" Unit="GB" Samples="@_disk" Loading="@_busy" />
         <MetricChart Title="Network (MB/s)" Unit="MB/s" Samples="@_network" Loading="@_busy" />
     </div>
 </RadzenStack>
@@ -142,7 +142,7 @@
             StateHasChanged();
             _memory = await Ai.GetMemoryUtilizationAsync(ctx, _window).ToArrayAsync();
             StateHasChanged();
-            _disk = await Ai.GetDiskUsageAsync(ctx, _window).ToArrayAsync();
+            _disk = await Ai.GetDiskFreeAsync(ctx, _window).ToArrayAsync();
             StateHasChanged();
             _network = await Ai.GetNetworkThroughputAsync(ctx, _window).ToArrayAsync();
         }

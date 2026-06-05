@@ -1222,23 +1222,25 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"mem|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public IAsyncEnumerable<MetricSample> GetDiskUsageAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetDiskFreeAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Disk is binned a step coarser than CPU/mem because the underlying signal moves slowly
         // and we'd otherwise duplicate a near-constant value across the chart. Series remains
         // host+volume so a machine with several filesystems still renders as separate lines.
+        // state=free (not used) — operators care about "how much room is left" and a line falling
+        // toward zero is the natural visual signal that the disk is filling up.
         var bin = MetricsBinSelector.PickBin(timeSpan);
         if (bin < TimeSpan.FromMinutes(5)) bin = TimeSpan.FromMinutes(5);
         var query = $@"
 AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.filesystem.usage'
-| where tostring(Properties.state) == 'used'
+| where tostring(Properties.state) == 'free'
 | extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
 | extend volume = strcat(host, ' ', tostring(Properties['device']))
-| summarize used_gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
-| project Series = volume, Timestamp = TimeGenerated, Value = used_gb";
-        return RunMetricQueryAsync(context, query, timeSpan, $"disk|{context.ToKey()}|{timeSpan}", cancellationToken);
+| summarize free_gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| project Series = volume, Timestamp = TimeGenerated, Value = free_gb";
+        return RunMetricQueryAsync(context, query, timeSpan, $"diskfree|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
     public IAsyncEnumerable<MetricSample> GetNetworkThroughputAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)

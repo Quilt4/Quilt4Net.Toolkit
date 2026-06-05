@@ -58,12 +58,13 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MetricSample> GetMemoryUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Filesystem used (GB) per host+device over <paramref name="timeSpan"/>. Source: OpenTelemetry
-    /// <c>system.filesystem.usage</c> with state=used. Series label is
-    /// <c>{cloud_RoleInstance} {device}</c> so multiple volumes on one host show as separate lines.
-    /// Bin size scales with the window.
+    /// Filesystem free (GB) per host+device over <paramref name="timeSpan"/>. Source: OpenTelemetry
+    /// <c>system.filesystem.usage</c> with state=free — operators want the "how much room is left"
+    /// view, where a line trending toward zero means the disk is filling up. Series label is
+    /// <c>{host.name} {device}</c> so multiple volumes on one host show as separate lines. Bin
+    /// size scales with the window.
     /// </summary>
-    IAsyncEnumerable<MetricSample> GetDiskUsageAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<MetricSample> GetDiskFreeAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Network throughput (MB/s) per host (<c>cloud_RoleInstance</c>) over <paramref name="timeSpan"/>.
