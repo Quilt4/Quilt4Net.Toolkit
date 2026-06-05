@@ -1,41 +1,28 @@
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Quilt4Net Blazor Sample</a>
-    </div>
-</div>
+@* Header (with sidebar-collapse toggle, brand, and the LanguageSelector) + sidebar (panel menu)
+   live together here — same shape as Quilt4Net.Server's NavMenu. Menu items use the toolkit's
+   content-driven Quilt4RadzenPanelMenuItem so labels can be edited via ContentAdmin. *@
+<RadzenHeader>
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Stretch" JustifyContent="JustifyContent.SpaceBetween" Gap="0">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+            <RadzenSidebarToggle Click="@(() => _menuExpanded = !_menuExpanded)" />
+            <RadzenText TextStyle="TextStyle.H6" Text="Quilt4Net Blazor Sample" Style="margin: 0;" />
+        </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem" Style="padding-right: 1rem;">
+            <LanguageSelector />
+        </RadzenStack>
+    </RadzenStack>
+</RadzenHeader>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<RadzenSidebar @bind-Expanded="_menuExpanded" Responsive="false" Style="width: max-content">
+    <RadzenPanelMenu DisplayStyle="@(_menuExpanded ? MenuItemDisplayStyle.IconAndText : MenuItemDisplayStyle.Icon)" ShowArrow="true">
+        <Quilt4RadzenPanelMenuItem TextKey="menu.home" DefaultText="Home" Icon="home" Path="/" />
+        <Quilt4RadzenPanelMenuItem TextKey="menu.content" DefaultText="Content" Icon="article" Path="/content" />
+        <Quilt4RadzenPanelMenuItem TextKey="menu.configuration" DefaultText="Configuration" Icon="tune" Path="/configuration" />
+        <Quilt4RadzenPanelMenuItem TextKey="menu.log" DefaultText="Log" Icon="description" Path="/log" />
+        <Quilt4RadzenPanelMenuItem TextKey="menu.admin" DefaultText="Content Admin" Icon="admin_panel_settings" Path="/admin" />
+    </RadzenPanelMenu>
+</RadzenSidebar>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="content">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Content
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="configuration">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Configuration
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="log">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Log
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Content Admin
-            </NavLink>
-        </div>
-    </nav>
-</div>
+@code {
+    private bool _menuExpanded = true;
+}

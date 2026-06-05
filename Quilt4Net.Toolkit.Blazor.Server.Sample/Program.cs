@@ -9,6 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Registers Radzen's DialogService / NotificationService / ContextMenuService / TooltipService.
+// The visual hosts (RadzenDialog / RadzenNotification / ...) live in MainLayout.razor.
 builder.Services.AddRadzenComponents();
 
 builder.AddQuilt4NetBlazorContent(o =>

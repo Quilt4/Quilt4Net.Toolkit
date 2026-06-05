@@ -32,7 +32,7 @@
 
     private async Task SaveAsync()
     {
-        var response = await DialogService.Confirm("The toggle will change and take effect in x time.", "Confirm change");
+        var response = await DialogService.Confirm($"The toggle will change and take effect in {TtlFormat.Describe(Model.Ttl)}.", "Confirm change");
         if (response != true) return;
 
         await OnSave.InvokeAsync((Model, $"{_val}"));
