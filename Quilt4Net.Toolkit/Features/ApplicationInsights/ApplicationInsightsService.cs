@@ -1189,6 +1189,10 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
     // writes. For aggregating across multiple rows we use sum(Sum)/sum(ItemCount), the weighted
     // average that matches what classic `avg(value)` produced.
 
+    // Group by host.name (from the OpenTelemetry resource attribute) so each machine renders as
+    // its own line. AppRoleInstance is the Azure-Monitor-side equivalent and serves as the
+    // fallback if host.name happens to be missing on a row.
+
     public IAsyncEnumerable<MetricSample> GetCpuUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var bin = MetricsBinSelector.PickBin(timeSpan);
@@ -1197,9 +1201,10 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.cpu.utilization'
 | where tostring(Properties.state) == 'idle'
-| summarize avg_idle = sum(Sum) / todouble(sum(ItemCount)) by AppRoleInstance, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| summarize avg_idle = sum(Sum) / todouble(sum(ItemCount)) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | extend cpu_busy_pct = 100.0 * (1 - avg_idle)
-| project Series = AppRoleInstance, Timestamp = TimeGenerated, Value = cpu_busy_pct";
+| project Series = host, Timestamp = TimeGenerated, Value = cpu_busy_pct";
         return RunMetricQueryAsync(context, query, timeSpan, $"cpu|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
@@ -1211,15 +1216,17 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.memory.utilization'
 | where tostring(Properties.state) == 'used'
-| summarize mem_used_pct = 100.0 * sum(Sum) / todouble(sum(ItemCount)) by AppRoleInstance, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
-| project Series = AppRoleInstance, Timestamp = TimeGenerated, Value = mem_used_pct";
+| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| summarize mem_used_pct = 100.0 * sum(Sum) / todouble(sum(ItemCount)) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| project Series = host, Timestamp = TimeGenerated, Value = mem_used_pct";
         return RunMetricQueryAsync(context, query, timeSpan, $"mem|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
     public IAsyncEnumerable<MetricSample> GetDiskUsageAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Disk is binned a step coarser than CPU/mem because the underlying signal moves slowly
-        // and we'd otherwise duplicate a near-constant value across the chart.
+        // and we'd otherwise duplicate a near-constant value across the chart. Series remains
+        // host+volume so a machine with several filesystems still renders as separate lines.
         var bin = MetricsBinSelector.PickBin(timeSpan);
         if (bin < TimeSpan.FromMinutes(5)) bin = TimeSpan.FromMinutes(5);
         var query = $@"
@@ -1227,7 +1234,8 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.filesystem.usage'
 | where tostring(Properties.state) == 'used'
-| extend volume = strcat(AppRoleInstance, ' ', tostring(Properties.device))
+| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| extend volume = strcat(host, ' ', tostring(Properties['device']))
 | summarize used_gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | project Series = volume, Timestamp = TimeGenerated, Value = used_gb";
         return RunMetricQueryAsync(context, query, timeSpan, $"disk|{context.ToKey()}|{timeSpan}", cancellationToken);
@@ -1243,13 +1251,14 @@ AppMetrics
 AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.network.io'
-| summarize total_bytes = sum(Sum) by AppRoleInstance, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
-| order by AppRoleInstance asc, TimeGenerated asc
-| extend prev_bytes = prev(total_bytes), prev_host = prev(AppRoleInstance), prev_t = prev(TimeGenerated)
-| where AppRoleInstance == prev_host
+| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| summarize total_bytes = sum(Sum) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| order by host asc, TimeGenerated asc
+| extend prev_bytes = prev(total_bytes), prev_host = prev(host), prev_t = prev(TimeGenerated)
+| where host == prev_host
 | extend mb_per_sec = (total_bytes - prev_bytes) / 1048576.0 / datetime_diff('second', TimeGenerated, prev_t)
 | where mb_per_sec >= 0
-| project Series = AppRoleInstance, Timestamp = TimeGenerated, Value = mb_per_sec";
+| project Series = host, Timestamp = TimeGenerated, Value = mb_per_sec";
         return RunMetricQueryAsync(context, query, timeSpan, $"net|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
