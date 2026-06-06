@@ -1,8 +1,10 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 @inject IApplicationInsightsService Ai
+@inject IBrowserTimeZoneAccessor BrowserTime
 @implements IDisposable
 
 @if (_configError != null)
@@ -154,6 +156,17 @@
         {
             _busy = false;
             StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // JS interop is unavailable during prerender, so the browser timezone lookup runs
+            // here on the first interactive render. The accessor is shared (scoped) and idempotent,
+            // so calling it from several views on one page is fine — only the first call dispatches.
+            await BrowserTime.EnsureLoadedAsync();
         }
     }
 

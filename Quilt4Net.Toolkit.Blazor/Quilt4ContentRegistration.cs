@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Quilt4Net.Toolkit.Blazor.Framework;
 
 namespace Quilt4Net.Toolkit.Blazor;
 
@@ -30,6 +31,7 @@ public static class Quilt4ContentRegistration
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddScoped<IQuilt4ContentService, Quilt4ContentService>();
         services.AddScoped<IContentAdminService, ContentAdminService>();
+        services.AddScoped<IBrowserTimeZoneAccessor, BrowserTimeZoneAccessor>();
         services.AddBlazoredLocalStorage();
         services.AddQuilt4NetContent(configuration, options);
 

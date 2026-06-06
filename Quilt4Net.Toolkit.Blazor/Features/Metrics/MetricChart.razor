@@ -1,8 +1,13 @@
+@using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IBrowserTimeZoneAccessor BrowserTime
+@implements IDisposable
 
 @* One RadzenChart per metric. Samples are grouped by Series so each host (and, for disk, each
-   filesystem) renders as its own line. Empty/loading states share the same card shell so the
-   grid doesn't reflow when data arrives. *@
+   filesystem) renders as its own line. Timestamps come back from KQL in UTC; convert to the
+   browser's local timezone before binding so axis labels match what the operator sees on the
+   clock. Empty/loading states share the same card shell so the grid doesn't reflow when data
+   arrives. *@
 <RadzenCard Style="padding: 1rem; min-height: 320px; display: flex; flex-direction: column;">
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Style="margin-bottom: 0.5rem;">
         <RadzenText TextStyle="TextStyle.H6" Text="@Title" Style="margin: 0;" />
@@ -40,14 +45,51 @@
 
     private IReadOnlyList<(string Label, MetricSample[] Points)> _series = [];
 
+    protected override void OnInitialized()
+    {
+        BrowserTime.Changed += OnTimeZoneChanged;
+    }
+
     protected override void OnParametersSet()
     {
-        // Group the flat samples by Series so each line is one host (or host+device). Order by
-        // label for stable legend order across reloads.
+        // Group the flat samples by Series so each line is one host (or host+device). Convert
+        // each point's UTC timestamp to the browser's local zone before binding so the chart's
+        // category axis shows clock-local times. Order by label for stable legend order.
+        var tz = BrowserTime.Current;
         _series = (Samples ?? [])
             .GroupBy(s => s.Series ?? "")
             .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
-            .Select(g => (Label: g.Key, Points: g.OrderBy(s => s.Timestamp).ToArray()))
+            .Select(g => (Label: g.Key, Points: g
+                .OrderBy(s => s.Timestamp)
+                .Select(s => s with { Timestamp = ToLocal(s.Timestamp, tz) })
+                .ToArray()))
             .ToList();
+    }
+
+    private static System.DateTime ToLocal(System.DateTime utc, System.TimeZoneInfo tz)
+    {
+        // KQL hands timestamps back as Kind=Utc; coerce anything else explicitly so the offset
+        // math is unambiguous. The returned DateTime has Kind=Unspecified, which Radzen happily
+        // formats with the FormatString we pass on the category axis.
+        if (utc.Kind != System.DateTimeKind.Utc)
+            utc = System.DateTime.SpecifyKind(utc, System.DateTimeKind.Utc);
+        return System.TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+    }
+
+    private void OnTimeZoneChanged()
+    {
+        // First load resolves after the chart already rendered with UTC; re-project samples in
+        // the new zone and force a redraw. Marshals to the UI thread — Changed fires from the
+        // JS-interop completion, which can be on a worker context.
+        InvokeAsync(() =>
+        {
+            OnParametersSet();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        BrowserTime.Changed -= OnTimeZoneChanged;
     }
 }
