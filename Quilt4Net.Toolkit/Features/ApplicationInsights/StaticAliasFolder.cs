@@ -68,10 +68,40 @@ public static class StaticAliasFolder
         var newApps = newCells.Keys.Select(k => k.App).Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
 
+        // Re-key the per-machine breakdown under logical names too — without this, the "Per machine"
+        // UI toggle would still find apps under their raw source names and the alias-folded grid
+        // wouldn't expand. For each (logical, env) we union the machine rows from every source name
+        // and dedupe by machine, keeping the latest-LastSeen winner per machine.
+        var newCellsByMachine = new Dictionary<(string App, string Env), IReadOnlyList<VersionMatrixCell>>();
+        if (raw.CellsByMachine is { Count: > 0 })
+        {
+            var groupedByMachine = raw.CellsByMachine
+                .SelectMany(kvp => kvp.Value.Select(c => new
+                {
+                    Logical = sourceToLogical.GetValueOrDefault(c.ApplicationName, c.ApplicationName),
+                    Env = c.Environment,
+                    Cell = c
+                }))
+                .GroupBy(x => (App: x.Logical, x.Env));
+            foreach (var g in groupedByMachine)
+            {
+                var machines = g
+                    .GroupBy(x => string.IsNullOrWhiteSpace(x.Cell.Machine) ? VersionMatrixView.UnknownMachine : x.Cell.Machine,
+                             StringComparer.OrdinalIgnoreCase)
+                    .Select(mg => mg
+                        .OrderByDescending(x => x.Cell.LastSeen)
+                        .First().Cell with { ApplicationName = g.Key.App })
+                    .OrderBy(c => c.Machine, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                newCellsByMachine[g.Key] = machines;
+            }
+        }
+
         return raw with
         {
             Applications = newApps,
             Cells = newCells,
+            CellsByMachine = newCellsByMachine,
             CellAliases = newAliases
         };
     }

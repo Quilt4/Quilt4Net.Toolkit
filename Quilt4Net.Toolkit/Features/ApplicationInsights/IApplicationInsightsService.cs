@@ -24,7 +24,7 @@ public interface IApplicationInsightsService
     /// did not cover. Pass <c>null</c> for <paramref name="lookback"/> to
     /// query the workspace's full retention.
     /// </summary>
-    IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null);
+    IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null, bool forceRefresh = false);
 
     /// <summary>
     /// Returns all telemetry rows whose <c>Properties.IncidentId</c> matches

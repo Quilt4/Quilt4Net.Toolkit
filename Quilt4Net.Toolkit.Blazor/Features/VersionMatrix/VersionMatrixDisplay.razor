@@ -38,6 +38,13 @@
             <RadzenSwitch @bind-Value="_showUnknown" TValue="bool" Name="showUnknown" />
             <RadzenLabel Component="showUnknown" Text="Show Unknown" />
         </RadzenStack>
+        @* Per-machine toggle: when on, every app row expands into one row per machine running it,
+           so you can see "app X is on v1.2 on machine A but still v1.0 on machine B" mid-deploy.
+           Pure UI flip — no re-fetch — both views derive from the same VersionMatrixView. *@
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_perMachine" TValue="bool" Name="perMachine" />
+            <RadzenLabel Component="perMachine" Text="Per machine" />
+        </RadzenStack>
         @* Aligned with MetricsView / LogCountByServiceView: Light button + IsBusy spinner.
            Native `title` tooltip — DataAgeFormat reports the absolute load timestamp from the
            merged view's LastRefreshedUtc, which is the OLDEST per-context fetch (set by LoadAsync
@@ -85,6 +92,10 @@
             <thead>
                 <tr>
                     <th>Application</th>
+                    @if (_perMachine)
+                    {
+                        <th>Machine</th>
+                    }
                     @foreach (var env in visibleEnvironments)
                     {
                         <th>@env</th>
@@ -92,43 +103,60 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach (var app in visibleApplications)
+                @if (!_perMachine)
                 {
-                    <tr>
-                        <td><strong>@app</strong></td>
-                        @foreach (var env in visibleEnvironments)
+                    @foreach (var app in visibleApplications)
+                    {
+                        <tr>
+                            <td><strong>@app</strong></td>
+                            @foreach (var env in visibleEnvironments)
+                            {
+                                <td>
+                                    @if (_view.TryGetCell(app, env, out var cell))
+                                    {
+                                        @RenderVersionCell(cell, app, env, includeMachine: false)
+                                    }
+                                    else
+                                    {
+                                        <RadzenText TextStyle="TextStyle.Caption" Text="—" />
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                }
+                else
+                {
+                    @* Per-machine: each (app, machine) gets its own row. Application repeats in
+                       the leftmost column for every machine that runs it; the Machine column
+                       carries the host name. Cells with no data for a (machine, env) read "—". *@
+                    @foreach (var app in visibleApplications)
+                    {
+                        var machines = MachinesForApp(app, visibleEnvironments);
+                        @foreach (var machine in machines)
                         {
-                            <td>
-                                @if (_view.TryGetCell(app, env, out var cell))
+                            <tr>
+                                <td><strong>@app</strong></td>
+                                <td class="version-matrix-machine">@machine</td>
+                                @foreach (var env in visibleEnvironments)
                                 {
-                                    var hasAlias = _view.TryGetAlias(app, env, out var alias);
-                                    var lastSeenLabel = hasAlias
-                                        ? $"Last seen {cell.LastSeen:u}\nMerged from: {string.Join(", ", alias.SourceNames)}"
-                                        : $"Last seen {cell.LastSeen:u}";
-                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
-                                        <span title="@lastSeenLabel">@cell.Version</span>
-                                        @if (cell.Source == VersionMatrixSource.Startup)
+                                    <td>
+                                        @{
+                                            var machineCell = FindMachineCell(app, env, machine);
+                                        }
+                                        @if (machineCell != null)
                                         {
-                                            <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="startup" Title="Identified from a Quilt4Net startup log entry" />
+                                            @RenderVersionCell(machineCell, app, env, includeMachine: true)
                                         }
                                         else
                                         {
-                                            <RadzenBadge BadgeStyle="BadgeStyle.Light" Text="log" Title="Identified by scanning regular logs" />
+                                            <RadzenText TextStyle="TextStyle.Caption" Text="—" />
                                         }
-                                        @if (hasAlias && alias.HasConflict)
-                                        {
-                                            var conflictDetail = string.Join("\n", alias.ConflictingVersions.Select(c => $"{c.SourceName}: {c.Version} ({c.LastSeen:u})"));
-                                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text="conflict" Title="@($"Source apps disagree on version:\n{conflictDetail}")" />
-                                        }
-                                    </RadzenStack>
+                                    </td>
                                 }
-                                else
-                                {
-                                    <RadzenText TextStyle="TextStyle.Caption" Text="—" />
-                                }
-                            </td>
+                            </tr>
                         }
-                    </tr>
+                    }
                 }
             </tbody>
         </table>
@@ -146,6 +174,14 @@
     .version-matrix thead th {
         background-color: var(--rz-base);
         font-weight: 600;
+    }
+    /* Per-machine column — caption-style, slightly subdued because the app column on its left
+       already carries the bold identifier. font-family is monospace so container hex names
+       (308360f909f3 etc.) line up character-by-character across rows for visual scanning. */
+    td.version-matrix-machine {
+        font-family: var(--rz-monospace-font-family, "Consolas", "Courier New", monospace);
+        font-size: 0.85rem;
+        color: var(--rz-text-secondary-color);
     }
     /* Configuration names can run long; without this they wrap inside the SelectBar pill and
        turn into two-line buttons. white-space:nowrap keeps each option on one line and lets the
@@ -215,6 +251,9 @@
     // application row left with no values in the remaining columns is hidden too.
     private bool _showDevelopment;
     private bool _showUnknown;
+    // Per-machine toggle. When on, each app row expands into one row per machine running it
+    // (sourced from VersionMatrixView.CellsByMachine). Pure UI flip — no re-fetch.
+    private bool _perMachine;
 
     // EnvironmentOrdering maps a null/blank environment to this sentinel (internal there, so matched literally).
     private const string DevelopmentEnvironment = "Development";
@@ -408,4 +447,67 @@
         if (context is ApplicationInsightsConfigurationResponse { Name: { Length: > 0 } name }) return name;
         return string.IsNullOrEmpty(context?.WorkspaceId) ? "the configured workspace" : $"workspace {context.WorkspaceId}";
     }
+
+    /// <summary>
+    /// All machines reported running <paramref name="app"/> across the visible environments,
+    /// alphabetically. Each row in per-machine mode renders one entry from this list.
+    /// </summary>
+    private IReadOnlyList<string> MachinesForApp(string app, IReadOnlyList<string> visibleEnvironments)
+    {
+        if (_view?.CellsByMachine is not { Count: > 0 }) return [];
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var env in visibleEnvironments)
+        {
+            if (_view.CellsByMachine.TryGetValue((app, env), out var list))
+            {
+                foreach (var c in list) set.Add(c.Machine);
+            }
+        }
+        return set.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>Look up the cell for a specific (app, env, machine) tuple, or null if that machine
+    /// hasn't reported anything for that env in the window.</summary>
+    private VersionMatrixCell FindMachineCell(string app, string env, string machine)
+    {
+        if (_view?.CellsByMachine is not { } map) return null;
+        if (!map.TryGetValue((app, env), out var list)) return null;
+        return list.FirstOrDefault(c => string.Equals(c.Machine, machine, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Renders a single version cell — version + startup/log badge + optional conflict badge.
+    /// Shared between the aggregated and per-machine table bodies so the per-cell visual stays
+    /// in sync across both modes. <paramref name="includeMachine"/> suppresses the conflict badge
+    /// in per-machine mode because conflicts are per-(App, Env), not per-(App, Env, Machine), and
+    /// they'd surface as misleading on a single-machine row.
+    /// </summary>
+    private RenderFragment RenderVersionCell(VersionMatrixCell cell, string app, string env, bool includeMachine) => __builder =>
+    {
+        // alias is only meaningful in aggregated mode — in per-machine mode each conflicting
+        // version already gets its own row, so the "conflict" badge would be misleading. Declare
+        // it nullable up front to avoid the short-circuit `out var` definite-assignment issue.
+        CellAlias alias = null;
+        var hasAlias = !includeMachine && _view.TryGetAlias(app, env, out alias);
+        var lastSeenLabel = hasAlias
+            ? $"Last seen {cell.LastSeen:u}\nMerged from: {string.Join(", ", alias.SourceNames)}"
+            : $"Last seen {cell.LastSeen:u}";
+
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <span title="@lastSeenLabel">@cell.Version</span>
+            @if (cell.Source == VersionMatrixSource.Startup)
+            {
+                <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="startup" Title="Identified from a Quilt4Net startup log entry" />
+            }
+            else
+            {
+                <RadzenBadge BadgeStyle="BadgeStyle.Light" Text="log" Title="Identified by scanning regular logs" />
+            }
+            @if (hasAlias && alias.HasConflict)
+            {
+                var conflictDetail = string.Join("\n", alias.ConflictingVersions.Select(c => $"{c.SourceName}: {c.Version} ({c.LastSeen:u})"));
+                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text="conflict" Title="@($"Source apps disagree on version:\n{conflictDetail}")" />
+            }
+        </RadzenStack>
+    };
 }

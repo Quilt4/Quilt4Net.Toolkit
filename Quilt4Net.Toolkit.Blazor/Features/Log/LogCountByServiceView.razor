@@ -86,6 +86,13 @@
                 </Items>
             </RadzenSelectBar>
         </RadzenStack>
+        @* Per-machine toggle: regroups the cell cube by (Service, Machine, Severity) instead of
+           (Service, Severity). Same data, pure local recompute — no fetch. *@
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_perMachine" TValue="bool" Name="perMachine"
+                          Change="@(_ => RecomputeRows())" />
+            <RadzenLabel Component="perMachine" Text="Per machine" />
+        </RadzenStack>
         @* Native `title` tooltip — fixed at render time, but DataAgeFormat now reports the
            absolute load timestamp (not a relative age) so it doesn't drift between renders. The
            timestamp itself is restored from the scoped cache on revisit, so even a stale render
@@ -127,6 +134,7 @@
                 <RadzenDataGridColumn TItem="ServiceRow" Title="Service" Property="@nameof(ServiceRow.Service)" SortOrder="SortOrder.Ascending">
                     <FooterTemplate><strong>Total</strong></FooterTemplate>
                 </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Machine" Property="@nameof(ServiceRow.Machine)" Visible="@_perMachine" />
                 <RadzenDataGridColumn TItem="ServiceRow" Title="Verbose" Property="@nameof(ServiceRow.Verbose)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
                     <FooterTemplate><strong>@_columnTotals[SeverityLevel.Verbose].ToString("N0")</strong></FooterTemplate>
                 </RadzenDataGridColumn>
@@ -164,6 +172,9 @@
     private IEnumerable<string> _selectedConfigIds = [];
     private IEnumerable<string> _selectedEnvironments = [];
     private IEnumerable<LogSource> _selectedSources = [];
+    // Per-machine toggle. When on, rows are keyed on (Service, Machine) instead of Service —
+    // each machine gets its own row in the grid. Default off; pure local regroup on flip.
+    private bool _perMachine;
 
     // Per-range cache of every cell fetched from AI (across every candidate config). Filter
     // changes recompute _rows from this map — no fetch. Range changes look up / populate it.
@@ -447,36 +458,45 @@
         var envSet = (_selectedEnvironments ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var sourceSet = (_selectedSources ?? []).ToHashSet();
 
-        // Pre-collect every service that appears in the range's cube. These are the rows we
-        // render no matter what the filter ends up matching — services with no matches show
-        // a row of zeros.
-        var allServices = allCells
-            .Select(t => t.Cell.Service ?? "unknown")
-            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+        // Row key shape depends on the per-machine toggle: (Service, "") when off — every machine
+        // collapses into one row per service — vs (Service, Machine) when on — one row per
+        // (service, machine) tuple. Cells with empty Machine read "(unknown)" so they stay
+        // distinguishable from real-named hosts.
+        string MachineKey(LogCountTaggedCell t) => _perMachine
+            ? (string.IsNullOrWhiteSpace(t.Cell.Machine) ? "(unknown)" : t.Cell.Machine)
+            : "";
+
+        // Pre-collect every (service, machine) pair that appears in the range's cube. These are the
+        // rows we render no matter what the filter matches — entries with no matches show a row of
+        // zeros so toggling a filter never makes a row vanish (keeps the grid stable across clicks).
+        var allKeys = allCells
+            .Select(t => (Service: t.Cell.Service ?? "unknown", Machine: MachineKey(t)))
+            .Distinct(new ServiceMachineComparer())
             .ToArray();
 
-        var aggregated = new Dictionary<(string Service, SeverityLevel Severity), long>(
-            new ServiceSeverityComparer());
+        var aggregated = new Dictionary<(string Service, string Machine, SeverityLevel Severity), long>(
+            new ServiceMachineSeverityComparer());
         foreach (var t in allCells)
         {
             if (configSet.Count > 0 && !configSet.Contains(t.ConfigId)) continue;
             if (envSet.Count > 0 && !envSet.Contains(t.Cell.Environment)) continue;
             if (sourceSet.Count > 0 && !sourceSet.Contains(t.Cell.Source)) continue;
 
-            var key = (t.Cell.Service ?? "unknown", t.Cell.Severity);
+            var key = (t.Cell.Service ?? "unknown", MachineKey(t), t.Cell.Severity);
             aggregated[key] = aggregated.GetValueOrDefault(key) + t.Cell.Count;
         }
 
-        _rows = allServices
-            .OrderBy(s => s, System.StringComparer.OrdinalIgnoreCase)
-            .Select(service =>
+        _rows = allKeys
+            .OrderBy(k => k.Service, System.StringComparer.OrdinalIgnoreCase)
+            .ThenBy(k => k.Machine, System.StringComparer.OrdinalIgnoreCase)
+            .Select(k =>
             {
                 var counts = new Dictionary<SeverityLevel, long>();
                 foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
                 {
-                    counts[sev] = aggregated.GetValueOrDefault((service, sev));
+                    counts[sev] = aggregated.GetValueOrDefault((k.Service, k.Machine, sev));
                 }
-                return new ServiceRow(service, counts);
+                return new ServiceRow(k.Service, k.Machine, counts);
             })
             .ToList();
 
@@ -492,15 +512,35 @@
     }
 
     /// <summary>
-    /// Case-insensitive comparer for the (Service, Severity) aggregation key so two service names
-    /// that differ only in casing don't end up split across rows.
+    /// Case-insensitive comparer for the (Service, Machine, Severity) aggregation key so two
+    /// service / machine names that differ only in casing don't end up split across rows.
+    /// When the per-machine toggle is off, Machine is "" for every cell — the comparer still
+    /// works, the Machine axis just collapses into a single bucket per Service.
     /// </summary>
-    private sealed class ServiceSeverityComparer : IEqualityComparer<(string Service, SeverityLevel Severity)>
+    private sealed class ServiceMachineSeverityComparer : IEqualityComparer<(string Service, string Machine, SeverityLevel Severity)>
     {
-        public bool Equals((string Service, SeverityLevel Severity) x, (string Service, SeverityLevel Severity) y)
-            => x.Severity == y.Severity && System.StringComparer.OrdinalIgnoreCase.Equals(x.Service, y.Service);
-        public int GetHashCode((string Service, SeverityLevel Severity) obj)
-            => System.HashCode.Combine(System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Service ?? ""), obj.Severity);
+        public bool Equals((string Service, string Machine, SeverityLevel Severity) x, (string Service, string Machine, SeverityLevel Severity) y)
+            => x.Severity == y.Severity
+                && System.StringComparer.OrdinalIgnoreCase.Equals(x.Service, y.Service)
+                && System.StringComparer.OrdinalIgnoreCase.Equals(x.Machine, y.Machine);
+        public int GetHashCode((string Service, string Machine, SeverityLevel Severity) obj)
+            => System.HashCode.Combine(
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Service ?? ""),
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Machine ?? ""),
+                obj.Severity);
+    }
+
+    /// <summary>Same idea but for the row-key Distinct() — no severity dimension, just the
+    /// (Service, Machine) pair.</summary>
+    private sealed class ServiceMachineComparer : IEqualityComparer<(string Service, string Machine)>
+    {
+        public bool Equals((string Service, string Machine) x, (string Service, string Machine) y)
+            => System.StringComparer.OrdinalIgnoreCase.Equals(x.Service, y.Service)
+                && System.StringComparer.OrdinalIgnoreCase.Equals(x.Machine, y.Machine);
+        public int GetHashCode((string Service, string Machine) obj)
+            => System.HashCode.Combine(
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Service ?? ""),
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Machine ?? ""));
     }
 
     private static Dictionary<SeverityLevel, long> NewEmptyTotals()
@@ -526,14 +566,18 @@
     {
         private readonly IReadOnlyDictionary<SeverityLevel, long> _counts;
 
-        public ServiceRow(string service, IReadOnlyDictionary<SeverityLevel, long> counts)
+        public ServiceRow(string service, string machine, IReadOnlyDictionary<SeverityLevel, long> counts)
         {
             Service = service;
+            Machine = machine;
             _counts = counts;
             Total = counts.Values.Sum();
         }
 
         public string Service { get; }
+        // Empty when the per-machine toggle is off; the data grid's Machine column is hidden in
+        // that case (Visible="@_perMachine") so the empty string is never shown.
+        public string Machine { get; }
         public long Verbose => GetCount(SeverityLevel.Verbose);
         public long Information => GetCount(SeverityLevel.Information);
         public long Warning => GetCount(SeverityLevel.Warning);

@@ -77,12 +77,14 @@ internal class ApplicationInsightsService : IApplicationInsightsService
     /// </summary>
     internal const string VersionMatrixPickStartupPreferred = @"let startup_pick = startup
 | extend Environment = iff(isempty(Environment), ""(unknown)"", Environment)
-| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment;
+| extend Machine = iff(isempty(Machine), ""(unknown)"", Machine)
+| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment, Machine;
 let log_pick = fallback
 | extend Environment = iff(isempty(Environment), ""(unknown)"", Environment)
-| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment;
-union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationName, Environment)
-| order by ApplicationName asc, Environment asc";
+| extend Machine = iff(isempty(Machine), ""(unknown)"", Machine)
+| summarize arg_max(TimeGenerated, Version, Source) by ApplicationName, Environment, Machine;
+union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationName, Environment, Machine)
+| order by ApplicationName asc, Environment asc, Machine asc";
     private readonly ConcurrentDictionary<ClientKey, LogsQueryClient> _clientCache = new();
     private readonly ITimeToLiveCache _timeToLiveCache;
     private readonly ApplicationInsightsOptions _options;
@@ -1040,9 +1042,23 @@ AppRequests
         }
     }
 
-    public async IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null)
+    public async IAsyncEnumerable<VersionMatrixCell> GetVersionMatrixAsync(IApplicationInsightsContext context, TimeSpan? lookback = null, bool forceRefresh = false)
     {
-        var cacheKey = $"versionmatrix|{context.ToKey()}|{lookback}";
+        // Cache key bumped to v3 when the Machine column was added — without that suffix, a hot-
+        // reloaded process would keep serving pre-Machine cell snapshots from the TtlCache (which
+        // doesn't track schema migrations) and every row would read "(unknown)" forever.
+        var cacheKey = $"versionmatrix-v3|{context.ToKey()}|{lookback}";
+
+        // forceRefresh wired up to the UI's Refresh button (via VersionMatrixService.RefreshAsync):
+        // drops the TtlCache entry first so the next GetAsync actually re-runs the KQL. Without
+        // this, RefreshAsync only cleared its own in-memory view dict — the underlying cells
+        // stayed cached for an hour, so users couldn't force a fresh fetch even by clicking
+        // Refresh after a code change.
+        if (forceRefresh)
+        {
+            await _timeToLiveCache.InvalidateAsync<VersionMatrixCell[]>(cacheKey);
+        }
+
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             return await GetVersionMatrixInternalAsync(context, lookback).ToArrayAsync();
@@ -1066,17 +1082,33 @@ let startup = AppTraces
 | extend
     ApplicationName = tostring(_p[""ApplicationName""]),
     Environment = tostring(_p[""Environment""]),
-    Version = tostring(_p[""Version""])
+    Version = tostring(_p[""Version""]),
+    Machine = coalesce(
+        tostring(_p[""MachineName""]),
+        tostring(_p[""machineName""]),
+        tostring(_p[""machine_name""]),
+        tostring(_p[""host.name""]),
+        tostring(_p[""ServerName""]),
+        tostring(_p[""serverName""]),
+        tostring(AppRoleInstance))
 | where isnotempty(ApplicationName) and isnotempty(Version)
-| project TimeGenerated, ApplicationName, Environment, Version, Source = ""Startup"";
+| project TimeGenerated, ApplicationName, Environment, Version, Machine, Source = ""Startup"";
 let fallback = union AppTraces, AppExceptions, AppRequests
 | extend _p = todynamic(Properties)
 | extend
     ApplicationName = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Environment = {EnvironmentProjection},
-    Version = coalesce(tostring(_p[""application_Version""]), tostring(_p[""service.version""]), tostring(AppVersion))
+    Version = coalesce(tostring(_p[""application_Version""]), tostring(_p[""service.version""]), tostring(AppVersion)),
+    Machine = coalesce(
+        tostring(_p[""MachineName""]),
+        tostring(_p[""machineName""]),
+        tostring(_p[""machine_name""]),
+        tostring(_p[""host.name""]),
+        tostring(_p[""ServerName""]),
+        tostring(_p[""serverName""]),
+        tostring(AppRoleInstance))
 | where isnotempty(ApplicationName) and isnotempty(Version)
-| project TimeGenerated, ApplicationName, Environment, Version, Source = ""Log"";
+| project TimeGenerated, ApplicationName, Environment, Version, Machine, Source = ""Log"";
 {VersionMatrixPickStartupPreferred}";
 
         var range = lookback.HasValue
@@ -1091,6 +1123,7 @@ let fallback = union AppTraces, AppExceptions, AppRequests
         var versionIndex = GetColumnIndex(table, "Version");
         var timeIndex = GetColumnIndex(table, "TimeGenerated");
         var sourceIndex = GetColumnIndex(table, "Source");
+        var machineIndex = GetColumnIndex(table, "Machine");
 
         foreach (var row in table.Rows)
         {
@@ -1102,7 +1135,8 @@ let fallback = union AppTraces, AppExceptions, AppRequests
                 LastSeen = GetDateTime(row, timeIndex),
                 Source = string.Equals(row[sourceIndex]?.ToString(), "Startup", StringComparison.Ordinal)
                     ? VersionMatrixSource.Startup
-                    : VersionMatrixSource.Log
+                    : VersionMatrixSource.Log,
+                Machine = row[machineIndex]?.ToString() ?? ""
             };
         }
     }
@@ -1189,9 +1223,10 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
     // writes. For aggregating across multiple rows we use sum(Sum)/sum(ItemCount), the weighted
     // average that matches what classic `avg(value)` produced.
 
-    // Group by host.name (from the OpenTelemetry resource attribute) so each machine renders as
-    // its own line. AppRoleInstance is the Azure-Monitor-side equivalent and serves as the
-    // fallback if host.name happens to be missing on a row.
+    // Group by host so each machine renders as its own line. Coalesce probes Properties['MachineName']
+    // first (what the Quilt4Net SDK enriches every record with — `Environment.MachineName`), then
+    // Properties['host.name'] (the OpenTelemetry resource attribute), and finally AppRoleInstance
+    // (Azure Monitor's per-instance id) as a last-resort fallback.
 
     public IAsyncEnumerable<MetricSample> GetCpuUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -1201,7 +1236,7 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.cpu.utilization'
 | where tostring(Properties.state) == 'idle'
-| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
 | summarize avg_idle = sum(Sum) / todouble(sum(ItemCount)) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | extend cpu_busy_pct = 100.0 * (1 - avg_idle)
 | project Series = host, Timestamp = TimeGenerated, Value = cpu_busy_pct";
@@ -1216,7 +1251,7 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.memory.utilization'
 | where tostring(Properties.state) == 'used'
-| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
 | summarize mem_used_pct = 100.0 * sum(Sum) / todouble(sum(ItemCount)) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | project Series = host, Timestamp = TimeGenerated, Value = mem_used_pct";
         return RunMetricQueryAsync(context, query, timeSpan, $"mem|{context.ToKey()}|{timeSpan}", cancellationToken);
@@ -1236,7 +1271,7 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.filesystem.usage'
 | where tostring(Properties.state) == 'free'
-| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
 | extend volume = strcat(host, ' ', tostring(Properties['device']))
 | summarize free_gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | project Series = volume, Timestamp = TimeGenerated, Value = free_gb";
@@ -1254,7 +1289,7 @@ AppMetrics
 AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.filesystem.usage'
-| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
 | extend volume = strcat(host, ' ', tostring(Properties['device']))
 | extend state = tostring(Properties.state)
 | summarize gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, state
@@ -1310,7 +1345,7 @@ AppMetrics
 AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.network.io'
-| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
 | summarize total_bytes = sum(Sum) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | order by host asc, TimeGenerated asc
 | extend prev_bytes = prev(total_bytes), prev_host = prev(host), prev_t = prev(TimeGenerated)
@@ -1323,7 +1358,9 @@ AppMetrics
 
     public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"logcount|{context.ToKey()}|{timeSpan}";
+        // Cache key bumped to v2 when the Machine column was added — without that suffix, a hot-
+        // reloaded process would keep serving pre-Machine cells from the TtlCache.
+        var cacheKey = $"logcount-v2|{context.ToKey()}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             var list = new List<LogCountByServiceCell>();
@@ -1342,12 +1379,19 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
 | extend
     Service = coalesce(tostring(_p['ApplicationName']), tostring(AppRoleName), 'unknown'),
     Environment = trim(' ', {EnvironmentProjection}),
+    Machine = coalesce(
+        tostring(_p['MachineName']),
+        tostring(_p['machineName']),
+        tostring(_p['machine_name']),
+        tostring(_p['host.name']),
+        tostring(AppRoleInstance),
+        'unknown'),
     EffectiveSeverity = case(
         _Source == 'AppExceptions', 3,
         _Source == 'AppRequests',   iif(tobool(coalesce(Success, true)), 1, 3),
         toint(SeverityLevel))
-| summarize Count = count() by Service, EffectiveSeverity, Environment, _Source
-| project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count";
+| summarize Count = count() by Service, EffectiveSeverity, Environment, _Source, Machine
+| project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count, Machine";
 
             var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
             foreach (var table in response.Value.AllTables)
@@ -1357,6 +1401,7 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
                 var envIdx = GetColumnIndex(table, "Environment");
                 var sourceIdx = GetColumnIndex(table, "Source");
                 var countIdx = GetColumnIndex(table, "Count");
+                var machineIdx = GetColumnIndex(table, "Machine");
                 foreach (var row in table.Rows)
                 {
                     var service = row[serviceIdx]?.ToString() ?? "unknown";
@@ -1369,7 +1414,8 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
                         _ => LogSource.Trace,
                     };
                     var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
-                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count));
+                    var machine = row[machineIdx]?.ToString() ?? "";
+                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count, machine));
                 }
             }
             return list.ToArray();

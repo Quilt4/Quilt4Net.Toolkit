@@ -107,8 +107,12 @@ public class Quilt4NetStartupLoggerTests
 
         Quilt4NetStartupLogger.Log(capture, options);
 
+        // MachineName is sourced from System.Environment.MachineName at runtime, so the value
+        // varies per host — match the surrounding shape with a wildcard rather than pinning the
+        // full string. The structured "MachineName" property's value is asserted separately
+        // (see Log_emits_MachineName_as_a_structured_property).
         capture.Entries[0].FormattedMessage
-            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server [Thargelion] v1.2.9.0 in CI (true)");
+            .Should().Match("Quilt4Net startup: Eplicta.FortDocs.Server [Thargelion] v1.2.9.0 in CI on * (true)");
     }
 
     [Fact]
@@ -128,8 +132,27 @@ public class Quilt4NetStartupLoggerTests
         Quilt4NetStartupLogger.Log(capture, options);
 
         capture.Entries[0].FormattedMessage
-            .Should().Be("Quilt4Net startup: Eplicta.FortDocs.Server v1.2.9.0 in CI (true)")
+            .Should().Match("Quilt4Net startup: Eplicta.FortDocs.Server v1.2.9.0 in CI on * (true)")
             .And.NotContain("[");
+    }
+
+    [Fact]
+    public void Log_emits_MachineName_as_a_structured_property()
+    {
+        // Companion to Log_emits_Quilt4NetStartup_as_a_structured_property_not_a_scope. Pins
+        // that MachineName is delivered as a message-template structured arg (not BeginScope)
+        // so it reaches App Insights' Properties bag on the Quilt4NetStartup-tagged row — the
+        // VersionMatrix per-machine view relies on this to label startup rows with a real host
+        // name. Value matches System.Environment.MachineName at the call site.
+        var capture = new CapturingLogger();
+        var options = new Quilt4NetLoggingOptions { ApplicationName = "x" };
+
+        Quilt4NetStartupLogger.Log(capture, options);
+
+        capture.Entries.Should().ContainSingle();
+        capture.Entries[0].State
+            .Should().Contain(kv => kv.Key == "MachineName"
+                && string.Equals(kv.Value as string, System.Environment.MachineName, System.StringComparison.Ordinal));
     }
 
     [Fact]

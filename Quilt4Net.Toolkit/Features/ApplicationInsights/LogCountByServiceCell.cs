@@ -22,4 +22,5 @@ public record LogCountByServiceCell(
     SeverityLevel Severity,
     string Environment,
     LogSource Source,
-    long Count);
+    long Count,
+    string Machine = "");

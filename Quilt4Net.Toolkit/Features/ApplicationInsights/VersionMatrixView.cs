@@ -16,6 +16,17 @@ public sealed record VersionMatrixView
     /// <summary>Cells keyed by (ApplicationName, Environment). Missing keys = empty cell.</summary>
     public required IReadOnlyDictionary<(string App, string Env), VersionMatrixCell> Cells { get; init; }
 
+    /// <summary>
+    /// Per-machine breakdown of the same data: for each (App, Env), the list of cells observed
+    /// on each individual machine running that app. Populated when the underlying telemetry
+    /// carries a machine identifier (host.name or AppRoleInstance); empty list otherwise. The
+    /// UI's "Per machine" toggle reads from this map to expand an app row into one sub-row per
+    /// machine. The aggregated <see cref="Cells"/> still picks the latest version across machines
+    /// for the default app-level view.
+    /// </summary>
+    public IReadOnlyDictionary<(string App, string Env), IReadOnlyList<VersionMatrixCell>> CellsByMachine { get; init; }
+        = new Dictionary<(string, string), IReadOnlyList<VersionMatrixCell>>();
+
     /// <summary>UTC timestamp the data was fetched from Application Insights.</summary>
     public required DateTime LastRefreshedUtc { get; init; }
 
@@ -57,18 +68,47 @@ public sealed record VersionMatrixView
             .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var cellMap = cells
-            .GroupBy(c => (App: c.ApplicationName, Env: string.IsNullOrWhiteSpace(c.Environment) ? UnknownEnvironment : c.Environment))
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.LastSeen).First());
+        // Normalise environment once so both the aggregated map and the per-machine map key on the
+        // same string. Without this, "" and "(unknown)" would split into two separate buckets.
+        var normalised = cells
+            .Select(c => c with { Environment = string.IsNullOrWhiteSpace(c.Environment) ? UnknownEnvironment : c.Environment })
+            .ToList();
+
+        // Aggregated cell — one per (App, Env), picking the latest-by-LastSeen across all machines.
+        // Machine identity is dropped so consumers that don't care about per-machine breakdown can
+        // read the cell at face value.
+        var cellMap = normalised
+            .GroupBy(c => (App: c.ApplicationName, Env: c.Environment))
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.LastSeen).First() with { Machine = "" });
+
+        // Per-machine map — for each (App, Env), one cell per machine that's reported a version.
+        // If two rows arrive for the same (App, Env, Machine) we pick the latest. Each list is
+        // ordered alphabetically by machine name so the UI's sub-rows render in a stable order.
+        var byMachine = normalised
+            .GroupBy(c => (App: c.ApplicationName, Env: c.Environment))
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<VersionMatrixCell>)g
+                    .GroupBy(c => string.IsNullOrWhiteSpace(c.Machine) ? UnknownMachine : c.Machine)
+                    .Select(mg => mg.OrderByDescending(c => c.LastSeen).First() with
+                    {
+                        Machine = string.IsNullOrWhiteSpace(mg.Key) ? UnknownMachine : mg.Key
+                    })
+                    .OrderBy(c => c.Machine, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
 
         return new VersionMatrixView
         {
             Applications = apps,
             Environments = envs,
             Cells = cellMap,
+            CellsByMachine = byMachine,
             LastRefreshedUtc = lastRefreshedUtc ?? DateTime.UtcNow
         };
     }
+
+    /// <summary>Sentinel used when a cell's <c>Machine</c> field is empty.</summary>
+    internal const string UnknownMachine = "(unknown)";
 }
 
 /// <summary>

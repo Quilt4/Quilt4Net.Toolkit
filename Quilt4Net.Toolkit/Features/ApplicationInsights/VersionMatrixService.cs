@@ -32,7 +32,9 @@ internal sealed class VersionMatrixService : IVersionMatrixService
     public async Task<VersionMatrixView> RefreshAsync(IApplicationInsightsContext context, TimeSpan? lookback = null, CancellationToken cancellationToken = default)
     {
         var cells = new List<VersionMatrixCell>();
-        await foreach (var cell in _ai.GetVersionMatrixAsync(context, lookback).WithCancellation(cancellationToken))
+        // forceRefresh=true so the TtlCache layer underneath drops its cached cells before
+        // re-running the KQL — that's what makes the UI's Refresh button genuinely refetch.
+        await foreach (var cell in _ai.GetVersionMatrixAsync(context, lookback, forceRefresh: true).WithCancellation(cancellationToken))
         {
             cells.Add(cell);
         }
@@ -44,5 +46,7 @@ internal sealed class VersionMatrixService : IVersionMatrixService
         return view;
     }
 
-    private readonly record struct CacheKey(string WorkspaceId, TimeSpan? Lookback);
+    // Schema version on the key — bump when VersionMatrixView's shape changes so a hot-reloaded
+    // process can't keep returning pre-migration cached views (e.g. without CellsByMachine).
+    private readonly record struct CacheKey(string WorkspaceId, TimeSpan? Lookback, int SchemaVersion = 3);
 }
