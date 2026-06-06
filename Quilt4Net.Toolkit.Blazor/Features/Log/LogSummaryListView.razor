@@ -19,7 +19,7 @@ else
     <RadzenDataGrid Data="@_filtered" TItem="SummarySubset"
                     AllowSorting="true" AllowFiltering="false"
                     AllowPaging="true" PageSize="8" PageSizeOptions="[8, 16, 32, 64]"
-                    ShowPagingSummary="true" PagingSummaryFormat="{2:N0} summary items, page {0} of {1}">
+                    ShowPagingSummary="true" PagingSummaryFormat="{2:N0} summary items, page {0:N0} of {1:N0}">
         <Columns>
             <RadzenDataGridColumn Title="Fingerprint" Width="60px" Sortable="false">
                 <Template>
@@ -32,7 +32,8 @@ else
                     <DateTimeView Date="@context.LastTimeGenerated"/>
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Count" Property="@nameof(SummarySubset.Count)" SortOrder="SortOrder.Descending" />
+            <RadzenDataGridColumn Title="Count" Property="@nameof(SummarySubset.Count)" SortOrder="SortOrder.Descending"
+                                  TextAlign="TextAlign.Right" FormatString="{0:N0}" />
             <RadzenDataGridColumn Title="Source" Property="@nameof(SummarySubset.Source)"/>
             <RadzenDataGridColumn Title="Level" Property="@nameof(SummarySubset.SeverityLevel)"/>
             <RadzenDataGridColumn Title="Message" Property="@nameof(SummarySubset.Message)"/>
