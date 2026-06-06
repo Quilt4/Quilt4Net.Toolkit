@@ -13,7 +13,11 @@ internal sealed class BrowserTimeZoneAccessor : IBrowserTimeZoneAccessor, System
     public BrowserTimeZoneAccessor(IJSRuntime js)
     {
         _js = js;
-        Current = System.TimeZoneInfo.Utc;
+        // Default to the server's local timezone before the JS interop completes. On a single-box
+        // dev setup the server runs on the same machine as the browser so this is usually correct;
+        // in production (server in UTC, browser elsewhere) the JS-interop refinement below
+        // replaces it. Anything is better than fixing the initial render to UTC.
+        Current = System.TimeZoneInfo.Local;
     }
 
     public System.TimeZoneInfo Current { get; private set; }
@@ -33,25 +37,11 @@ internal sealed class BrowserTimeZoneAccessor : IBrowserTimeZoneAccessor, System
         try
         {
             _module ??= await _js.InvokeAsync<IJSObjectReference>("import", ModulePath);
-            var ianaName = await _module.InvokeAsync<string>("getBrowserTimeZone");
-            if (string.IsNullOrWhiteSpace(ianaName)) return;
+            var info = await _module.InvokeAsync<BrowserTimeZoneInfoDto>("getBrowserTimeZone");
+            var resolved = Resolve(info);
+            if (resolved == null) return;
 
-            // .NET 10 maps IANA ids natively on all platforms via ICU; TryFindSystemTimeZoneById
-            // would be cleaner but isn't on the surface. Catch + log-and-skip on the rare
-            // exotic id rather than crash the circuit.
-            try
-            {
-                Current = System.TimeZoneInfo.FindSystemTimeZoneById(ianaName);
-            }
-            catch (System.TimeZoneNotFoundException)
-            {
-                return;
-            }
-            catch (System.InvalidTimeZoneException)
-            {
-                return;
-            }
-
+            Current = resolved;
             IsLoaded = true;
             Changed?.Invoke();
         }
@@ -61,10 +51,37 @@ internal sealed class BrowserTimeZoneAccessor : IBrowserTimeZoneAccessor, System
         }
         catch (System.InvalidOperationException)
         {
-            // JS interop unavailable (prerender phase). The next OnAfterRenderAsync call will
-            // re-run this — null out the cached task so the retry is allowed.
+            // JS interop unavailable (prerender phase). Null the cached task so a later call
+            // from OnAfterRenderAsync(firstRender) can retry.
             _loadTask = null;
         }
+    }
+
+    /// <summary>
+    /// IANA first, offset fallback. The IANA path is DST-aware (a single zone identifier covers
+    /// summer + winter); the offset path is what JavaScript gave us *right now* and is
+    /// fine-as-a-fallback for chart axis labels. Returns null when the browser sent neither — the
+    /// constructor's TimeZoneInfo.Local default then stays in place.
+    /// </summary>
+    private static System.TimeZoneInfo Resolve(BrowserTimeZoneInfoDto info)
+    {
+        if (info == null) return null;
+
+        if (!string.IsNullOrWhiteSpace(info.Name))
+        {
+            try
+            {
+                return System.TimeZoneInfo.FindSystemTimeZoneById(info.Name);
+            }
+            catch (System.TimeZoneNotFoundException) { /* fall through to offset */ }
+            catch (System.InvalidTimeZoneException) { /* fall through to offset */ }
+        }
+
+        var offset = System.TimeSpan.FromMinutes(info.OffsetMinutes);
+        if (offset < System.TimeSpan.FromHours(-14) || offset > System.TimeSpan.FromHours(14))
+            return null; // bogus payload — keep the existing fallback
+        var label = info.Name is { Length: > 0 } ? info.Name : $"UTC{(offset >= System.TimeSpan.Zero ? "+" : "-")}{offset:hh\\:mm}";
+        return System.TimeZoneInfo.CreateCustomTimeZone(label, offset, label, label);
     }
 
     public async System.Threading.Tasks.ValueTask DisposeAsync()
@@ -75,4 +92,6 @@ internal sealed class BrowserTimeZoneAccessor : IBrowserTimeZoneAccessor, System
             catch (JSDisconnectedException) { }
         }
     }
+
+    private sealed record BrowserTimeZoneInfoDto(string Name, int OffsetMinutes);
 }
