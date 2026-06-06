@@ -67,6 +67,16 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MetricSample> GetDiskFreeAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Per-volume disk capacity (total GB, plus the free/used/reserved breakdown) across
+    /// <paramref name="timeSpan"/>. Sourced from <c>system.filesystem.usage</c> by summing the
+    /// three states per volume — gives the UI a real "% of capacity" reference for free-space bars
+    /// instead of needing to scale them relative to whichever host happens to have the most space.
+    /// Series label matches <see cref="GetDiskFreeAsync"/> so consumers can join the two by
+    /// <see cref="MetricSample.Series"/> / <see cref="DiskCapacity.Series"/>.
+    /// </summary>
+    IAsyncEnumerable<DiskCapacity> GetDiskCapacityAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Network throughput (MB/s) per host (<c>cloud_RoleInstance</c>) over <paramref name="timeSpan"/>.
     /// Computed as the per-bin delta of <c>system.network.io</c> divided by the bin duration; negative
     /// deltas (host restart / counter reset) are dropped. Bin size scales with the window.

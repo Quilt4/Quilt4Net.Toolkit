@@ -1243,6 +1243,63 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"diskfree|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
+    public async IAsyncEnumerable<DiskCapacity> GetDiskCapacityAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // Capacity is constant on a healthy filesystem (it only moves when a volume is resized),
+        // so we don't bin by time — we average each state's GB across the window for one row per
+        // volume. free + used + reserved = total. The window is still passed so a freshly-added
+        // volume that only has data for the last 5 minutes still shows up.
+        var cacheKey = $"diskcapacity|{context.ToKey()}|{timeSpan}";
+        var query = $@"
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name == 'system.filesystem.usage'
+| extend host = coalesce(tostring(Properties['host.name']), AppRoleInstance)
+| extend volume = strcat(host, ' ', tostring(Properties['device']))
+| extend state = tostring(Properties.state)
+| summarize gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, state
+| extend free_gb = iif(state == 'free', gb, 0.0)
+| extend used_gb = iif(state == 'used', gb, 0.0)
+| extend reserved_gb = iif(state == 'reserved', gb, 0.0)
+| summarize FreeGb = sum(free_gb), UsedGb = sum(used_gb), ReservedGb = sum(reserved_gb) by volume
+| extend TotalGb = FreeGb + UsedGb + ReservedGb
+| project Series = volume, FreeGb, UsedGb, ReservedGb, TotalGb";
+
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            var list = new List<DiskCapacity>();
+            var client = GetClient(context);
+            var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+            var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
+            foreach (var table in response.Value.AllTables)
+            {
+                var seriesIdx = GetColumnIndex(table, "Series");
+                var freeIdx = GetColumnIndex(table, "FreeGb");
+                var usedIdx = GetColumnIndex(table, "UsedGb");
+                var reservedIdx = GetColumnIndex(table, "ReservedGb");
+                var totalIdx = GetColumnIndex(table, "TotalGb");
+                foreach (var row in table.Rows)
+                {
+                    list.Add(new DiskCapacity(
+                        row[seriesIdx]?.ToString() ?? "",
+                        ToDouble(row[freeIdx]),
+                        ToDouble(row[usedIdx]),
+                        ToDouble(row[reservedIdx]),
+                        ToDouble(row[totalIdx])));
+                }
+            }
+            return list.ToArray();
+        });
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
+    private static double ToDouble(object raw)
+        => raw is null ? 0.0 : System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
+
     public IAsyncEnumerable<MetricSample> GetNetworkThroughputAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // system.network.io is a counter — bytes since process start. Take sum(Sum) per bin so

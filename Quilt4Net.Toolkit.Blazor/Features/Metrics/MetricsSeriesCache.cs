@@ -29,8 +29,9 @@ internal sealed class MetricsSeriesCache
 
     public void Set(string configKey, System.TimeSpan range,
         MetricSample[] cpu, MetricSample[] memory, MetricSample[] disk, MetricSample[] network,
+        DiskCapacity[] diskCapacity,
         System.DateTime loadedUtc)
-        => _entries[(configKey, range)] = new CacheEntry(cpu, memory, disk, network, loadedUtc);
+        => _entries[(configKey, range)] = new CacheEntry(cpu, memory, disk, network, diskCapacity, loadedUtc);
 
     public void Invalidate(string configKey, System.TimeSpan range)
         => _entries.Remove((configKey, range));
@@ -45,5 +46,6 @@ internal sealed class MetricsSeriesCache
         MetricSample[] Memory,
         MetricSample[] Disk,
         MetricSample[] Network,
+        DiskCapacity[] DiskCapacity,
         System.DateTime LoadedUtc);
 }

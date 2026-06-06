@@ -40,6 +40,12 @@
                 </Items>
             </RadzenSelectBar>
         </RadzenStack>
+        @* Test toggle: forwards to FullPercentScale on the CPU/Memory charts. Flipping it doesn't
+           re-fetch data — the Y-axis just redraws against a fixed 0..100 vs auto-scaled range. *@
+        @* <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_fullPercentScale" TValue="bool" Name="fullPercentScale" />
+            <RadzenLabel Component="fullPercentScale" Text="0–100 % scale" />
+        </RadzenStack> *@
         @* Native `title` tooltip — DataAgeFormat reports the absolute load timestamp (restored
            from the scoped cache on page-navigation revisit) so the text doesn't go stale between
            renders the way a relative "X minutes ago" string would. *@
@@ -57,10 +63,19 @@
     }
 
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
-        <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" />
-        <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" />
-        <MetricChart Title="Disk free (GB)" Unit="GB" Samples="@_disk" Loading="@_busy" />
-        <MetricChart Title="Network (MB/s)" Unit="MB/s" Samples="@_network" Loading="@_busy" />
+        <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+        <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+        @* Disk free uses a bar-per-host snapshot — over a 1h/24h/7d window the value barely
+           moves so a line chart degenerates into N flat lines. The bar gives the current value
+           at a glance, the delta badge (▼ −1.2 GB / 24h) signals trend direction with a
+           free-space-is-good colour scheme, and the inline sparkline keeps the shape visible
+           for cases where a sudden drop matters. *@
+        <MetricLatestChart Title="Disk free (GB)" Unit="GB" Samples="@_disk" Capacity="@_diskCapacity" Range="@_window" Loading="@_busy" LessIsBad="true" />
+        @* Network values commonly span 3-4 orders of magnitude across hosts — idle web boxes sit
+           at ~0.01 MB/s while a single backup job spikes to 50+ MB/s. On a linear axis the idle
+           hosts vanish into a flat line at the bottom; log scale gives each host's shape its own
+           visible band. Ticks reverse-format back to MB/s so the axis still reads naturally. *@
+        <MetricChart Title="Network (MB/s)" Unit="MB/s" Samples="@_network" Loading="@_busy" LogScale="true" />
     </div>
 </RadzenStack>
 
@@ -71,11 +86,15 @@
     private System.DateTime? _lastRefreshUtc;
     private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
     private System.TimeSpan _window = System.TimeSpan.FromHours(1);
+    // Default ON — matches the new MetricChart default. Wired to the page's "0–100 % scale" switch
+    // so testers can toggle the axis pinning live without code changes.
+    private bool _fullPercentScale = true;
 
     private MetricSample[] _cpu = [];
     private MetricSample[] _memory = [];
     private MetricSample[] _disk = [];
     private MetricSample[] _network = [];
+    private DiskCapacity[] _diskCapacity = [];
 
     private IApplicationInsightsConfigurationSelector _selector;
     private ApplicationInsightsConfigurationResponse _selectedConfig;
@@ -157,6 +176,7 @@
             _memory = entry.Memory;
             _disk = entry.Disk;
             _network = entry.Network;
+            _diskCapacity = entry.DiskCapacity;
             _lastRefreshUtc = entry.LoadedUtc;
             _loadError = null;
             _busy = false;
@@ -177,11 +197,15 @@
             StateHasChanged();
             _disk = await Ai.GetDiskFreeAsync(ctx, _window).ToArrayAsync();
             StateHasChanged();
+            // Capacity is sequenced with the other queries so a single-query failure can't leave
+            // the bars half-rendered. It's quick — one KQL pass that aggregates per volume.
+            _diskCapacity = await Ai.GetDiskCapacityAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
             _network = await Ai.GetNetworkThroughputAsync(ctx, _window).ToArrayAsync();
             // Stamp the load completion. Only on success — a failed load shouldn't claim freshness.
             var loadedUtc = System.DateTime.UtcNow;
             _lastRefreshUtc = loadedUtc;
-            _scopedCache?.Set(key, _window, _cpu, _memory, _disk, _network, loadedUtc);
+            _scopedCache?.Set(key, _window, _cpu, _memory, _disk, _network, _diskCapacity, loadedUtc);
         }
         catch (System.Exception e)
         {

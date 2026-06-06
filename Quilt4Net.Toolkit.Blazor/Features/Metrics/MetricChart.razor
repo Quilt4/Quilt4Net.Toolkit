@@ -26,13 +26,39 @@
     }
     else
     {
-        <RadzenChart Style="flex: 1; min-height: 240px;">
+        @* @key gives Blazor a new chart instance when axis flags flip, AND we explicitly call
+           RadzenChart.Reload() in OnAfterRenderAsync when the key has just changed. Either path on
+           its own proved unreliable across multiple sibling charts (Memory would update while CPU
+           didn't, depending on render order); the belt-and-braces combination of "destroy +
+           recreate via @key, then tell Radzen to recompute its axis scales via Reload" picks up
+           the new Min/Max consistently. Data changes (Refresh, Range flip) don't change the key,
+           so they don't trigger Reload — Radzen's normal re-render path handles those. *@
+        <RadzenChart @ref="_chart" @key="@_chartKey" Style="flex: 1; min-height: 240px;">
             @foreach (var (label, points) in _series)
             {
                 <RadzenLineSeries Data="@points" CategoryProperty="@nameof(MetricSample.Timestamp)" ValueProperty="@nameof(MetricSample.Value)" Title="@label" Smooth="true" />
             }
             <RadzenCategoryAxis FormatString="{0:HH:mm}" />
-            <RadzenValueAxis FormatString="@($"{{0:0.##}} {Unit}")" />
+            @if (LogScale)
+            {
+                @* Values were transformed to log10 in OnParametersSet; the axis lives in log
+                   space so the Formatter reverse-transforms tick labels back to the natural unit
+                   (0.01, 0.1, 1, 10, 100 …). Letting Radzen auto-scale the axis is fine — the
+                   per-tick distance is already linear in log space. LogScale overrides
+                   FullPercentScale because log10(0) is −∞ and a fixed 0..100 range loses meaning. *@
+                <RadzenValueAxis Formatter="@FormatLogValue" />
+            }
+            else if (FullPercentScale)
+            {
+                @* Pinned 0..100 scale for percent metrics (CPU, memory). Stops the chart from
+                   auto-scaling to a host's narrow band (e.g. "always between 8 and 12 %") and
+                   making it look saturated when it's actually idle. *@
+                <RadzenValueAxis FormatString="@($"{{0:0.##}} {Unit}")" Min="0d" Max="100d" />
+            }
+            else
+            {
+                <RadzenValueAxis FormatString="@($"{{0:0.##}} {Unit}")" />
+            }
             <RadzenLegend Position="LegendPosition.Bottom" />
         </RadzenChart>
     }
@@ -44,8 +70,37 @@
     [Parameter] public MetricSample[] Samples { get; set; } = [];
     [Parameter] public bool Loading { get; set; }
 
+    /// <summary>
+    /// When true, values are plotted on a logarithmic (base-10) scale. Useful when one or two
+    /// hosts spike orders of magnitude above the others — on a linear axis the idle hosts squash
+    /// into a flat line at the bottom; on log scale every host's shape is visible. Values are
+    /// pre-transformed in <see cref="OnParametersSet"/> and the y-axis Formatter reverse-transforms
+    /// tick labels so they read in the natural unit (10⁰=1, 10¹=10, 10²=100 …).
+    /// </summary>
+    [Parameter] public bool LogScale { get; set; }
+
+    /// <summary>
+    /// When true (default), pins the y-axis to the 0..100 range — appropriate for percent metrics
+    /// like CPU and memory utilisation, where letting Radzen auto-scale would zoom into a narrow
+    /// band (e.g. 8–12 %) and read as "saturated" when the host is actually idle. Ignored when
+    /// <see cref="LogScale"/> is true (log10(0) is undefined and a fixed range loses meaning in
+    /// log space).
+    /// </summary>
+    [Parameter] public bool FullPercentScale { get; set; } = true;
+
+    /// <summary>
+    /// Floor used when log-transforming values — anything ≤ this maps to log10(LogScaleEpsilon),
+    /// so a host sitting at exactly 0 still plots at a finite y instead of −∞. Default 0.001
+    /// (= 10⁻³) suits sub-1 MB/s network and similar small-magnitude metrics; raise it for metrics
+    /// whose realistic floor is higher.
+    /// </summary>
+    [Parameter] public double LogScaleEpsilon { get; set; } = 0.001;
+
     private IReadOnlyList<(string Label, MetricSample[] Points)> _series = [];
     private IBrowserTimeZoneAccessor _browserTime; // optional — null when no host wires it up
+    private string _chartKey = "linear-fullpct"; // recomputed in OnParametersSet; gates RadzenChart's @key
+    private RadzenChart _chart; // captured via @ref so OnAfterRenderAsync can call Reload() on axis flips
+    private string _lastReloadedKey = ""; // gate so we only Reload when the axis key actually changed
 
     protected override void OnInitialized()
     {
@@ -58,18 +113,48 @@
 
     protected override void OnParametersSet()
     {
+        // Key includes the chart Title so sibling MetricChart instances (CPU vs Memory in the
+        // same view) get distinct keys — without that, two charts at adjacent positions with
+        // identical keys created a Blazor-side ambiguity that left one of them un-re-keyed when
+        // the toggle flipped. Also includes the axis-affecting flags so a fresh chart instance
+        // is created on toggle. See the @key comment up top.
+        _chartKey = $"{Title}-{(LogScale ? "log" : "lin")}-{(FullPercentScale ? "pct" : "auto")}";
+
         // Group the flat samples by Series so each line is one host (or host+device). Convert
         // each point's UTC timestamp to the browser's local zone (or, if no accessor is registered,
-        // to the server's local zone — still better than UTC). Order by label for stable legend.
+        // to the server's local zone — still better than UTC). When LogScale is on, also pre-
+        // transform values to log10 space — RadzenChart's value axis is linear, so we trade one
+        // round-trip through the values (log10 here, 10^x in the axis Formatter) for log-scale
+        // plotting without depending on the chart library to support it natively.
         var tz = _browserTime?.Current ?? System.TimeZoneInfo.Local;
         _series = (Samples ?? [])
             .GroupBy(s => s.Series ?? "")
             .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
             .Select(g => (Label: g.Key, Points: g
                 .OrderBy(s => s.Timestamp)
-                .Select(s => s with { Timestamp = ToLocal(s.Timestamp, tz) })
+                .Select(s => s with
+                {
+                    Timestamp = ToLocal(s.Timestamp, tz),
+                    Value = LogScale ? System.Math.Log10(System.Math.Max(s.Value, LogScaleEpsilon)) : s.Value,
+                })
                 .ToArray()))
             .ToList();
+    }
+
+    /// <summary>
+    /// Reverse-transform tick labels from log10 space back to natural units so the axis reads
+    /// "0.01 MB/s", "0.1 MB/s", "1 MB/s", "10 MB/s", "100 MB/s" instead of "−2", "−1", "0", "1", "2".
+    /// </summary>
+    private string FormatLogValue(object value)
+    {
+        if (value is null) return string.Empty;
+        var d = System.Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+        var original = System.Math.Pow(10, d);
+        // Sub-1 ticks show two decimals (0.01, 0.10) — anything ≥ 1 can drop the trailing zero.
+        var fmt = original < 1 ? "0.##" : "0.#";
+        return string.IsNullOrEmpty(Unit)
+            ? original.ToString(fmt, System.Globalization.CultureInfo.CurrentCulture)
+            : $"{original.ToString(fmt, System.Globalization.CultureInfo.CurrentCulture)} {Unit}";
     }
 
     private static System.DateTime ToLocal(System.DateTime utc, System.TimeZoneInfo tz)
@@ -80,6 +165,19 @@
         if (utc.Kind != System.DateTimeKind.Utc)
             utc = System.DateTime.SpecifyKind(utc, System.DateTimeKind.Utc);
         return System.TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // After Blazor has rendered the chart with the new (post-toggle) axis configuration,
+        // ask Radzen to recompute its scales. Reload() re-reads the registered axes and
+        // re-projects the series — without this, RadzenChart sometimes holds onto the first-
+        // render axis bounds even after @key recreated the component.
+        if (_chart != null && _lastReloadedKey != _chartKey)
+        {
+            _lastReloadedKey = _chartKey;
+            await _chart.Reload();
+        }
     }
 
     private void OnTimeZoneChanged()

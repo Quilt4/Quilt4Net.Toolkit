@@ -85,6 +85,13 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
             });
+            // Disk capacity is essentially static (only changes when a volume is resized). Same
+            // 10-minute cadence as the other metric queries keeps the cache key shape consistent
+            // and avoids a separate KQL pass on every Refresh.
+            s.RegisterType<DiskCapacity[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
+            });
             // Log-count pivot (service × severity). One KQL query; 10 minutes matches the metrics
             // page — both surfaces are operator-driven and the Refresh button is right there.
             s.RegisterType<LogCountByServiceCell[], IMemory>(x =>
@@ -152,6 +159,7 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<SummarySubset[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
             s.RegisterType<VersionMatrixCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromHours(1); });
             s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
+            s.RegisterType<DiskCapacity[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<LogCountByServiceCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
         });
     }
