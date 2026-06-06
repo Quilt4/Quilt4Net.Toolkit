@@ -70,24 +70,26 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
             });
-            // Version matrix scans for the latest version per (app, env). The view is
-            // typically refreshed manually; 5 minutes balances freshness with query cost.
+            // Version matrix scans for the latest version per (app, env). Versions change rarely
+            // (one deploy per environment per day at most) and the underlying KQL is expensive;
+            // a 1-hour TTL matches the operator workflow — manual refresh button when needed,
+            // otherwise reuse what we already have.
             s.RegisterType<VersionMatrixCell[], IMemory>(x =>
             {
-                x.DefaultFreshSpan = TimeSpan.FromMinutes(5);
+                x.DefaultFreshSpan = TimeSpan.FromHours(1);
             });
-            // Host metrics (CPU / memory / disk / network). Operators iterate quickly when
-            // investigating, but each refresh runs four KQL queries — 1 minute matches the
-            // other aggregation queries above.
+            // Host metrics (CPU / memory / disk / network). Each refresh runs four KQL queries —
+            // 10 minutes lets operators flip between pages without re-fetching; the Refresh button
+            // force-evicts when they want fresh numbers.
             s.RegisterType<MetricSample[], IMemory>(x =>
             {
-                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
             });
-            // Log-count pivot (service × severity). One KQL query, similar refresh cadence
-            // expectations as other aggregations.
+            // Log-count pivot (service × severity). One KQL query; 10 minutes matches the metrics
+            // page — both surfaces are operator-driven and the Refresh button is right there.
             s.RegisterType<LogCountByServiceCell[], IMemory>(x =>
             {
-                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
             });
         });
     }
@@ -148,9 +150,9 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<CountData[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
             s.RegisterType<SummaryData, IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
             s.RegisterType<SummarySubset[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
-            s.RegisterType<VersionMatrixCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(5); });
-            s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
-            s.RegisterType<LogCountByServiceCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
+            s.RegisterType<VersionMatrixCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromHours(1); });
+            s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
+            s.RegisterType<LogCountByServiceCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
         });
     }
 }

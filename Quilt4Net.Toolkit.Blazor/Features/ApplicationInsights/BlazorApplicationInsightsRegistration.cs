@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Quilt4Net.Toolkit;
+using Quilt4Net.Toolkit.Blazor.Features.Log;
+using Quilt4Net.Toolkit.Blazor.Features.Metrics;
 using Quilt4Net.Toolkit.Blazor.Framework;
 
 namespace Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights;
@@ -36,6 +38,14 @@ public static class BlazorApplicationInsightsRegistration
         // local timezone. TryAdd so it's idempotent — also registered from AddQuilt4NetBlazorContent
         // so most consumers get it from one path or the other.
         services.TryAddScoped<IBrowserTimeZoneAccessor, BrowserTimeZoneAccessor>();
+        // LogCountByServiceView caches its per-range cell cube here so navigating away from
+        // /monitor/logcount and back doesn't re-fetch from Application Insights (and doesn't
+        // flash a spinner). Scoped = one cube per Blazor circuit.
+        services.TryAddScoped<LogCountCellCache>();
+        // MetricsView uses the same scoped-cube pattern: four series + a load timestamp survive
+        // page navigation within the circuit so the charts re-render immediately and the refresh
+        // button's "Data loaded at …" tooltip reports the real fetch time, not "now".
+        services.TryAddScoped<MetricsSeriesCache>();
         return services;
     }
 }

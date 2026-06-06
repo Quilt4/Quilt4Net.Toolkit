@@ -4,6 +4,12 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 internal sealed class VersionMatrixService : IVersionMatrixService
 {
+    // 1-hour TTL on the materialised view. The cells underneath have their own TtlCache lifetime
+    // (also 1 hour); without this check the view's in-memory dictionary would serve stale data
+    // indefinitely because the dict has no TTL of its own. On expiry we fall through to a fresh
+    // RefreshAsync, which re-fetches via the cell cache (still warm if its TTL hasn't lapsed).
+    private static readonly TimeSpan _viewTtl = TimeSpan.FromHours(1);
+
     private readonly IApplicationInsightsService _ai;
     private readonly ConcurrentDictionary<CacheKey, VersionMatrixView> _cache = new();
 
@@ -15,7 +21,7 @@ internal sealed class VersionMatrixService : IVersionMatrixService
     public Task<VersionMatrixView> GetAsync(IApplicationInsightsContext context, TimeSpan? lookback = null, CancellationToken cancellationToken = default)
     {
         var key = new CacheKey(context?.WorkspaceId ?? string.Empty, lookback);
-        if (_cache.TryGetValue(key, out var cached))
+        if (_cache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.LastRefreshedUtc < _viewTtl)
         {
             return Task.FromResult(cached);
         }

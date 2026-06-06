@@ -37,7 +37,13 @@ public sealed record VersionMatrixView
     /// applied at render time by <c>VersionMatrixDisplay</c>, so the same fetched view can
     /// be reused under different ordering preferences.
     /// </summary>
-    public static VersionMatrixView FromCells(IReadOnlyList<VersionMatrixCell> cells)
+    /// <param name="lastRefreshedUtc">
+    /// Original load timestamp to stamp on the returned view. Pass the oldest per-context
+    /// <see cref="LastRefreshedUtc"/> when merging multiple workspace views so the
+    /// "Data loaded at …" indicator reflects the real fetch time across cache hits, not the
+    /// moment this merge happened to run. <c>null</c> stamps <see cref="DateTime.UtcNow"/>.
+    /// </param>
+    public static VersionMatrixView FromCells(IReadOnlyList<VersionMatrixCell> cells, DateTime? lastRefreshedUtc = null)
     {
         var apps = cells
             .Select(c => c.ApplicationName)
@@ -60,7 +66,7 @@ public sealed record VersionMatrixView
             Applications = apps,
             Environments = envs,
             Cells = cellMap,
-            LastRefreshedUtc = DateTime.UtcNow
+            LastRefreshedUtc = lastRefreshedUtc ?? DateTime.UtcNow
         };
     }
 }

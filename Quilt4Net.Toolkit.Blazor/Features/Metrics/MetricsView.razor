@@ -13,42 +13,41 @@
 }
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+    @* RadzenStack horizontal + FlexWrap.Wrap so each filter sizes to its content and the row
+       reflows onto extra lines as the window narrows — same shape as LogCountByServiceView /
+       VersionMatrixDisplay / /monitor/log. *@
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
         @if (_selector != null && _selector.Available.Count > 1)
         {
-            <RadzenColumn>
-                <ApplicationInsightsConfigurationDropdown />
-            </RadzenColumn>
+            <ApplicationInsightsConfigurationDropdown />
         }
         else if (Configs is { Count: > 1 })
         {
-            <RadzenColumn>
-                <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
-                    <RadzenDropDown Data="@Configs" @bind-Value="_selectedConfig" TValue="ApplicationInsightsConfigurationResponse"
-                                    TextProperty="Name" Change="@(_ => ReloadAsync())" />
-                </RadzenStack>
-            </RadzenColumn>
-        }
-        <RadzenColumn>
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
-                <RadzenSelectBar @bind-Value="_window" TValue="System.TimeSpan" Size="ButtonSize.Small"
-                                 Change="@(_ => ReloadAsync())">
-                    <Items>
-                        <RadzenSelectBarItem Text="1h" Value="@System.TimeSpan.FromHours(1)" />
-                        <RadzenSelectBarItem Text="24h" Value="@System.TimeSpan.FromHours(24)" />
-                        <RadzenSelectBarItem Text="7d" Value="@System.TimeSpan.FromDays(7)" />
-                    </Items>
-                </RadzenSelectBar>
+                <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
+                <RadzenDropDown Data="@Configs" @bind-Value="_selectedConfig" TValue="ApplicationInsightsConfigurationResponse"
+                                TextProperty="Name" Change="@(_ => ReloadAsync(force: false))" />
             </RadzenStack>
-        </RadzenColumn>
-        <RadzenColumn>
-            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
-                          IsBusy="@_busy" title="@DataAgeFormat.Describe(_lastRefreshUtc)"
-                          Click="@(_ => ReloadAsync())" />
-        </RadzenColumn>
-    </RadzenRow>
+        }
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+            <RadzenSelectBar @bind-Value="_window" TValue="System.TimeSpan" Size="ButtonSize.Small"
+                             Change="@(_ => ReloadAsync(force: false))">
+                <Items>
+                    <RadzenSelectBarItem Text="1h" Value="@System.TimeSpan.FromHours(1)" />
+                    <RadzenSelectBarItem Text="24h" Value="@System.TimeSpan.FromHours(24)" />
+                    <RadzenSelectBarItem Text="7d" Value="@System.TimeSpan.FromDays(7)" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+        @* Native `title` tooltip — DataAgeFormat reports the absolute load timestamp (restored
+           from the scoped cache on page-navigation revisit) so the text doesn't go stale between
+           renders the way a relative "X minutes ago" string would. *@
+        <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                      IsBusy="@_busy"
+                      title="@DataAgeFormat.Describe(_lastRefreshUtc, _browserTime?.Current, _cacheTtl)"
+                      Click="@(_ => ReloadAsync(force: true))" />
+    </RadzenStack>
 
     @if (_loadError != null)
     {
@@ -70,6 +69,7 @@
     private string _loadError;
     private bool _busy;
     private System.DateTime? _lastRefreshUtc;
+    private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
     private System.TimeSpan _window = System.TimeSpan.FromHours(1);
 
     private MetricSample[] _cpu = [];
@@ -79,6 +79,8 @@
 
     private IApplicationInsightsConfigurationSelector _selector;
     private ApplicationInsightsConfigurationResponse _selectedConfig;
+    private MetricsSeriesCache _scopedCache;
+    private IBrowserTimeZoneAccessor _browserTime;
 
     /// <summary>Optional explicit context. When set, the selector is ignored.</summary>
     [Parameter]
@@ -97,6 +99,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Scoped cache: per-circuit so the four series + load timestamp survive page navigation.
+        // Optional — hosts that didn't call AddQuilt4NetBlazorApplicationInsightsClientRemote
+        // still work, they just lose cross-page persistence.
+        _scopedCache = ServiceProvider.GetService<MetricsSeriesCache>();
+        _browserTime = ServiceProvider.GetService<IBrowserTimeZoneAccessor>();
+
         // Explicit Context / Configs bypass the DI selector entirely.
         if (Context == null && Configs is not { Count: > 0 })
         {
@@ -122,18 +130,40 @@
             return;
         }
 
-        await ReloadAsync();
+        await ReloadAsync(force: false);
     }
 
     private async void OnSelectorChanged()
     {
-        await InvokeAsync(ReloadAsync);
+        await InvokeAsync(() => ReloadAsync(force: false));
     }
 
-    private async Task ReloadAsync()
+    private async Task ReloadAsync(bool force)
     {
         var ctx = EffectiveContext;
         if (ctx == null) return;
+        var key = MetricsSeriesCache.KeyForContext(ctx);
+
+        if (force)
+        {
+            _scopedCache?.Invalidate(key, _window);
+        }
+
+        // Cache hit: render immediately and skip the spinner. The restored LoadedUtc keeps the
+        // refresh-button tooltip honest ("Data loaded at 14:03:11") across page navigations.
+        if (!force && _scopedCache != null && _scopedCache.TryGet(key, _window, _cacheTtl, out var entry))
+        {
+            _cpu = entry.Cpu;
+            _memory = entry.Memory;
+            _disk = entry.Disk;
+            _network = entry.Network;
+            _lastRefreshUtc = entry.LoadedUtc;
+            _loadError = null;
+            _busy = false;
+            StateHasChanged();
+            return;
+        }
+
         _busy = true;
         _loadError = null;
         StateHasChanged();
@@ -148,9 +178,10 @@
             _disk = await Ai.GetDiskFreeAsync(ctx, _window).ToArrayAsync();
             StateHasChanged();
             _network = await Ai.GetNetworkThroughputAsync(ctx, _window).ToArrayAsync();
-            // Stamp the load completion so the refresh-button tooltip can show data age. Only on
-            // success — a failed load shouldn't claim the data is fresh.
-            _lastRefreshUtc = System.DateTime.UtcNow;
+            // Stamp the load completion. Only on success — a failed load shouldn't claim freshness.
+            var loadedUtc = System.DateTime.UtcNow;
+            _lastRefreshUtc = loadedUtc;
+            _scopedCache?.Set(key, _window, _cpu, _memory, _disk, _network, loadedUtc);
         }
         catch (System.Exception e)
         {

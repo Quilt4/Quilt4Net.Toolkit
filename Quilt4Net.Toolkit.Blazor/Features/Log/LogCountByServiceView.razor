@@ -8,6 +8,10 @@
 @inject IOptions<ApplicationInsightsOptions> AiOptions
 @implements IDisposable
 
+@* TTL applied to both the scoped cell cube and the service-level TtlCache below it: a flip away
+   and back within 10 minutes shows the cached cube; after that we re-fetch. The Refresh button
+   still force-evicts both layers and runs a fresh KQL pass. *@
+
 @* Pivot of log counts: rows = services, columns = severity. Configuration / Environment / Source
    are all multi-select with "nothing selected = include all" semantics; only Range changes hit
    AI — every other filter toggle is a local regroup over the cell cube already in memory. Each
@@ -21,15 +25,18 @@
 }
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-    @* Single RadzenRow so the filter chips reflow onto extra lines as the window narrows —
-       same behaviour as /monitor/log. Refresh sits last so it lines up on the right at full
-       width, and falls below the chips on narrow views. *@
-    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+    @* RadzenStack horizontal + FlexWrap.Wrap so each filter sizes to its content and the row
+       reflows onto extra lines as the window narrows — matches /monitor/log's behaviour. With
+       a RadzenRow/RadzenColumn grid the columns share width evenly, leaving the narrow Range
+       column padded with whitespace; with RadzenStack each child takes only the space it needs.
+       Refresh sits last so it lines up on the right at full width, and falls below the chips
+       on narrow views. *@
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
         @if (_candidateConfigs.Count > 1)
         {
-            <RadzenColumn>
+            <div class="quilt-nowrap-buttons">
                 <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration (none = all)" />
+                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
                     <RadzenSelectBar @bind-Value="_selectedConfigIds" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
                                      Change="@(_ => RecomputeRows())">
                         <Items>
@@ -40,57 +47,61 @@
                         </Items>
                     </RadzenSelectBar>
                 </RadzenStack>
-            </RadzenColumn>
+            </div>
         }
-        <RadzenColumn>
-            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
-                <RadzenSelectBar @bind-Value="_window" TValue="System.TimeSpan" Size="ButtonSize.Small"
-                                 Change="@(_ => OnRangeChangedAsync())">
-                    <Items>
-                        <RadzenSelectBarItem Text="1h" Value="@System.TimeSpan.FromHours(1)" />
-                        <RadzenSelectBarItem Text="24h" Value="@System.TimeSpan.FromHours(24)" />
-                        <RadzenSelectBarItem Text="7d" Value="@System.TimeSpan.FromDays(7)" />
-                    </Items>
-                </RadzenSelectBar>
-            </RadzenStack>
-        </RadzenColumn>
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+            <RadzenSelectBar @bind-Value="_window" TValue="System.TimeSpan" Size="ButtonSize.Small"
+                             Change="@(_ => OnRangeChangedAsync())">
+                <Items>
+                    <RadzenSelectBarItem Text="1h" Value="@System.TimeSpan.FromHours(1)" />
+                    <RadzenSelectBarItem Text="24h" Value="@System.TimeSpan.FromHours(24)" />
+                    <RadzenSelectBarItem Text="7d" Value="@System.TimeSpan.FromDays(7)" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
         @if (_candidateEnvironments.Count > 0)
         {
-            <RadzenColumn>
-                <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                    <RadzenText TextStyle="TextStyle.Caption" Text="Environment (none = all)" />
-                    <RadzenSelectBar @bind-Value="_selectedEnvironments" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
-                                     Change="@(_ => RecomputeRows())">
-                        <Items>
-                            @foreach (var env in _candidateEnvironments)
-                            {
-                                <RadzenSelectBarItem Text="@env" Value="@env" />
-                            }
-                        </Items>
-                    </RadzenSelectBar>
-                </RadzenStack>
-            </RadzenColumn>
-        }
-        <RadzenColumn>
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenText TextStyle="TextStyle.Caption" Text="Source (none = all)" />
-                <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
+                <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
+                <RadzenSelectBar @bind-Value="_selectedEnvironments" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
                                  Change="@(_ => RecomputeRows())">
                     <Items>
-                        <RadzenSelectBarItem Text="Trace" Value="LogSource.Trace" />
-                        <RadzenSelectBarItem Text="Exception" Value="LogSource.Exception" />
-                        <RadzenSelectBarItem Text="Request" Value="LogSource.Request" />
+                        @foreach (var env in _candidateEnvironments)
+                        {
+                            <RadzenSelectBarItem Text="@env" Value="@env" />
+                        }
                     </Items>
                 </RadzenSelectBar>
             </RadzenStack>
-        </RadzenColumn>
-        <RadzenColumn>
-            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
-                          IsBusy="@_busy" title="@DataAgeFormat.Describe(_lastRefreshUtc)"
-                          Click="@(_ => ReloadAsync(force: true))" />
-        </RadzenColumn>
-    </RadzenRow>
+        }
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Source" />
+            <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
+                             Change="@(_ => RecomputeRows())">
+                <Items>
+                    <RadzenSelectBarItem Text="Trace" Value="LogSource.Trace" />
+                    <RadzenSelectBarItem Text="Exception" Value="LogSource.Exception" />
+                    <RadzenSelectBarItem Text="Request" Value="LogSource.Request" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+        @* Native `title` tooltip — fixed at render time, but DataAgeFormat now reports the
+           absolute load timestamp (not a relative age) so it doesn't drift between renders. The
+           timestamp itself is restored from the scoped cache on revisit, so even a stale render
+           shows the real fetch time. *@
+        <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                      IsBusy="@_busy"
+                      title="@DataAgeFormat.Describe(_lastRefreshUtc, _browserTime?.Current, _cacheTtl)"
+                      Click="@(_ => ReloadAsync(force: true))" />
+    </RadzenStack>
+
+    <style>
+        /* Configuration names can run long; without this they wrap inside the SelectBar pill
+           and turn into two-line buttons. white-space:nowrap keeps each option on one line
+           and lets the SelectBar size to its content. */
+        .quilt-nowrap-buttons .rz-button-text { white-space: nowrap; }
+    </style>
 
     @if (_loadError != null)
     {
@@ -157,13 +168,21 @@
     // Per-range cache of every cell fetched from AI (across every candidate config). Filter
     // changes recompute _rows from this map — no fetch. Range changes look up / populate it.
     // Each cell is tagged with its owning config id so the configuration filter is local too.
-    private readonly Dictionary<System.TimeSpan, List<TaggedCell>> _cellCache = new();
+    //
+    // Backing storage is the scoped LogCountCellCache when available (survives page navigation
+    // within the same Blazor circuit), otherwise this in-component dictionary (lost on dispose).
+    // All access goes through TryGetCells / SetCells / InvalidateCells so the component doesn't
+    // care which path is live.
+    private readonly Dictionary<System.TimeSpan, IReadOnlyList<LogCountTaggedCell>> _cellCache = new();
+    private LogCountCellCache _scopedCellCache;
 
     // Output of the current filter combination — what the grid binds to + the pinned totals row.
     private List<ServiceRow> _rows = [];
     private Dictionary<SeverityLevel, long> _columnTotals = NewEmptyTotals();
     private long _grandTotal;
-    private System.DateTime? _lastRefreshUtc; // for the refresh-button age tooltip
+    private System.DateTime? _lastRefreshUtc; // for the refresh-button "loaded at" tooltip
+    private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
+    private Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor _browserTime;
 
     private IApplicationInsightsConfigurationSelector _selector;
 
@@ -191,8 +210,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Scoped cache holds the cell cube across page navigations within this Blazor circuit.
+        // Optional — hosts that didn't call AddQuilt4NetBlazorApplicationInsightsClientRemote
+        // still work, they just lose the cross-page persistence.
+        _scopedCellCache = ServiceProvider.GetService<LogCountCellCache>();
+        // Browser timezone for the refresh-button tooltip; optional, falls back to server-local.
+        _browserTime = ServiceProvider.GetService<Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor>();
+
         // _busy stays true through env discovery + the first fetch so the loading spinner is the
-        // only thing on screen between component mount and the data landing.
+        // only thing on screen between component mount and the data landing. The exception is a
+        // warm scoped cache: if the current range is already cached we skip the spinner entirely
+        // and render synchronously — that's the point of the scoped cache.
         _busy = true;
         StateHasChanged();
 
@@ -224,6 +252,16 @@
                 }
             }
 
+            // Warm-load from the scoped cache before deciding whether to spin: if the default
+            // range is already there, ReloadAsync will see it and short-circuit the fetch. We also
+            // adopt the entry's LoadedUtc so the refresh-button tooltip reports the real fetch time
+            // (not the moment this component instance happened to mount).
+            if (TryGetScopedCacheEntry(_window, out var warm))
+            {
+                _cellCache[_window] = warm.Cells;
+                _lastRefreshUtc = warm.LoadedUtc;
+            }
+
             await LoadEnvironmentsAsync();
             await ReloadAsync(force: false);
         }
@@ -233,6 +271,19 @@
             _busy = false;
             StateHasChanged();
         }
+    }
+
+    /// <summary>Configs identity for the scoped cache key — explicit Context uses its own slot;
+    /// otherwise the joined ids of the candidate configurations.</summary>
+    private string ConfigsCacheKey()
+        => Context != null
+            ? LogCountCellCache.KeyForContext(Context)
+            : LogCountCellCache.KeyForConfigs(_candidateConfigs.Select(c => c.Id));
+
+    private bool TryGetScopedCacheEntry(System.TimeSpan range, out LogCountCellCache.CacheEntry entry)
+    {
+        entry = default;
+        return _scopedCellCache != null && _scopedCellCache.TryGet(ConfigsCacheKey(), range, _cacheTtl, out entry);
     }
 
     private async void OnSelectorChanged() => await InvokeAsync(async () =>
@@ -316,6 +367,17 @@
         if (force)
         {
             _cellCache.Remove(_window);
+            _scopedCellCache?.Invalidate(ConfigsCacheKey(), _window);
+        }
+
+        // If the local dict misses, check the scoped cache before fetching — that's how a
+        // page-navigation revisit skips the AI round-trip (and the spinner) entirely. We pull
+        // the LoadedUtc back into _lastRefreshUtc too so the refresh-button tooltip stays
+        // accurate ("Data loaded at 14:03:11") instead of resetting to "now".
+        if (!_cellCache.ContainsKey(_window) && TryGetScopedCacheEntry(_window, out var cached))
+        {
+            _cellCache[_window] = cached.Cells;
+            _lastRefreshUtc = cached.LoadedUtc;
         }
 
         if (!_cellCache.ContainsKey(_window))
@@ -332,17 +394,22 @@
                 {
                     var configId = (ctx as ApplicationInsightsConfigurationResponse)?.Id ?? "";
                     var cells = await Ai.GetLogCountByServiceAsync(ctx, range).ToArrayAsync();
-                    return cells.Select(c => new TaggedCell(configId, c)).ToArray();
+                    return cells.Select(c => new LogCountTaggedCell(configId, c)).ToArray();
                 }));
-                _cellCache[_window] = perContext.SelectMany(x => x).ToList();
-                // Stamp the load completion so the refresh-button tooltip can report data age.
-                // Only on success — a failed load shouldn't claim freshness.
-                _lastRefreshUtc = System.DateTime.UtcNow;
+                var merged = perContext.SelectMany(x => x).ToArray();
+                _cellCache[_window] = merged;
+                // Stamp the load completion so the refresh-button tooltip can report the actual
+                // fetch time. Only on success — a failed load shouldn't claim freshness.
+                var loadedUtc = System.DateTime.UtcNow;
+                _lastRefreshUtc = loadedUtc;
+                _scopedCellCache?.Set(ConfigsCacheKey(), _window, merged, loadedUtc);
             }
             catch (System.Exception e)
             {
                 _loadError = e.Message;
-                _cellCache[_window] = [];
+                _cellCache[_window] = System.Array.Empty<LogCountTaggedCell>();
+                // Don't poison the scoped cache with an empty failure result — leave the slot
+                // missing so the next visit can re-attempt instead of being stuck on "no data".
             }
             finally
             {
@@ -450,9 +517,6 @@
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
     }
-
-    /// <summary>Cell + the id of the configuration it came from, for the local configuration filter.</summary>
-    private sealed record TaggedCell(string ConfigId, LogCountByServiceCell Cell);
 
     /// <summary>
     /// Row shape with one explicit property per severity so the grid can sort each amount column

@@ -13,43 +13,40 @@
 @implements IDisposable
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-    @* Single flowing RadzenRow: at full width the Configurations bar, the two toggles and the
-       Refresh button line up; as the window narrows the columns wrap to extra lines. Refresh sits
-       last so it stays right-most when there's room and falls below when there isn't. Same flow
-       behaviour as /monitor/log / MetricsView / LogCountByServiceView. *@
-    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+    @* RadzenStack horizontal + FlexWrap.Wrap so each control sizes to its content and the row
+       reflows onto extra lines as the window narrows — matches LogCountByServiceView / MetricsView
+       / /monitor/log. RadzenRow/RadzenColumn would share width evenly across the row, leaving
+       padded gaps around the toggles; RadzenStack only takes the space each child needs. Refresh
+       sits last so it stays right-most when there's room. *@
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
         @if (Context == null && AvailableConfigs().Count > 1)
         {
-            <RadzenColumn>
+            <div class="quilt-nowrap-buttons">
                 <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                    <RadzenText TextStyle="TextStyle.Caption" Text="Configurations" />
+                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
                     <RadzenSelectBar Data="@AvailableConfigs()" @bind-Value="_selectedIds"
                                      Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, _ => LoadAsync(false)))"
                                      TextProperty="Name" ValueProperty="Id" Multiple="true" AllowSelectAll="false" />
                 </RadzenStack>
-            </RadzenColumn>
+            </div>
         }
-        <RadzenColumn>
-            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
-                <RadzenSwitch @bind-Value="_showDevelopment" TValue="bool" Name="showDevelopment" />
-                <RadzenLabel Component="showDevelopment" Text="Show Development" />
-            </RadzenStack>
-        </RadzenColumn>
-        <RadzenColumn>
-            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
-                <RadzenSwitch @bind-Value="_showUnknown" TValue="bool" Name="showUnknown" />
-                <RadzenLabel Component="showUnknown" Text="Show Unknown" />
-            </RadzenStack>
-        </RadzenColumn>
-        <RadzenColumn>
-            @* Aligned with MetricsView / LogCountByServiceView: Light button + IsBusy spinner.
-               The absolute "Updated yyyy-MM-dd HH:mm:ssZ" text is gone — the operator-relevant
-               signal "how old is this data" lives in the button's title tooltip via DataAgeFormat. *@
-            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
-                          IsBusy="@_loading" title="@DataAgeFormat.Describe(_view?.LastRefreshedUtc)"
-                          Click="OnRefreshAsync" />
-        </RadzenColumn>
-    </RadzenRow>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_showDevelopment" TValue="bool" Name="showDevelopment" />
+            <RadzenLabel Component="showDevelopment" Text="Show Development" />
+        </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_showUnknown" TValue="bool" Name="showUnknown" />
+            <RadzenLabel Component="showUnknown" Text="Show Unknown" />
+        </RadzenStack>
+        @* Aligned with MetricsView / LogCountByServiceView: Light button + IsBusy spinner.
+           Native `title` tooltip — DataAgeFormat reports the absolute load timestamp from the
+           merged view's LastRefreshedUtc, which is the OLDEST per-context fetch (set by LoadAsync
+           below). So a navigation revisit with cached data still shows the original fetch time. *@
+        <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                      IsBusy="@_loading"
+                      title="@DataAgeFormat.Describe(_view?.LastRefreshedUtc, _browserTime?.Current, _cacheTtl)"
+                      Click="OnRefreshAsync" />
+    </RadzenStack>
 
     @if (_warning != null)
     {
@@ -150,6 +147,10 @@
         background-color: var(--rz-base);
         font-weight: 600;
     }
+    /* Configuration names can run long; without this they wrap inside the SelectBar pill and
+       turn into two-line buttons. white-space:nowrap keeps each option on one line and lets the
+       SelectBar size to its content. */
+    .quilt-nowrap-buttons .rz-button-text { white-space: nowrap; }
 </style>
 
 @code {
@@ -219,6 +220,11 @@
     private const string DevelopmentEnvironment = "Development";
     private const string UnknownEnvironment = "(unknown)";
 
+    // Matches VersionMatrixService._viewTtl — purely for the tooltip's "Cached for …" hint;
+    // the actual cache lives in the service.
+    private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromHours(1);
+    private Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor _browserTime;
+
     /// <summary>
     /// The available configurations: the explicit <see cref="Configs"/> when supplied, otherwise the
     /// DI selector's list (empty when neither is present).
@@ -248,6 +254,10 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Browser timezone for the refresh-button "Data loaded at …" tooltip; optional, falls
+        // back to server-local when the host didn't register the accessor.
+        _browserTime = ServiceProvider.GetService<Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor>();
+
         // Only engage the DI selector when neither an explicit Context nor explicit Configs are given.
         if (Context == null && Configs is not { Count: > 0 })
         {
@@ -308,6 +318,11 @@
             var contexts = SelectedContexts();
             var cells = new List<VersionMatrixCell>();
             var failures = new List<(IApplicationInsightsContext Context, Exception Exception, string Message)>();
+            // Track each per-context view's original LastRefreshedUtc — we want the merged view's
+            // "Data loaded at …" indicator to reflect the OLDEST fetch (most stale data point),
+            // not "now". Without this the merge below would stamp UtcNow and the tooltip would
+            // claim freshness on every navigation back to /monitor/version.
+            DateTime? mergedRefreshedUtc = null;
 
             // Query each configuration independently. A single broken configuration (e.g. a stale
             // ClientSecret on one workspace) must not blank the whole matrix — collect its failure and
@@ -321,6 +336,10 @@
                         ? await VersionMatrixService.RefreshAsync(context, Lookback)
                         : await VersionMatrixService.GetAsync(context, Lookback);
                     cells.AddRange(view.Cells.Values);
+                    if (mergedRefreshedUtc is null || view.LastRefreshedUtc < mergedRefreshedUtc)
+                    {
+                        mergedRefreshedUtc = view.LastRefreshedUtc;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -347,7 +366,7 @@
                 _warningIsAuthFailure = failures.Any(f => ApplicationInsightsErrorMessage.IsAuthenticationFailure(f.Exception));
             }
 
-            var raw = VersionMatrixView.FromCells(cells);
+            var raw = VersionMatrixView.FromCells(cells, mergedRefreshedUtc);
 
             VersionMatrixView folded;
             if (AliasFolder != null)
