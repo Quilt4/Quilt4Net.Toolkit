@@ -75,15 +75,15 @@ public interface IApplicationInsightsService
 
     /// <summary>
     /// Counts log entries per (service, severity) across <c>AppTraces</c>, <c>AppExceptions</c> and
-    /// <c>AppRequests</c> over <paramref name="timeSpan"/>, optionally narrowed to one environment.
-    /// Severity is unified across sources: traces use their own <c>SeverityLevel</c>; exceptions are
-    /// always counted as <see cref="SeverityLevel.Error"/>; requests use Information when Success is
-    /// true and Error otherwise. Service is coalesced from <c>Properties.ApplicationName</c> then
-    /// <c>AppRoleName</c>.
+    /// <c>AppRequests</c> over <paramref name="timeSpan"/>, optionally narrowed to a set of
+    /// environments. Severity is unified across sources: traces use their own <c>SeverityLevel</c>;
+    /// exceptions are always counted as <see cref="SeverityLevel.Error"/>; requests use Information
+    /// when Success is true and Error otherwise. Service is coalesced from
+    /// <c>Properties.ApplicationName</c> then <c>AppRoleName</c>.
     /// </summary>
-    /// <param name="environment">
-    /// Environment name to filter by, or <c>null</c>/empty to include all environments. The filter
-    /// also includes rows with no environment logged, mirroring <see cref="SearchAsync"/>.
+    /// <param name="environments">
+    /// Environments to include, or <c>null</c>/empty to include all environments. Rows with no
+    /// environment logged are also included to mirror <see cref="SearchAsync"/>.
     /// </param>
-    IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, IEnumerable<string> environments, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 }

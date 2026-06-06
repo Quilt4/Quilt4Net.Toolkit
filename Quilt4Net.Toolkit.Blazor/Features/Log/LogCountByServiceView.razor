@@ -6,8 +6,9 @@
 @implements IDisposable
 
 @* Pivot table of log counts: rows = services (AppRoleName / Properties.ApplicationName), columns
-   = severity levels. Mirrors LogView / MetricsView wiring (workspace dropdown, range selector,
-   environment filter) so the three compose on the same page and the same operator habits transfer. *@
+   = severity levels. Configurations and environments are both multi-select with "nothing
+   selected = include all" semantics; numbers are aggregated across the selected (or implicit-
+   all) set. *@
 
 @if (_configError != null)
 {
@@ -17,19 +18,20 @@
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
     <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
-        @if (_selector != null && _selector.Available.Count > 1)
-        {
-            <RadzenColumn>
-                <ApplicationInsightsConfigurationDropdown />
-            </RadzenColumn>
-        }
-        else if (Configs is { Count: > 1 })
+        @if (_candidateConfigs.Count > 1)
         {
             <RadzenColumn>
                 <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
-                    <RadzenDropDown Data="@Configs" @bind-Value="_selectedConfig" TValue="ApplicationInsightsConfigurationResponse"
-                                    TextProperty="Name" Change="@(_ => ReloadAsync())" />
+                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration (none = all)" />
+                    <RadzenSelectBar @bind-Value="_selectedConfigIds" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
+                                     Change="@(_ => ReloadAsync())">
+                        <Items>
+                            @foreach (var c in _candidateConfigs)
+                            {
+                                <RadzenSelectBarItem Text="@c.Name" Value="@c.Id" />
+                            }
+                        </Items>
+                    </RadzenSelectBar>
                 </RadzenStack>
             </RadzenColumn>
         }
@@ -46,12 +48,23 @@
                 </RadzenSelectBar>
             </RadzenStack>
         </RadzenColumn>
-        <RadzenColumn>
-            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
-                <LogEnvironmentSelector OnSelected="OnEnvironmentSelected" Context="EffectiveContext" />
-            </RadzenStack>
-        </RadzenColumn>
+        @if (_candidateEnvironments.Length > 0)
+        {
+            <RadzenColumn>
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                    <RadzenText TextStyle="TextStyle.Caption" Text="Environment (none = all)" />
+                    <RadzenSelectBar @bind-Value="_selectedEnvironments" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
+                                     Change="@(_ => ReloadAsync())">
+                        <Items>
+                            @foreach (var env in _candidateEnvironments)
+                            {
+                                <RadzenSelectBarItem Text="@env" Value="@env" />
+                            }
+                        </Items>
+                    </RadzenSelectBar>
+                </RadzenStack>
+            </RadzenColumn>
+        }
         <RadzenColumn>
             <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
                           IsBusy="@_busy" Click="@(_ => ReloadAsync())" />
@@ -73,115 +86,209 @@
     }
     else
     {
+        @* AllowSorting + per-severity properties on ServiceRow so amount columns sort numerically.
+           FooterTemplate per column emits the pinned Total row at the bottom — Radzen's footer is
+           rendered outside the sortable data so it stays at the bottom regardless of sort order. *@
         <RadzenDataGrid Data="@_rows" TItem="ServiceRow" AllowSorting="true">
             <Columns>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Service" Property="@nameof(ServiceRow.Service)" SortOrder="SortOrder.Ascending" />
-                @foreach (var sev in Severities)
-                {
-                    var s = sev;
-                    <RadzenDataGridColumn TItem="ServiceRow" Title="@s.ToString()" Width="120px" TextAlign="TextAlign.Right">
-                        <Template Context="row">@row.GetCount(s)</Template>
-                    </RadzenDataGridColumn>
-                }
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Total" Property="@nameof(ServiceRow.Total)" Width="120px" TextAlign="TextAlign.Right" />
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Service" Property="@nameof(ServiceRow.Service)" SortOrder="SortOrder.Ascending">
+                    <FooterTemplate><strong>Total</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Verbose" Property="@nameof(ServiceRow.Verbose)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Verbose].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Information" Property="@nameof(ServiceRow.Information)" Width="140px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Information].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Warning" Property="@nameof(ServiceRow.Warning)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Warning].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Error" Property="@nameof(ServiceRow.Error)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Error].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Critical" Property="@nameof(ServiceRow.Critical)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Critical].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Total" Property="@nameof(ServiceRow.Total)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_grandTotal.ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
             </Columns>
         </RadzenDataGrid>
     }
 </RadzenStack>
 
 @code {
-    // Render every severity column even when its count is zero across all services — keeps the
-    // grid layout stable across reloads / windows. Ordered low-to-high so reading left-to-right
-    // walks from informational to critical.
-    private static readonly SeverityLevel[] Severities =
-    [
-        SeverityLevel.Verbose,
-        SeverityLevel.Information,
-        SeverityLevel.Warning,
-        SeverityLevel.Error,
-        SeverityLevel.Critical,
-    ];
-
     private string _configError;
     private string _loadError;
     private bool _busy;
     private System.TimeSpan _window = System.TimeSpan.FromHours(24);
-    private string _environment;
+
+    // Candidate sets for the SelectBars. _selected* hold the user's picks; empty = all.
+    private IReadOnlyList<ApplicationInsightsConfigurationResponse> _candidateConfigs = [];
+    private IEnumerable<string> _selectedConfigIds = [];
+    private string[] _candidateEnvironments = [];
+    private IEnumerable<string> _selectedEnvironments = [];
+
     private List<ServiceRow> _rows = [];
+    private Dictionary<SeverityLevel, long> _columnTotals = NewEmptyTotals();
+    private long _grandTotal;
 
     private IApplicationInsightsConfigurationSelector _selector;
-    private ApplicationInsightsConfigurationResponse _selectedConfig;
 
-    /// <summary>Optional explicit context. When set, the selector is ignored.</summary>
+    /// <summary>Optional explicit context. When set, the selector and multi-config picker are bypassed.</summary>
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
     /// <summary>
-    /// Optional explicit set of configurations to pick from. When more than one is supplied a
-    /// dropdown is rendered. Takes precedence over the DI selector; ignored when <see cref="Context"/>
-    /// is set. Mirrors LogView / MetricsView so the three compose on the same page.
+    /// Optional explicit set of configurations. Multi-select bar lists these; "nothing selected"
+    /// means aggregate across all. Takes precedence over the DI selector; ignored when
+    /// <see cref="Context"/> is set.
     /// </summary>
     [Parameter]
     public IReadOnlyList<ApplicationInsightsConfigurationResponse> Configs { get; set; }
 
-    private IApplicationInsightsContext EffectiveContext
-        => Context ?? _selectedConfig ?? _selector?.Selected;
-
     protected override async Task OnInitializedAsync()
     {
-        if (Context == null && Configs is not { Count: > 0 })
+        // Build the candidate-configs list. Explicit single Context bypasses all selection.
+        if (Context == null)
         {
-            _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
-            if (_selector != null)
+            if (Configs is { Count: > 0 })
             {
-                _selector.OnChanged += OnSelectorChanged;
-                if (!_selector.IsLoaded) await _selector.LoadAsync();
+                _candidateConfigs = Configs;
+            }
+            else
+            {
+                _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+                if (_selector != null)
+                {
+                    _selector.OnChanged += OnSelectorChanged;
+                    if (!_selector.IsLoaded) await _selector.LoadAsync();
+                    _candidateConfigs = _selector.Available ?? [];
+                }
+            }
+
+            if (_candidateConfigs.Count == 0)
+            {
+                _configError = "No Application Insights configuration available.";
+                return;
             }
         }
 
-        if (Configs is { Count: > 0 } && _selectedConfig == null)
-        {
-            _selectedConfig = Configs[0];
-        }
-
-        if (EffectiveContext == null)
-        {
-            _configError = "No Application Insights configuration available.";
-            return;
-        }
-
+        await LoadEnvironmentsAsync();
         await ReloadAsync();
     }
 
-    private async void OnSelectorChanged() => await InvokeAsync(ReloadAsync);
-
-    private async Task OnEnvironmentSelected(EnvironmentOption environment)
+    private async void OnSelectorChanged() => await InvokeAsync(async () =>
     {
-        // EnvironmentOption has an implicit conversion to its Value string; null means "all envs".
-        _environment = environment?.Value;
+        _candidateConfigs = _selector?.Available ?? [];
+        await LoadEnvironmentsAsync();
         await ReloadAsync();
+    });
+
+    /// <summary>
+    /// Load the union of environments across every candidate config so the env multi-select
+    /// presents the full set (a config-narrowed env list would be confusing when the operator
+    /// then adds another config). One call per context; results merged.
+    /// </summary>
+    private async Task LoadEnvironmentsAsync()
+    {
+        try
+        {
+            var contexts = ResolveEffectiveContexts(null);
+            var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var ctx in contexts)
+            {
+                await foreach (var env in Ai.GetEnvironments(ctx))
+                {
+                    if (!string.IsNullOrWhiteSpace(env.Value)) set.Add(env.Value);
+                }
+            }
+            _candidateEnvironments = set.OrderBy(x => x, System.StringComparer.OrdinalIgnoreCase).ToArray();
+            // Drop any selected env that disappeared after a config change.
+            _selectedEnvironments = _selectedEnvironments?.Where(e => set.Contains(e)).ToArray() ?? [];
+        }
+        catch (System.Exception)
+        {
+            _candidateEnvironments = [];
+            _selectedEnvironments = [];
+        }
+    }
+
+    /// <summary>
+    /// Resolve which contexts to query: an explicit Context wins; otherwise the selected configs
+    /// (or all candidates when nothing is selected). <paramref name="selectedIds"/> may be the
+    /// current user selection or null when called for env-list discovery.
+    /// </summary>
+    private IReadOnlyList<IApplicationInsightsContext> ResolveEffectiveContexts(IEnumerable<string> selectedIds)
+    {
+        if (Context != null) return [Context];
+
+        if (_candidateConfigs.Count == 0) return [];
+
+        var ids = selectedIds?.ToArray();
+        if (ids == null || ids.Length == 0)
+        {
+            return _candidateConfigs.Cast<IApplicationInsightsContext>().ToArray();
+        }
+        return _candidateConfigs
+            .Where(c => ids.Contains(c.Id))
+            .Cast<IApplicationInsightsContext>()
+            .ToArray();
     }
 
     private async Task ReloadAsync()
     {
-        var ctx = EffectiveContext;
-        if (ctx == null) return;
+        var contexts = ResolveEffectiveContexts(_selectedConfigIds);
+        if (contexts.Count == 0)
+        {
+            _rows = [];
+            _columnTotals = NewEmptyTotals();
+            _grandTotal = 0;
+            return;
+        }
+
         _busy = true;
         _loadError = null;
         StateHasChanged();
         try
         {
-            var cells = await Ai.GetLogCountByServiceAsync(ctx, _environment, _window).ToArrayAsync();
-            _rows = cells
-                .GroupBy(c => c.Service ?? "unknown")
+            // Fan out one query per context with the same env-filter set; aggregate across
+            // contexts by summing (service, severity) cells. Same-named services in different
+            // workspaces roll into one row — the operator sees a single team-wide picture.
+            var envs = _selectedEnvironments?.ToArray() ?? [];
+            var aggregated = new Dictionary<(string Service, SeverityLevel Severity), long>();
+            foreach (var ctx in contexts)
+            {
+                await foreach (var cell in Ai.GetLogCountByServiceAsync(ctx, envs, _window))
+                {
+                    var key = (cell.Service ?? "unknown", cell.Severity);
+                    aggregated[key] = aggregated.GetValueOrDefault(key) + cell.Count;
+                }
+            }
+
+            _rows = aggregated
+                .GroupBy(kvp => kvp.Key.Service, System.StringComparer.OrdinalIgnoreCase)
                 .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
-                .Select(g => new ServiceRow(g.Key, g.ToDictionary(c => c.Severity, c => c.Count)))
+                .Select(g => new ServiceRow(g.Key, g.ToDictionary(kvp => kvp.Key.Severity, kvp => kvp.Value)))
                 .ToList();
+
+            // Column totals for the pinned footer row.
+            _columnTotals = NewEmptyTotals();
+            foreach (var row in _rows)
+            {
+                foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
+                {
+                    _columnTotals[sev] += row.GetCount(sev);
+                }
+            }
+            _grandTotal = _rows.Sum(r => r.Total);
         }
         catch (System.Exception e)
         {
             _loadError = e.Message;
             _rows = [];
+            _columnTotals = NewEmptyTotals();
+            _grandTotal = 0;
         }
         finally
         {
@@ -190,13 +297,29 @@
         }
     }
 
+    private static Dictionary<SeverityLevel, long> NewEmptyTotals()
+    {
+        var d = new Dictionary<SeverityLevel, long>();
+        foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
+        {
+            d[sev] = 0L;
+        }
+        return d;
+    }
+
     public void Dispose()
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
     }
 
+    /// <summary>
+    /// Row shape with one explicit property per severity so the grid can sort each amount column
+    /// numerically (sort works off of the property name, not a Template's runtime expression).
+    /// </summary>
     private sealed class ServiceRow
     {
+        private readonly IReadOnlyDictionary<SeverityLevel, long> _counts;
+
         public ServiceRow(string service, IReadOnlyDictionary<SeverityLevel, long> counts)
         {
             Service = service;
@@ -204,9 +327,12 @@
             Total = counts.Values.Sum();
         }
 
-        private readonly IReadOnlyDictionary<SeverityLevel, long> _counts;
-
         public string Service { get; }
+        public long Verbose => GetCount(SeverityLevel.Verbose);
+        public long Information => GetCount(SeverityLevel.Information);
+        public long Warning => GetCount(SeverityLevel.Warning);
+        public long Error => GetCount(SeverityLevel.Error);
+        public long Critical => GetCount(SeverityLevel.Critical);
         public long Total { get; }
         public long GetCount(SeverityLevel s) => _counts.TryGetValue(s, out var v) ? v : 0;
     }

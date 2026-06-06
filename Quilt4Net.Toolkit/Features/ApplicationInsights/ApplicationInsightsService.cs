@@ -1264,23 +1264,39 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"net|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, IEnumerable<string> environments, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"logcount|{context.ToKey()}|{environment}|{timeSpan}";
+        // Normalise + dedup the env set up front; ordering is stable so the cache key is
+        // deterministic regardless of caller iteration order.
+        var envList = (environments ?? Array.Empty<string>())
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var cacheKey = $"logcount|{context.ToKey()}|{string.Join(",", envList)}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             var list = new List<LogCountByServiceCell>();
             var client = GetClient(context);
             var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-            var envValue = string.IsNullOrWhiteSpace(environment) ? null : environment.Trim();
-            // Same env-filter semantics as SearchAsync / GetCountAsync: when an env is supplied,
-            // include matching rows AND rows that didn't log an environment at all; otherwise no
-            // filter. The Environment projection lives in EnvironmentProjection (deployment.environment
-            // → AspNetCoreEnvironment fallback) so this stays in sync with the rest of the service.
-            var envFilter = envValue is null
-                ? string.Empty
-                : $"\n| where isempty(Environment) or Environment =~ '{EscapeKqlSingleQuoted(envValue)}'";
+            // Same env-filter semantics as SearchAsync / GetCountAsync: when one or more envs are
+            // supplied, include matching rows AND rows that didn't log an environment at all;
+            // otherwise no filter. The Environment projection lives in EnvironmentProjection
+            // (deployment.environment → AspNetCoreEnvironment fallback) so this stays in sync with
+            // the rest of the service.
+            string envFilter;
+            if (envList.Length == 0)
+            {
+                envFilter = string.Empty;
+            }
+            else
+            {
+                var quoted = string.Join(", ", envList.Select(e => $"'{EscapeKqlSingleQuoted(e)}'"));
+                envFilter = $"\n| where isempty(Environment) or Environment in~ ({quoted})";
+            }
 
             // Unified severity:
             //   - AppTraces: own SeverityLevel (Verbose..Critical = 0..4)
