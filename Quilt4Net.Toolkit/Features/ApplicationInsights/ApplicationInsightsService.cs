@@ -1264,6 +1264,65 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"net|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
+    public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"logcount|{context.ToKey()}|{environment}|{timeSpan}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            var list = new List<LogCountByServiceCell>();
+            var client = GetClient(context);
+            var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+            var envValue = string.IsNullOrWhiteSpace(environment) ? null : environment.Trim();
+            // Same env-filter semantics as SearchAsync / GetCountAsync: when an env is supplied,
+            // include matching rows AND rows that didn't log an environment at all; otherwise no
+            // filter. The Environment projection lives in EnvironmentProjection (deployment.environment
+            // → AspNetCoreEnvironment fallback) so this stays in sync with the rest of the service.
+            var envFilter = envValue is null
+                ? string.Empty
+                : $"\n| where isempty(Environment) or Environment =~ '{EscapeKqlSingleQuoted(envValue)}'";
+
+            // Unified severity:
+            //   - AppTraces: own SeverityLevel (Verbose..Critical = 0..4)
+            //   - AppExceptions: always count as Error (3) — no useful gradient on raw exceptions
+            //   - AppRequests: Information (1) on success, Error (3) on failure
+            var query = $@"
+union withsource=_Source AppTraces, AppExceptions, AppRequests
+| extend _p = todynamic(Properties)
+| extend
+    Service = coalesce(tostring(_p['ApplicationName']), tostring(AppRoleName), 'unknown'),
+    Environment = trim(' ', {EnvironmentProjection}),
+    EffectiveSeverity = case(
+        _Source == 'AppExceptions', 3,
+        _Source == 'AppRequests',   iif(tobool(coalesce(Success, true)), 1, 3),
+        toint(SeverityLevel))
+{envFilter}
+| summarize Count = count() by Service, EffectiveSeverity
+| project Service, Severity = EffectiveSeverity, Count";
+
+            var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
+            foreach (var table in response.Value.AllTables)
+            {
+                var serviceIdx = GetColumnIndex(table, "Service");
+                var sevIdx = GetColumnIndex(table, "Severity");
+                var countIdx = GetColumnIndex(table, "Count");
+                foreach (var row in table.Rows)
+                {
+                    var service = row[serviceIdx]?.ToString() ?? "unknown";
+                    var severity = (SeverityLevel)GetInt(row, sevIdx);
+                    var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                    list.Add(new LogCountByServiceCell(service, severity, count));
+                }
+            }
+            return list.ToArray();
+        });
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
     /// <summary>
     /// Shared executor for the four metric queries. Each query is required to project columns
     /// named exactly <c>Series</c> / <c>Timestamp</c> / <c>Value</c> so the row mapping below is

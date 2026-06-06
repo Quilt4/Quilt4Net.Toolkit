@@ -83,6 +83,12 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
             });
+            // Log-count pivot (service × severity). One KQL query, similar refresh cadence
+            // expectations as other aggregations.
+            s.RegisterType<LogCountByServiceCell[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+            });
         });
     }
 
@@ -144,6 +150,7 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<SummarySubset[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
             s.RegisterType<VersionMatrixCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(5); });
             s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
+            s.RegisterType<LogCountByServiceCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
         });
     }
 }
