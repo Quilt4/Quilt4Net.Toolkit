@@ -1,6 +1,7 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 @inject IApplicationInsightsService Ai
@@ -20,8 +21,9 @@
 }
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-    @* Row 1 — the data-source controls that drive what gets fetched (configuration, range, refresh).
-       Row 2 — the local-only slicers (environment, source) that re-aggregate without re-fetching. *@
+    @* Single RadzenRow so the filter chips reflow onto extra lines as the window narrows —
+       same behaviour as /monitor/log. Refresh sits last so it lines up on the right at full
+       width, and falls below the chips on narrow views. *@
     <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
         @if (_candidateConfigs.Count > 1)
         {
@@ -53,13 +55,6 @@
                 </RadzenSelectBar>
             </RadzenStack>
         </RadzenColumn>
-        <RadzenColumn>
-            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
-                          IsBusy="@_busy" Click="@(_ => ReloadAsync(force: true))" />
-        </RadzenColumn>
-    </RadzenRow>
-
-    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
         @if (_candidateEnvironments.Count > 0)
         {
             <RadzenColumn>
@@ -89,6 +84,11 @@
                     </Items>
                 </RadzenSelectBar>
             </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                          IsBusy="@_busy" title="@DataAgeFormat.Describe(_lastRefreshUtc)"
+                          Click="@(_ => ReloadAsync(force: true))" />
         </RadzenColumn>
     </RadzenRow>
 
@@ -163,6 +163,7 @@
     private List<ServiceRow> _rows = [];
     private Dictionary<SeverityLevel, long> _columnTotals = NewEmptyTotals();
     private long _grandTotal;
+    private System.DateTime? _lastRefreshUtc; // for the refresh-button age tooltip
 
     private IApplicationInsightsConfigurationSelector _selector;
 
@@ -334,6 +335,9 @@
                     return cells.Select(c => new TaggedCell(configId, c)).ToArray();
                 }));
                 _cellCache[_window] = perContext.SelectMany(x => x).ToList();
+                // Stamp the load completion so the refresh-button tooltip can report data age.
+                // Only on success — a failed load shouldn't claim freshness.
+                _lastRefreshUtc = System.DateTime.UtcNow;
             }
             catch (System.Exception e)
             {

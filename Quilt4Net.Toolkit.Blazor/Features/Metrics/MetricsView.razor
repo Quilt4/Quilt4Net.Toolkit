@@ -4,7 +4,7 @@
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 @inject IApplicationInsightsService Ai
-@implements IDisposable
+@implements System.IDisposable
 
 @if (_configError != null)
 {
@@ -45,7 +45,8 @@
         </RadzenColumn>
         <RadzenColumn>
             <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
-                          IsBusy="@_busy" Click="@(_ => ReloadAsync())" />
+                          IsBusy="@_busy" title="@DataAgeFormat.Describe(_lastRefreshUtc)"
+                          Click="@(_ => ReloadAsync())" />
         </RadzenColumn>
     </RadzenRow>
 
@@ -68,6 +69,7 @@
     private string _configError;
     private string _loadError;
     private bool _busy;
+    private System.DateTime? _lastRefreshUtc;
     private System.TimeSpan _window = System.TimeSpan.FromHours(1);
 
     private MetricSample[] _cpu = [];
@@ -146,6 +148,9 @@
             _disk = await Ai.GetDiskFreeAsync(ctx, _window).ToArrayAsync();
             StateHasChanged();
             _network = await Ai.GetNetworkThroughputAsync(ctx, _window).ToArrayAsync();
+            // Stamp the load completion so the refresh-button tooltip can show data age. Only on
+            // success — a failed load shouldn't claim the data is fresh.
+            _lastRefreshUtc = System.DateTime.UtcNow;
         }
         catch (System.Exception e)
         {

@@ -2,6 +2,7 @@
 @using Quilt4Net.Toolkit
 @using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
 @using Quilt4Net.Toolkit.Blazor.Features.Log
+@using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @using Microsoft.Extensions.Logging
 @using Microsoft.Extensions.Options
@@ -12,30 +13,43 @@
 @implements IDisposable
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-    @if (Context == null && AvailableConfigs().Count > 1)
-    {
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-            <RadzenText TextStyle="TextStyle.Caption" Text="Configurations" />
-            <RadzenSelectBar Data="@AvailableConfigs()" @bind-Value="_selectedIds"
-                             Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, _ => LoadAsync(false)))"
-                             TextProperty="Name" ValueProperty="Id" Multiple="true" AllowSelectAll="false" />
-        </RadzenStack>
-    }
-    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
-        <RadzenButton Icon="refresh" Text="Refresh" Click="OnRefreshAsync" Disabled="@_loading" ButtonStyle="ButtonStyle.Secondary" />
-        @if (_view != null)
+    @* Single flowing RadzenRow: at full width the Configurations bar, the two toggles and the
+       Refresh button line up; as the window narrows the columns wrap to extra lines. Refresh sits
+       last so it stays right-most when there's room and falls below when there isn't. Same flow
+       behaviour as /monitor/log / MetricsView / LogCountByServiceView. *@
+    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+        @if (Context == null && AvailableConfigs().Count > 1)
         {
-            <RadzenText TextStyle="TextStyle.Caption" Text="@($"Updated {_view.LastRefreshedUtc:u}")" />
+            <RadzenColumn>
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                    <RadzenText TextStyle="TextStyle.Caption" Text="Configurations" />
+                    <RadzenSelectBar Data="@AvailableConfigs()" @bind-Value="_selectedIds"
+                                     Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, _ => LoadAsync(false)))"
+                                     TextProperty="Name" ValueProperty="Id" Multiple="true" AllowSelectAll="false" />
+                </RadzenStack>
+            </RadzenColumn>
         }
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
-            <RadzenSwitch @bind-Value="_showDevelopment" TValue="bool" Name="showDevelopment" />
-            <RadzenLabel Component="showDevelopment" Text="Show Development" />
-        </RadzenStack>
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
-            <RadzenSwitch @bind-Value="_showUnknown" TValue="bool" Name="showUnknown" />
-            <RadzenLabel Component="showUnknown" Text="Show Unknown" />
-        </RadzenStack>
-    </RadzenStack>
+        <RadzenColumn>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+                <RadzenSwitch @bind-Value="_showDevelopment" TValue="bool" Name="showDevelopment" />
+                <RadzenLabel Component="showDevelopment" Text="Show Development" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+                <RadzenSwitch @bind-Value="_showUnknown" TValue="bool" Name="showUnknown" />
+                <RadzenLabel Component="showUnknown" Text="Show Unknown" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn>
+            @* Aligned with MetricsView / LogCountByServiceView: Light button + IsBusy spinner.
+               The absolute "Updated yyyy-MM-dd HH:mm:ssZ" text is gone — the operator-relevant
+               signal "how old is this data" lives in the button's title tooltip via DataAgeFormat. *@
+            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                          IsBusy="@_loading" title="@DataAgeFormat.Describe(_view?.LastRefreshedUtc)"
+                          Click="OnRefreshAsync" />
+        </RadzenColumn>
+    </RadzenRow>
 
     @if (_warning != null)
     {
@@ -50,7 +64,7 @@
 
     @if (_loading)
     {
-        <RadzenText Text="Loading..." />
+        <Loading />
     }
     else if (_error != null)
     {
