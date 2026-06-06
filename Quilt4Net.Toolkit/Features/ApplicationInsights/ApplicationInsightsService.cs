@@ -1264,43 +1264,20 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"net|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, IEnumerable<string> environments, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        // Normalise + dedup the env set up front; ordering is stable so the cache key is
-        // deterministic regardless of caller iteration order.
-        var envList = (environments ?? Array.Empty<string>())
-            .Where(e => !string.IsNullOrWhiteSpace(e))
-            .Select(e => e.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var cacheKey = $"logcount|{context.ToKey()}|{string.Join(",", envList)}|{timeSpan}";
+        var cacheKey = $"logcount|{context.ToKey()}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             var list = new List<LogCountByServiceCell>();
             var client = GetClient(context);
             var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
-            // Same env-filter semantics as SearchAsync / GetCountAsync: when one or more envs are
-            // supplied, include matching rows AND rows that didn't log an environment at all;
-            // otherwise no filter. The Environment projection lives in EnvironmentProjection
-            // (deployment.environment → AspNetCoreEnvironment fallback) so this stays in sync with
-            // the rest of the service.
-            string envFilter;
-            if (envList.Length == 0)
-            {
-                envFilter = string.Empty;
-            }
-            else
-            {
-                var quoted = string.Join(", ", envList.Select(e => $"'{EscapeKqlSingleQuoted(e)}'"));
-                envFilter = $"\n| where isempty(Environment) or Environment in~ ({quoted})";
-            }
-
+            // Group by every dimension the admin UI may filter on (env + source) so the same
+            // result set powers every subsequent filter combination without another KQL run.
             // Unified severity:
             //   - AppTraces: own SeverityLevel (Verbose..Critical = 0..4)
-            //   - AppExceptions: always count as Error (3) — no useful gradient on raw exceptions
+            //   - AppExceptions: always Error (3) — no useful gradient on raw exceptions
             //   - AppRequests: Information (1) on success, Error (3) on failure
             var query = $@"
 union withsource=_Source AppTraces, AppExceptions, AppRequests
@@ -1312,22 +1289,30 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
         _Source == 'AppExceptions', 3,
         _Source == 'AppRequests',   iif(tobool(coalesce(Success, true)), 1, 3),
         toint(SeverityLevel))
-{envFilter}
-| summarize Count = count() by Service, EffectiveSeverity
-| project Service, Severity = EffectiveSeverity, Count";
+| summarize Count = count() by Service, EffectiveSeverity, Environment, _Source
+| project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count";
 
             var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
             foreach (var table in response.Value.AllTables)
             {
                 var serviceIdx = GetColumnIndex(table, "Service");
                 var sevIdx = GetColumnIndex(table, "Severity");
+                var envIdx = GetColumnIndex(table, "Environment");
+                var sourceIdx = GetColumnIndex(table, "Source");
                 var countIdx = GetColumnIndex(table, "Count");
                 foreach (var row in table.Rows)
                 {
                     var service = row[serviceIdx]?.ToString() ?? "unknown";
                     var severity = (SeverityLevel)GetInt(row, sevIdx);
+                    var environment = row[envIdx]?.ToString() ?? "";
+                    var source = (row[sourceIdx]?.ToString()) switch
+                    {
+                        "AppExceptions" => LogSource.Exception,
+                        "AppRequests" => LogSource.Request,
+                        _ => LogSource.Trace,
+                    };
                     var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
-                    list.Add(new LogCountByServiceCell(service, severity, count));
+                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count));
                 }
             }
             return list.ToArray();

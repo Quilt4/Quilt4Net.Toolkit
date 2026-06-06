@@ -1,14 +1,17 @@
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
 @using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 @inject IApplicationInsightsService Ai
+@inject IOptions<ApplicationInsightsOptions> AiOptions
 @implements IDisposable
 
-@* Pivot table of log counts: rows = services (AppRoleName / Properties.ApplicationName), columns
-   = severity levels. Configurations and environments are both multi-select with "nothing
-   selected = include all" semantics; numbers are aggregated across the selected (or implicit-
-   all) set. *@
+@* Pivot of log counts: rows = services, columns = severity. Configuration / Environment / Source
+   are all multi-select with "nothing selected = include all" semantics; only Range changes hit
+   AI — every other filter toggle is a local regroup over the cell cube already in memory. Each
+   distinct Range is cached for the lifetime of the circuit so flipping back to 1h after 24h is
+   instant. *@
 
 @if (_configError != null)
 {
@@ -24,7 +27,7 @@
                 <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                     <RadzenText TextStyle="TextStyle.Caption" Text="Configuration (none = all)" />
                     <RadzenSelectBar @bind-Value="_selectedConfigIds" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
-                                     Change="@(_ => ReloadAsync())">
+                                     Change="@(_ => RecomputeRows())">
                         <Items>
                             @foreach (var c in _candidateConfigs)
                             {
@@ -39,7 +42,7 @@
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                 <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
                 <RadzenSelectBar @bind-Value="_window" TValue="System.TimeSpan" Size="ButtonSize.Small"
-                                 Change="@(_ => ReloadAsync())">
+                                 Change="@(_ => OnRangeChangedAsync())">
                     <Items>
                         <RadzenSelectBarItem Text="1h" Value="@System.TimeSpan.FromHours(1)" />
                         <RadzenSelectBarItem Text="24h" Value="@System.TimeSpan.FromHours(24)" />
@@ -48,13 +51,13 @@
                 </RadzenSelectBar>
             </RadzenStack>
         </RadzenColumn>
-        @if (_candidateEnvironments.Length > 0)
+        @if (_candidateEnvironments.Count > 0)
         {
             <RadzenColumn>
                 <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                     <RadzenText TextStyle="TextStyle.Caption" Text="Environment (none = all)" />
                     <RadzenSelectBar @bind-Value="_selectedEnvironments" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
-                                     Change="@(_ => ReloadAsync())">
+                                     Change="@(_ => RecomputeRows())">
                         <Items>
                             @foreach (var env in _candidateEnvironments)
                             {
@@ -66,8 +69,21 @@
             </RadzenColumn>
         }
         <RadzenColumn>
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Source (none = all)" />
+                <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
+                                 Change="@(_ => RecomputeRows())">
+                    <Items>
+                        <RadzenSelectBarItem Text="Trace" Value="LogSource.Trace" />
+                        <RadzenSelectBarItem Text="Exception" Value="LogSource.Exception" />
+                        <RadzenSelectBarItem Text="Request" Value="LogSource.Request" />
+                    </Items>
+                </RadzenSelectBar>
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn>
             <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
-                          IsBusy="@_busy" Click="@(_ => ReloadAsync())" />
+                          IsBusy="@_busy" Click="@(_ => ReloadAsync(force: true))" />
         </RadzenColumn>
     </RadzenRow>
 
@@ -78,17 +94,18 @@
         </RadzenAlert>
     }
 
-    @if (_rows.Count == 0 && !_busy)
+    @if (_busy)
+    {
+        <Loading />
+    }
+    else if (_rows.Count == 0)
     {
         <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
-            No log entries in the selected range / environment.
+            No log entries in the selected range / filter combination.
         </RadzenAlert>
     }
     else
     {
-        @* AllowSorting + per-severity properties on ServiceRow so amount columns sort numerically.
-           FooterTemplate per column emits the pinned Total row at the bottom — Radzen's footer is
-           rendered outside the sortable data so it stays at the bottom regardless of sort order. *@
         <RadzenDataGrid Data="@_rows" TItem="ServiceRow" AllowSorting="true">
             <Columns>
                 <RadzenDataGridColumn TItem="ServiceRow" Title="Service" Property="@nameof(ServiceRow.Service)" SortOrder="SortOrder.Ascending">
@@ -123,19 +140,28 @@
     private bool _busy;
     private System.TimeSpan _window = System.TimeSpan.FromHours(24);
 
-    // Candidate sets for the SelectBars. _selected* hold the user's picks; empty = all.
+    // Candidate sets (everything offered by the AI workspaces) — separate from the user's picks.
     private IReadOnlyList<ApplicationInsightsConfigurationResponse> _candidateConfigs = [];
-    private IEnumerable<string> _selectedConfigIds = [];
-    private string[] _candidateEnvironments = [];
-    private IEnumerable<string> _selectedEnvironments = [];
+    private IReadOnlyList<string> _candidateEnvironments = [];
 
+    // Current user selections. Empty enumerable everywhere means "include all".
+    private IEnumerable<string> _selectedConfigIds = [];
+    private IEnumerable<string> _selectedEnvironments = [];
+    private IEnumerable<LogSource> _selectedSources = [];
+
+    // Per-range cache of every cell fetched from AI (across every candidate config). Filter
+    // changes recompute _rows from this map — no fetch. Range changes look up / populate it.
+    // Each cell is tagged with its owning config id so the configuration filter is local too.
+    private readonly Dictionary<System.TimeSpan, List<TaggedCell>> _cellCache = new();
+
+    // Output of the current filter combination — what the grid binds to + the pinned totals row.
     private List<ServiceRow> _rows = [];
     private Dictionary<SeverityLevel, long> _columnTotals = NewEmptyTotals();
     private long _grandTotal;
 
     private IApplicationInsightsConfigurationSelector _selector;
 
-    /// <summary>Optional explicit context. When set, the selector and multi-config picker are bypassed.</summary>
+    /// <summary>Optional explicit context. When set, the configuration multi-select is bypassed.</summary>
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
@@ -147,54 +173,80 @@
     [Parameter]
     public IReadOnlyList<ApplicationInsightsConfigurationResponse> Configs { get; set; }
 
+    /// <summary>
+    /// Preferred display order for environments. Named entries come first in the supplied order;
+    /// any extras the AI workspace surfaces fall back to alphabetical. When null,
+    /// <see cref="EnvironmentOrdering.DefaultOrder"/> (Development, CI, Staging, Test, Production)
+    /// is used. Hosts that pull a team-specific order from their own config — e.g. via
+    /// <c>IEnvironmentService</c> on Quilt4Net.Server — should pass it here.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string> EnvironmentOrder { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
-        // Build the candidate-configs list. Explicit single Context bypasses all selection.
-        if (Context == null)
+        // _busy stays true through env discovery + the first fetch so the loading spinner is the
+        // only thing on screen between component mount and the data landing.
+        _busy = true;
+        StateHasChanged();
+
+        try
         {
-            if (Configs is { Count: > 0 })
+            // Resolve the candidate-config set first — explicit Context bypasses selection.
+            if (Context == null)
             {
-                _candidateConfigs = Configs;
-            }
-            else
-            {
-                _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
-                if (_selector != null)
+                if (Configs is { Count: > 0 })
                 {
-                    _selector.OnChanged += OnSelectorChanged;
-                    if (!_selector.IsLoaded) await _selector.LoadAsync();
-                    _candidateConfigs = _selector.Available ?? [];
+                    _candidateConfigs = Configs;
+                }
+                else
+                {
+                    _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+                    if (_selector != null)
+                    {
+                        _selector.OnChanged += OnSelectorChanged;
+                        if (!_selector.IsLoaded) await _selector.LoadAsync();
+                        _candidateConfigs = _selector.Available ?? [];
+                    }
+                }
+
+                if (_candidateConfigs.Count == 0)
+                {
+                    _configError = "No Application Insights configuration available.";
+                    _busy = false;
+                    return;
                 }
             }
 
-            if (_candidateConfigs.Count == 0)
-            {
-                _configError = "No Application Insights configuration available.";
-                return;
-            }
+            await LoadEnvironmentsAsync();
+            await ReloadAsync(force: false);
         }
-
-        await LoadEnvironmentsAsync();
-        await ReloadAsync();
+        finally
+        {
+            // ReloadAsync clears _busy on success; this guards the early returns and exceptions.
+            _busy = false;
+            StateHasChanged();
+        }
     }
 
     private async void OnSelectorChanged() => await InvokeAsync(async () =>
     {
         _candidateConfigs = _selector?.Available ?? [];
+        _cellCache.Clear(); // workspaces changed; previous fetches are no longer authoritative
         await LoadEnvironmentsAsync();
-        await ReloadAsync();
+        await ReloadAsync(force: false);
     });
 
     /// <summary>
-    /// Load the union of environments across every candidate config so the env multi-select
-    /// presents the full set (a config-narrowed env list would be confusing when the operator
-    /// then adds another config). One call per context; results merged.
+    /// Discover environments via <c>GetEnvironments</c> on each candidate context, then order them
+    /// using <see cref="EnvironmentOrdering.Order"/> with either the host-supplied
+    /// <see cref="EnvironmentOrder"/> or the options-level <see cref="ApplicationInsightsOptions.EnvironmentOrder"/>.
     /// </summary>
     private async Task LoadEnvironmentsAsync()
     {
         try
         {
-            var contexts = ResolveEffectiveContexts(null);
+            var contexts = ResolveAllContexts();
             var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             foreach (var ctx in contexts)
             {
@@ -203,9 +255,18 @@
                     if (!string.IsNullOrWhiteSpace(env.Value)) set.Add(env.Value);
                 }
             }
-            _candidateEnvironments = set.OrderBy(x => x, System.StringComparer.OrdinalIgnoreCase).ToArray();
-            // Drop any selected env that disappeared after a config change.
-            _selectedEnvironments = _selectedEnvironments?.Where(e => set.Contains(e)).ToArray() ?? [];
+            var order = EnvironmentOrder ?? AiOptions.Value.EnvironmentOrder;
+            _candidateEnvironments = EnvironmentOrdering.Order(set, order)
+                // EnvironmentOrdering appends the "(unknown)" sentinel for blank rows — we filter
+                // those out of the selectable set because the cube already carries the empty-string
+                // environment, which the "no selection = all" path handles transparently.
+                .Where(e => e != EnvironmentOrderingUnknownSentinel)
+                .ToArray();
+
+            // Drop any selected env that disappeared so the chip state doesn't lie.
+            _selectedEnvironments = _selectedEnvironments?
+                .Where(e => _candidateEnvironments.Contains(e, System.StringComparer.OrdinalIgnoreCase))
+                .ToArray() ?? [];
         }
         catch (System.Exception)
         {
@@ -214,31 +275,30 @@
         }
     }
 
-    /// <summary>
-    /// Resolve which contexts to query: an explicit Context wins; otherwise the selected configs
-    /// (or all candidates when nothing is selected). <paramref name="selectedIds"/> may be the
-    /// current user selection or null when called for env-list discovery.
-    /// </summary>
-    private IReadOnlyList<IApplicationInsightsContext> ResolveEffectiveContexts(IEnumerable<string> selectedIds)
+    /// <summary>EnvironmentOrdering's internal sentinel is "(unknown)" — same literal here.</summary>
+    private const string EnvironmentOrderingUnknownSentinel = "(unknown)";
+
+    private IReadOnlyList<IApplicationInsightsContext> ResolveAllContexts()
     {
         if (Context != null) return [Context];
-
         if (_candidateConfigs.Count == 0) return [];
-
-        var ids = selectedIds?.ToArray();
-        if (ids == null || ids.Length == 0)
-        {
-            return _candidateConfigs.Cast<IApplicationInsightsContext>().ToArray();
-        }
-        return _candidateConfigs
-            .Where(c => ids.Contains(c.Id))
-            .Cast<IApplicationInsightsContext>()
-            .ToArray();
+        return _candidateConfigs.Cast<IApplicationInsightsContext>().ToArray();
     }
 
-    private async Task ReloadAsync()
+    private async Task OnRangeChangedAsync()
     {
-        var contexts = ResolveEffectiveContexts(_selectedConfigIds);
+        // Range changes are the only filter that triggers a fetch. Cached ranges return instantly.
+        await ReloadAsync(force: false);
+    }
+
+    /// <summary>
+    /// Ensure the current range is in the cache (fetching from every candidate config in parallel
+    /// if not), then regroup into _rows. <paramref name="force"/> evicts the current range's
+    /// cache entry first — what the Refresh button does.
+    /// </summary>
+    private async Task ReloadAsync(bool force)
+    {
+        var contexts = ResolveAllContexts();
         if (contexts.Count == 0)
         {
             _rows = [];
@@ -247,54 +307,90 @@
             return;
         }
 
-        _busy = true;
-        _loadError = null;
-        StateHasChanged();
-        try
+        if (force)
         {
-            // Fan out one query per context with the same env-filter set; aggregate across
-            // contexts by summing (service, severity) cells. Same-named services in different
-            // workspaces roll into one row — the operator sees a single team-wide picture.
-            var envs = _selectedEnvironments?.ToArray() ?? [];
-            var aggregated = new Dictionary<(string Service, SeverityLevel Severity), long>();
-            foreach (var ctx in contexts)
-            {
-                await foreach (var cell in Ai.GetLogCountByServiceAsync(ctx, envs, _window))
-                {
-                    var key = (cell.Service ?? "unknown", cell.Severity);
-                    aggregated[key] = aggregated.GetValueOrDefault(key) + cell.Count;
-                }
-            }
-
-            _rows = aggregated
-                .GroupBy(kvp => kvp.Key.Service, System.StringComparer.OrdinalIgnoreCase)
-                .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
-                .Select(g => new ServiceRow(g.Key, g.ToDictionary(kvp => kvp.Key.Severity, kvp => kvp.Value)))
-                .ToList();
-
-            // Column totals for the pinned footer row.
-            _columnTotals = NewEmptyTotals();
-            foreach (var row in _rows)
-            {
-                foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
-                {
-                    _columnTotals[sev] += row.GetCount(sev);
-                }
-            }
-            _grandTotal = _rows.Sum(r => r.Total);
+            _cellCache.Remove(_window);
         }
-        catch (System.Exception e)
+
+        if (!_cellCache.ContainsKey(_window))
         {
-            _loadError = e.Message;
+            _busy = true;
+            _loadError = null;
+            StateHasChanged();
+            try
+            {
+                // Parallel fan-out across configs — each Log Analytics query is independent and
+                // typically takes seconds; running them in sequence multiplies the wait.
+                var range = _window;
+                var perContext = await System.Threading.Tasks.Task.WhenAll(contexts.Select(async ctx =>
+                {
+                    var configId = (ctx as ApplicationInsightsConfigurationResponse)?.Id ?? "";
+                    var cells = await Ai.GetLogCountByServiceAsync(ctx, range).ToArrayAsync();
+                    return cells.Select(c => new TaggedCell(configId, c)).ToArray();
+                }));
+                _cellCache[_window] = perContext.SelectMany(x => x).ToList();
+            }
+            catch (System.Exception e)
+            {
+                _loadError = e.Message;
+                _cellCache[_window] = [];
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+
+        RecomputeRows();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Pure client-side: slice the cached cell cube by the current configuration / environment /
+    /// source selections (empty selection = include all), aggregate counts by (service, severity),
+    /// and rebuild the column totals + grand total for the pinned footer row. Called whenever any
+    /// non-range filter toggles.
+    /// </summary>
+    private void RecomputeRows()
+    {
+        if (!_cellCache.TryGetValue(_window, out var allCells))
+        {
             _rows = [];
             _columnTotals = NewEmptyTotals();
             _grandTotal = 0;
+            return;
         }
-        finally
+
+        var configSet = (_selectedConfigIds ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var envSet = (_selectedEnvironments ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var sourceSet = (_selectedSources ?? []).ToHashSet();
+
+        var aggregated = new Dictionary<(string Service, SeverityLevel Severity), long>();
+        foreach (var t in allCells)
         {
-            _busy = false;
-            StateHasChanged();
+            if (configSet.Count > 0 && !configSet.Contains(t.ConfigId)) continue;
+            if (envSet.Count > 0 && !envSet.Contains(t.Cell.Environment)) continue;
+            if (sourceSet.Count > 0 && !sourceSet.Contains(t.Cell.Source)) continue;
+
+            var key = (t.Cell.Service ?? "unknown", t.Cell.Severity);
+            aggregated[key] = aggregated.GetValueOrDefault(key) + t.Cell.Count;
         }
+
+        _rows = aggregated
+            .GroupBy(kvp => kvp.Key.Service, System.StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
+            .Select(g => new ServiceRow(g.Key, g.ToDictionary(kvp => kvp.Key.Severity, kvp => kvp.Value)))
+            .ToList();
+
+        _columnTotals = NewEmptyTotals();
+        foreach (var row in _rows)
+        {
+            foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
+            {
+                _columnTotals[sev] += row.GetCount(sev);
+            }
+        }
+        _grandTotal = _rows.Sum(r => r.Total);
     }
 
     private static Dictionary<SeverityLevel, long> NewEmptyTotals()
@@ -312,9 +408,12 @@
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
     }
 
+    /// <summary>Cell + the id of the configuration it came from, for the local configuration filter.</summary>
+    private sealed record TaggedCell(string ConfigId, LogCountByServiceCell Cell);
+
     /// <summary>
     /// Row shape with one explicit property per severity so the grid can sort each amount column
-    /// numerically (sort works off of the property name, not a Template's runtime expression).
+    /// numerically — sort works off of the property name, not a runtime Template expression.
     /// </summary>
     private sealed class ServiceRow
     {
