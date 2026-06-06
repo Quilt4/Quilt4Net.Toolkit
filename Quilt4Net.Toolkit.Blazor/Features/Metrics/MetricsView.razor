@@ -4,7 +4,6 @@
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 @inject IApplicationInsightsService Ai
-@inject IBrowserTimeZoneAccessor BrowserTime
 @implements IDisposable
 
 @if (_configError != null)
@@ -164,9 +163,14 @@
         if (firstRender)
         {
             // JS interop is unavailable during prerender, so the browser timezone lookup runs
-            // here on the first interactive render. The accessor is shared (scoped) and idempotent,
-            // so calling it from several views on one page is fine — only the first call dispatches.
-            await BrowserTime.EnsureLoadedAsync();
+            // here on the first interactive render. The accessor is optional in DI: when a host
+            // doesn't call AddQuilt4NetBlazorContent or AddQuilt4NetBlazorApplicationInsightsClient-
+            // Remote, the charts simply fall back to TimeZoneInfo.Local (handled in MetricChart).
+            var browserTime = ServiceProvider.GetService<IBrowserTimeZoneAccessor>();
+            if (browserTime != null)
+            {
+                await browserTime.EnsureLoadedAsync();
+            }
         }
     }
 

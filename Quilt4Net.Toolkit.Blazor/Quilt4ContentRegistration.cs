@@ -1,6 +1,7 @@
 ﻿using Blazored.LocalStorage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Quilt4Net.Toolkit.Blazor.Framework;
 
@@ -31,7 +32,8 @@ public static class Quilt4ContentRegistration
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddScoped<IQuilt4ContentService, Quilt4ContentService>();
         services.AddScoped<IContentAdminService, ContentAdminService>();
-        services.AddScoped<IBrowserTimeZoneAccessor, BrowserTimeZoneAccessor>();
+        // TryAdd so AddQuilt4NetBlazor*-AI registrations can register it too without conflict.
+        services.TryAddScoped<IBrowserTimeZoneAccessor, BrowserTimeZoneAccessor>();
         services.AddBlazoredLocalStorage();
         services.AddQuilt4NetContent(configuration, options);
 

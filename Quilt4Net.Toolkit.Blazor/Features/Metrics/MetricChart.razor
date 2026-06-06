@@ -1,6 +1,7 @@
+@using Microsoft.Extensions.DependencyInjection
 @using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
-@inject IBrowserTimeZoneAccessor BrowserTime
+@inject IServiceProvider Services
 @implements IDisposable
 
 @* One RadzenChart per metric. Samples are grouped by Series so each host (and, for disk, each
@@ -44,18 +45,23 @@
     [Parameter] public bool Loading { get; set; }
 
     private IReadOnlyList<(string Label, MetricSample[] Points)> _series = [];
+    private IBrowserTimeZoneAccessor _browserTime; // optional — null when no host wires it up
 
     protected override void OnInitialized()
     {
-        BrowserTime.Changed += OnTimeZoneChanged;
+        _browserTime = Services.GetService<IBrowserTimeZoneAccessor>();
+        if (_browserTime != null)
+        {
+            _browserTime.Changed += OnTimeZoneChanged;
+        }
     }
 
     protected override void OnParametersSet()
     {
         // Group the flat samples by Series so each line is one host (or host+device). Convert
-        // each point's UTC timestamp to the browser's local zone before binding so the chart's
-        // category axis shows clock-local times. Order by label for stable legend order.
-        var tz = BrowserTime.Current;
+        // each point's UTC timestamp to the browser's local zone (or, if no accessor is registered,
+        // to the server's local zone — still better than UTC). Order by label for stable legend.
+        var tz = _browserTime?.Current ?? System.TimeZoneInfo.Local;
         _series = (Samples ?? [])
             .GroupBy(s => s.Series ?? "")
             .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
@@ -90,6 +96,6 @@
 
     public void Dispose()
     {
-        BrowserTime.Changed -= OnTimeZoneChanged;
+        if (_browserTime != null) _browserTime.Changed -= OnTimeZoneChanged;
     }
 }

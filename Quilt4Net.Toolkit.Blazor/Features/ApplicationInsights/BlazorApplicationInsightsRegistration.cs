@@ -1,8 +1,10 @@
 using Blazored.LocalStorage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Quilt4Net.Toolkit;
+using Quilt4Net.Toolkit.Blazor.Framework;
 
 namespace Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights;
 
@@ -30,6 +32,10 @@ public static class BlazorApplicationInsightsRegistration
         services.AddQuilt4NetApplicationInsightsClientRemote(configuration, options);
         services.AddBlazoredLocalStorage();
         services.AddScoped<IApplicationInsightsConfigurationSelector, ApplicationInsightsConfigurationSelector>();
+        // MetricsView / MetricChart consume this to render chart axis labels in the browser's
+        // local timezone. TryAdd so it's idempotent — also registered from AddQuilt4NetBlazorContent
+        // so most consumers get it from one path or the other.
+        services.TryAddScoped<IBrowserTimeZoneAccessor, BrowserTimeZoneAccessor>();
         return services;
     }
 }
