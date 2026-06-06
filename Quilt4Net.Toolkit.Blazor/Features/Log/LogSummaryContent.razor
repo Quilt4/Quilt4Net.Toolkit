@@ -67,6 +67,11 @@ else
             <RadzenDataGridColumn Title="Message" Property="@nameof(SummaryData.Item.Message)" />
         </Columns>
     </RadzenDataGrid>
+
+    @* Cap indicator below the table — same place a pager would surface "showing X of Y" if
+       this grid had paging. Items.Length is what we're showing, TotalCount is what matched the
+       fingerprint in the lookback window — when they differ, KQL's `take` clipped older rows. *@
+    <RadzenText TextStyle="TextStyle.Caption" Style="margin-top: 0.4rem; display: block;">@FormatCapLabel(Model)</RadzenText>
 }
 
 @code {
@@ -128,5 +133,20 @@ else
         {
             _selectedDetailId = id;
         }
+    }
+
+    /// <summary>
+    /// "Showing 100 of 280 rows…" when KQL's take clipped older entries, or just
+    /// "N rows" when nothing was clipped. Plural-safe at 1.
+    /// </summary>
+    private static string FormatCapLabel(SummaryData model)
+    {
+        var shown = model.Items.Length;
+        var total = model.TotalCount;
+        if (shown < total)
+        {
+            return $"Showing {shown:N0} of {total:N0} rows (newest first; older rows beyond the {shown:N0}-item cap are not loaded)";
+        }
+        return $"{shown:N0} row{(shown == 1 ? string.Empty : "s")}";
     }
 }

@@ -811,10 +811,13 @@ AppRequests
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
 
+        // Each branch builds a `_matched` set, computes _total = count() before take, then projects
+        // the top maxItems with TotalCount attached as a column on every row. This lets the UI
+        // tell the operator "showing X of Y" without a second query.
         var query = source switch
         {
             LogSource.Exception => $@"
-AppExceptions
+let _matched = AppExceptions
 | extend _p = todynamic(Properties)
 | extend
     Fingerprint = base64_encode_tostring(tostring(hash(ProblemId))),
@@ -823,12 +826,15 @@ AppExceptions
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Id = _ItemId
 | where Fingerprint == ""{fingerprint}""
-| project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
+| project Id, TimeGenerated, Message, Environment, Application, SeverityLevel;
+let _total = toscalar(_matched | count);
+_matched
 | order by TimeGenerated desc
-| take {maxItems}",
+| take {maxItems}
+| extend TotalCount = _total",
 
             LogSource.Trace => $@"
-AppTraces
+let _matched = AppTraces
 | extend _p = todynamic(Properties)
 | extend
     OriginalFormat = tostring(_p[""OriginalFormat""]),
@@ -841,12 +847,15 @@ AppTraces
 | extend
     Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
 | where Fingerprint == ""{fingerprint}""
-| project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
+| project Id, TimeGenerated, Message, Environment, Application, SeverityLevel;
+let _total = toscalar(_matched | count);
+_matched
 | order by TimeGenerated desc
-| take {maxItems}",
+| take {maxItems}
+| extend TotalCount = _total",
 
             LogSource.Request => $@"
-AppRequests
+let _matched = AppRequests
 | extend _p = todynamic(Properties)
 | extend
     Message = tostring(Name),
@@ -856,9 +865,12 @@ AppRequests
     SeverityLevel = iif(tobool(Success), 1, 3),
     Id = _ItemId
 | where Fingerprint == ""{fingerprint}""
-| project Id, TimeGenerated, Message, Environment, Application, SeverityLevel
+| project Id, TimeGenerated, Message, Environment, Application, SeverityLevel;
+let _total = toscalar(_matched | count);
+_matched
 | order by TimeGenerated desc
-| take {maxItems}",
+| take {maxItems}
+| extend TotalCount = _total",
 
             _ => throw new ArgumentOutOfRangeException(nameof(source))
         };
@@ -880,6 +892,7 @@ AppRequests
         var envIndex = GetColumnIndex(table, "Environment");
         var appIndex = GetColumnIndex(table, "Application");
         var severityIndex = GetColumnIndex(table, "SeverityLevel");
+        var totalIndex = GetColumnIndex(table, "TotalCount");
 
         var items = table.Rows
             .Select(row => new SummaryData.Item
@@ -892,6 +905,9 @@ AppRequests
             .ToArray();
 
         var first = table.Rows[0];
+        // Every row in the response carries the same TotalCount column (computed once via
+        // toscalar in KQL) — read it off the first row.
+        var totalCount = System.Convert.ToInt64(first[totalIndex] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
 
         return new SummaryData
         {
@@ -901,7 +917,8 @@ AppRequests
             Application = first[appIndex]?.ToString() ?? "",
             SeverityLevel = (SeverityLevel)GetInt(first, severityIndex),
             Source = source,
-            Items = items
+            Items = items,
+            TotalCount = totalCount
         };
     }
 
