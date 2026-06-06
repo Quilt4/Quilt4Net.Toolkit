@@ -20,6 +20,8 @@
 }
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    @* Row 1 — the data-source controls that drive what gets fetched (configuration, range, refresh).
+       Row 2 — the local-only slicers (environment, source) that re-aggregate without re-fetching. *@
     <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
         @if (_candidateConfigs.Count > 1)
         {
@@ -51,6 +53,13 @@
                 </RadzenSelectBar>
             </RadzenStack>
         </RadzenColumn>
+        <RadzenColumn>
+            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                          IsBusy="@_busy" Click="@(_ => ReloadAsync(force: true))" />
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
         @if (_candidateEnvironments.Count > 0)
         {
             <RadzenColumn>
@@ -80,10 +89,6 @@
                     </Items>
                 </RadzenSelectBar>
             </RadzenStack>
-        </RadzenColumn>
-        <RadzenColumn>
-            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
-                          IsBusy="@_busy" Click="@(_ => ReloadAsync(force: true))" />
         </RadzenColumn>
     </RadzenRow>
 
@@ -350,6 +355,12 @@
     /// source selections (empty selection = include all), aggregate counts by (service, severity),
     /// and rebuild the column totals + grand total for the pinned footer row. Called whenever any
     /// non-range filter toggles.
+    /// <para>
+    /// Row keyset is the *unfiltered* set of services seen in the current range — so toggling a
+    /// filter never makes a service vanish; it just zeroes its row. That keeps the table stable
+    /// across filter clicks and makes "this app stopped logging warnings to Production" visible
+    /// as a row that drops to zero rather than disappearing.
+    /// </para>
     /// </summary>
     private void RecomputeRows()
     {
@@ -365,7 +376,16 @@
         var envSet = (_selectedEnvironments ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var sourceSet = (_selectedSources ?? []).ToHashSet();
 
-        var aggregated = new Dictionary<(string Service, SeverityLevel Severity), long>();
+        // Pre-collect every service that appears in the range's cube. These are the rows we
+        // render no matter what the filter ends up matching — services with no matches show
+        // a row of zeros.
+        var allServices = allCells
+            .Select(t => t.Cell.Service ?? "unknown")
+            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var aggregated = new Dictionary<(string Service, SeverityLevel Severity), long>(
+            new ServiceSeverityComparer());
         foreach (var t in allCells)
         {
             if (configSet.Count > 0 && !configSet.Contains(t.ConfigId)) continue;
@@ -376,10 +396,17 @@
             aggregated[key] = aggregated.GetValueOrDefault(key) + t.Cell.Count;
         }
 
-        _rows = aggregated
-            .GroupBy(kvp => kvp.Key.Service, System.StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
-            .Select(g => new ServiceRow(g.Key, g.ToDictionary(kvp => kvp.Key.Severity, kvp => kvp.Value)))
+        _rows = allServices
+            .OrderBy(s => s, System.StringComparer.OrdinalIgnoreCase)
+            .Select(service =>
+            {
+                var counts = new Dictionary<SeverityLevel, long>();
+                foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
+                {
+                    counts[sev] = aggregated.GetValueOrDefault((service, sev));
+                }
+                return new ServiceRow(service, counts);
+            })
             .ToList();
 
         _columnTotals = NewEmptyTotals();
@@ -391,6 +418,18 @@
             }
         }
         _grandTotal = _rows.Sum(r => r.Total);
+    }
+
+    /// <summary>
+    /// Case-insensitive comparer for the (Service, Severity) aggregation key so two service names
+    /// that differ only in casing don't end up split across rows.
+    /// </summary>
+    private sealed class ServiceSeverityComparer : IEqualityComparer<(string Service, SeverityLevel Severity)>
+    {
+        public bool Equals((string Service, SeverityLevel Severity) x, (string Service, SeverityLevel Severity) y)
+            => x.Severity == y.Severity && System.StringComparer.OrdinalIgnoreCase.Equals(x.Service, y.Service);
+        public int GetHashCode((string Service, SeverityLevel Severity) obj)
+            => System.HashCode.Combine(System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Service ?? ""), obj.Severity);
     }
 
     private static Dictionary<SeverityLevel, long> NewEmptyTotals()
