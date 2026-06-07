@@ -8,6 +8,20 @@
 <RadzenTemplateForm TItem="ContentEditModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
     <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
         <RadzenStack>
+            @if (IsNonDefaultLanguage)
+            {
+                @* The asymmetry: edits to the default-language row mark sister translations stale
+                   so the operator knows they need review. Edits to a translation don't push back
+                   — the default-language value isn't auto-derived from translations. Surface
+                   that here so the operator understands why "changing a translation" doesn't
+                   propagate to other languages. *@
+                <RadzenAlert AlertStyle="AlertStyle.Warning" AllowClose="false" Style="margin-bottom: 0.5rem;">
+                    You're editing a translation. Changes here don't trigger a
+                    "review translation" flag on the other languages — only edits to the
+                    default-language version do that. To update what every language is translated
+                    from, edit the default-language value instead.
+                </RadzenAlert>
+            }
             <RadzenColumn Visible="@(ContentFormat == ContentFormat.String)">
                 <RadzenText TextStyle="TextStyle.Caption">Content</RadzenText>
                 <div><RadzenTextBox Name="Content" @bind-Value="@Model.Content" Style="width: 100%; min-width: 174px;" /></div>
@@ -15,6 +29,13 @@
             </RadzenColumn>
             <RadzenColumn Visible="@(ContentFormat == ContentFormat.Html)">
                 <RadzenHtmlEditor @bind-Value="Model.Content" />
+            </RadzenColumn>
+            <RadzenColumn Visible="@(ContentFormat == ContentFormat.Markdown)">
+                @* Plain textarea for the raw Markdown source. Server-side Markdig renders to HTML
+                   on read; the editor edits the source. Live preview pane is a Phase-7 polish. *@
+                <RadzenText TextStyle="TextStyle.Caption">Markdown</RadzenText>
+                <RadzenTextArea Name="ContentMd" @bind-Value="@Model.Content" Rows="10" Style="width: 100%; font-family: var(--rz-monospace-font-family, monospace); min-width: 320px;" />
+                <RadzenRequiredValidator Component="ContentMd" Text="Content is required." />
             </RadzenColumn>
             <RadzenRow>
                 <RadzenColumn>
@@ -44,6 +65,10 @@
     public ContentFormat ContentFormat { get; set; }
 
     private ContentEditModel Model { get; set; }
+
+    /// <summary>True when the operator is editing a row in a language other than the team's
+    /// default. Drives the warning banner above the editor.</summary>
+    private bool IsNonDefaultLanguage => (LanguageStateService.Selected?.Key ?? Guid.Empty) != Guid.Empty;
 
     protected override async Task OnInitializedAsync()
     {

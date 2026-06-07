@@ -1,0 +1,23 @@
+@using Quilt4Net.Toolkit.Features.Content.Pages
+@using Radzen.Blazor
+
+@* Shown when the server returns an element type the toolkit doesn't recognise — i.e. the server
+   has shipped a new element type (Image, Video, Resource…) and the consumer hasn't upgraded the
+   Quilt4Net.Toolkit.Blazor package yet. We render an info alert instead of throwing so the rest
+   of the page still loads. *@
+<RadzenAlert AlertStyle="AlertStyle.Info" Variant="Variant.Flat" Shade="Shade.Light" AllowClose="false">
+    Newer toolkit required for element type '<strong>@(_serverType ?? "unknown")</strong>'.
+</RadzenAlert>
+
+@code {
+    [Parameter, EditorRequired]
+    public ContentElementDto Element { get; set; }
+
+    /// <summary>Optional raw type string the host can pass when it knows the server-side name —
+    /// useful in tests, but normally the placeholder just says "unknown" since the wire collapses
+    /// unrecognised types to <see cref="ElementType.Unknown"/>.</summary>
+    [Parameter]
+    public string ServerTypeHint { get; set; }
+
+    private string _serverType => ServerTypeHint ?? Element?.Type.ToString();
+}

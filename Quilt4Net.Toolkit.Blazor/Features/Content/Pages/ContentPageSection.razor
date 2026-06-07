@@ -1,0 +1,50 @@
+@using Quilt4Net.Toolkit.Features.Content.Pages
+
+@* Each layout is a thin CSS-grid (or block) wrapper. Element-renderer pick happens once per
+   element via the if-chain — keeping it inline avoids a generic ChildContent component per
+   element type which would balloon the render tree. *@
+@if (!string.IsNullOrWhiteSpace(Section.Title))
+{
+    <h2 class="quilt4net-content-section-title">@Section.Title</h2>
+}
+
+<div class="quilt4net-content-section @LayoutCssClass" style="@LayoutInlineStyle">
+    @foreach (var element in OrderedElements)
+    {
+        @if (element.Type == ElementType.Headline) { <HeadlineElement Element="element" /> }
+        else if (element.Type == ElementType.Text) { <TextElement Element="element" /> }
+        else if (element.Type == ElementType.Quotation) { <QuotationElement Element="element" /> }
+        else if (element.Type == ElementType.Divider) { <DividerElement Element="element" /> }
+        else { <MissingElementPlaceholder Element="element" /> }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ContentSectionDto Section { get; set; }
+
+    private IEnumerable<ContentElementDto> OrderedElements
+    {
+        get
+        {
+            if (Section?.Elements == null) return Array.Empty<ContentElementDto>();
+            return Section.Elements.OrderBy(e => e.Order);
+        }
+    }
+
+    private string LayoutCssClass => Section.Layout switch
+    {
+        SectionLayout.TwoColumn => "quilt4net-layout-two-column",
+        SectionLayout.Hero => "quilt4net-layout-hero",
+        _ => "quilt4net-layout-one-column",
+    };
+
+    // Inline fallback styles so the layout works even when the consumer hasn't added a stylesheet.
+    // Consumers that want to restyle can override via the class selectors above.
+    private string LayoutInlineStyle => Section.Layout switch
+    {
+        SectionLayout.TwoColumn => "display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem;",
+        SectionLayout.Hero => "padding: 2rem 0; text-align: center;",
+        _ => null,
+    };
+}

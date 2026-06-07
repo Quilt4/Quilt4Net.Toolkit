@@ -1,0 +1,26 @@
+@using Quilt4Net.Toolkit.Features.Content.Pages
+
+@* Level is the heading rank (1-6 → h1-h6). Anything outside that range is clamped to keep the
+   document outline meaningful even if an operator types 0 or 99. *@
+@if (ClampedLevel == 1) { <h1>@Element.Text</h1> }
+else if (ClampedLevel == 2) { <h2>@Element.Text</h2> }
+else if (ClampedLevel == 3) { <h3>@Element.Text</h3> }
+else if (ClampedLevel == 4) { <h4>@Element.Text</h4> }
+else if (ClampedLevel == 5) { <h5>@Element.Text</h5> }
+else { <h6>@Element.Text</h6> }
+
+@code {
+    [Parameter, EditorRequired]
+    public ContentElementDto Element { get; set; }
+
+    private int ClampedLevel
+    {
+        get
+        {
+            if (Element == null) return 2;
+            if (Element.Level < 1) return 2;        // h1 is reserved for the page title
+            if (Element.Level > 6) return 6;
+            return Element.Level;
+        }
+    }
+}

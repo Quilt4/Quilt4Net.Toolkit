@@ -1,3 +1,5 @@
+@using Quilt4Net.Toolkit.Blazor.Features.Content.Pages
+@using Tharga.Blazor.Features.BreadCrumbs
 @* Header (with sidebar-collapse toggle, brand, and the LanguageSelector) + sidebar (panel menu)
    live together here — same shape as Quilt4Net.Server's NavMenu. Menu items use the toolkit's
    content-driven Quilt4RadzenPanelMenuItem so labels can be edited via ContentAdmin. *@
@@ -6,6 +8,7 @@
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
             <RadzenSidebarToggle Click="@(() => _menuExpanded = !_menuExpanded)" />
             <RadzenText TextStyle="TextStyle.H6" Text="Quilt4Net Blazor Sample" Style="margin: 0;" />
+            <BreadCrumbs />
         </RadzenStack>
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem" Style="padding-right: 1rem;">
             <LanguageSelector />
@@ -20,6 +23,7 @@
         <Quilt4RadzenPanelMenuItem TextKey="menu.configuration" DefaultText="Configuration" Icon="tune" Path="/configuration" />
         <Quilt4RadzenPanelMenuItem TextKey="menu.log" DefaultText="Log" Icon="description" Path="/log" />
         <Quilt4RadzenPanelMenuItem TextKey="menu.admin" DefaultText="Content Admin" Icon="admin_panel_settings" Path="/admin" />
+        <ContentMenu RoutePrefix="/pages/" WrapInPanelMenu="false" />
     </RadzenPanelMenu>
 </RadzenSidebar>
 
