@@ -5,13 +5,28 @@
 @* Self-referencing recursive helper. Each instance renders a RadzenPanelMenuItem for its own
    page, then nests one of these for each child (filtered to ShowInMenu) sorted by Order.
    The recursion terminates naturally — a leaf has no children, so the inner @foreach loops zero
-   times and the menu item renders with no nested content. *@
-<RadzenPanelMenuItem Text="@Item.Title" Path="@Href">
-    @foreach (var child in Children)
-    {
-        <ContentMenuItem Item="child" AllItems="AllItems" RoutePrefix="@RoutePrefix" />
-    }
-</RadzenPanelMenuItem>
+   times and the menu item renders with no nested content.
+
+   Radzen quirk: a RadzenPanelMenuItem with a Path is treated as a navigation leaf — click
+   always navigates, never expands. So parents with children render with NO Path (expand-only);
+   leaves render WITH Path (navigate). If the operator wants a parent to also be navigable, they
+   can author an explicit child with the same slug as the parent. *@
+@{
+    var hasChildren = Children.Any();
+}
+@if (hasChildren)
+{
+    <RadzenPanelMenuItem Text="@Item.Title">
+        @foreach (var child in Children)
+        {
+            <ContentMenuItem Item="child" AllItems="AllItems" RoutePrefix="@RoutePrefix" />
+        }
+    </RadzenPanelMenuItem>
+}
+else
+{
+    <RadzenPanelMenuItem Text="@Item.Title" Path="@Href" />
+}
 
 @code {
     [Parameter, EditorRequired]

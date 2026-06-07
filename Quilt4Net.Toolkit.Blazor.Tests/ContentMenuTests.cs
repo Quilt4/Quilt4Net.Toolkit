@@ -1,6 +1,7 @@
 using Bunit;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Quilt4Net.Toolkit.Blazor.Features.Content.Pages;
 using Quilt4Net.Toolkit.Features.Content;
 using Quilt4Net.Toolkit.Features.Content.Pages;
@@ -12,11 +13,13 @@ namespace Quilt4Net.Toolkit.Blazor.Tests;
 public class ContentMenuTests : BunitContext
 {
     private readonly StubReader _reader = new();
+    private readonly StubHostEnvironment _hostEnvironment = new() { EnvironmentName = "Development" };
 
     public ContentMenuTests()
     {
         Services.AddSingleton<IContentPageReader>(_reader);
         Services.AddSingleton<ILanguageStateService>(new StubLanguageState());
+        Services.AddSingleton<IHostEnvironment>(_hostEnvironment);
         // RadzenPanelMenu pulls these services from DI; without them the component throws during
         // render and the test never gets to assert on markup.
         Services.AddScoped<DialogService>();
@@ -127,16 +130,73 @@ public class ContentMenuTests : BunitContext
     }
 
     [Fact]
-    public void Renders_nothing_when_reader_returns_an_empty_tree()
+    public void Shows_empty_placeholder_when_reader_returns_an_empty_tree()
     {
-        // No menu items registered => render the panel-menu shell with no items. Used to be a
-        // crash when RootItems referenced an uninitialised list; guard against regression.
+        // No menu items registered => render a disabled placeholder so a developer can tell
+        // "no data" apart from "component not rendering". Silent absence is the worst failure
+        // mode — ApiKey missing, wrong address, or no ShowInMenu pages all look identical
+        // otherwise.
         _reader.Items = [];
 
         var cut = Render<ContentMenu>();
 
-        cut.Markup.Should().NotContain("undefined");
-        cut.Markup.Should().NotBeEmpty();        // the panel-menu container still renders
+        cut.Markup.Should().Contain("(no menu pages)");
+    }
+
+    [Fact]
+    public void Suppresses_empty_placeholder_when_ShowEmptyPlaceholder_is_false()
+    {
+        // Production hosts that don't want the dev affordance can opt out — the menu then renders
+        // an empty shell instead of the placeholder row.
+        _reader.Items = [];
+
+        var cut = Render<ContentMenu>(p => p.Add(x => x.ShowEmptyPlaceholder, false));
+
+        cut.Markup.Should().NotContain("(no menu pages)");
+    }
+
+    [Fact]
+    public void Hides_empty_placeholder_by_default_in_non_development_environments()
+    {
+        // Default is environment-aware: shown in Development (dev affordance), hidden in
+        // Production (end users shouldn't see the dev hint).
+        _hostEnvironment.EnvironmentName = "Production";
+        _reader.Items = [];
+
+        var cut = Render<ContentMenu>();
+
+        cut.Markup.Should().NotContain("(no menu pages)");
+    }
+
+    [Fact]
+    public void Forces_empty_placeholder_on_in_non_development_when_explicitly_true()
+    {
+        // Explicit override beats the env-aware default in both directions.
+        _hostEnvironment.EnvironmentName = "Production";
+        _reader.Items = [];
+
+        var cut = Render<ContentMenu>(p => p.Add(x => x.ShowEmptyPlaceholder, true));
+
+        cut.Markup.Should().Contain("(no menu pages)");
+    }
+
+    [Fact]
+    public void Parent_with_children_is_rendered_without_a_Path_so_it_can_expand()
+    {
+        // Radzen quirk: RadzenPanelMenuItem with a Path is a navigation leaf — clicking always
+        // navigates, never expands. So parents (items with children) must omit Path. Leaves keep
+        // Path so they navigate. Verify by checking the rendered href set: only leaf slugs appear.
+        _reader.Items =
+        [
+            new ContentMenuItemDto { Id = "1", Slug = "docs", Title = "Documentation", Order = 1, ShowInMenu = true },
+            new ContentMenuItemDto { Id = "2", Slug = "docs/intro", Title = "Intro", Order = 1, ShowInMenu = true, ParentPageId = "1" },
+        ];
+
+        var cut = Render<ContentMenu>();
+
+        cut.Markup.Should().NotContain("href=\"/docs\"");       // parent: no Path
+        cut.Markup.Should().NotContain("href=\"docs\"");        // (defensive against href shape)
+        cut.Markup.Should().Contain("docs/intro");              // leaf: navigable
     }
 
     private sealed class StubReader : IContentPageReader
@@ -148,6 +208,14 @@ public class ContentMenuTests : BunitContext
 
         public Task<IReadOnlyList<ContentMenuItemDto>> GetTreeAsync(Guid languageKey, string application = null)
             => Task.FromResult(Items);
+    }
+
+    private sealed class StubHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Development";
+        public string ApplicationName { get; set; } = "Tests";
+        public string ContentRootPath { get; set; } = string.Empty;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 
     private sealed class StubLanguageState : ILanguageStateService
