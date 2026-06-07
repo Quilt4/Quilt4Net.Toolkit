@@ -72,5 +72,18 @@ public static class ContentRegistration
             var logger = s.GetService<ILogger<RemoteContentCallService>>();
             return new RemoteContentCallService(environmentName, co, httpClientFactory, logger);
         });
+
+        // Same factory pattern as RemoteContentCallService — EnvironmentName isn't a globally
+        // registered type, it's resolved per-component from IHostEnvironment. Singleton so the
+        // reader can hold caches later (Phase 2 keeps it stateless).
+        services.AddSingleton<Features.Content.Pages.IContentPageReader>(s =>
+        {
+            var env = s.GetService<IHostEnvironment>();
+            var co = s.GetService<IOptions<ContentOptions>>();
+            var environmentName = new Features.FeatureToggle.EnvironmentName { Name = env?.EnvironmentName ?? "Production" };
+            var httpClientFactory = s.GetRequiredService<IHttpClientFactory>();
+            var logger = s.GetService<ILogger<Features.Content.Pages.RemoteContentPageReader>>();
+            return new Features.Content.Pages.RemoteContentPageReader(environmentName, co, httpClientFactory, logger);
+        });
     }
 }

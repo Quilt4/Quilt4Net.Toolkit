@@ -1,0 +1,14 @@
+@using Quilt4Net.Toolkit.Features.Content.Pages
+
+<blockquote class="quilt4net-content-quotation">
+    <p>@Element.Text</p>
+    @if (!string.IsNullOrWhiteSpace(Element.Attribution))
+    {
+        <footer>— <cite>@Element.Attribution</cite></footer>
+    }
+</blockquote>
+
+@code {
+    [Parameter, EditorRequired]
+    public ContentElementDto Element { get; set; }
+}

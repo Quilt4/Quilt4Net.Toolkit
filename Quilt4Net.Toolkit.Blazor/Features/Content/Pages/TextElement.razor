@@ -1,0 +1,13 @@
+@using Quilt4Net.Toolkit.Features.Content.Pages
+
+<div class="quilt4net-content-text">
+    @((MarkupString)(Element.Html ?? ""))
+</div>
+
+@code {
+    @* Server pre-renders Markdown via Markdig with `DisableHtml()` so raw HTML inside source is
+       escaped, not passed through. The toolkit emits the result via MarkupString — same approach
+       as the existing Quilt4Content snippet renderer. *@
+    [Parameter, EditorRequired]
+    public ContentElementDto Element { get; set; }
+}

@@ -32,6 +32,9 @@ public static class Quilt4ContentRegistration
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddScoped<IQuilt4ContentService, Quilt4ContentService>();
         services.AddScoped<IContentAdminService, ContentAdminService>();
+        // Default adapter forwards to Tharga.Blazor's BreadCrumbService when registered, silently
+        // no-ops otherwise. TryAdd so a host can swap in their own adapter ahead of this call.
+        services.TryAddScoped<Features.Content.Pages.IPageBreadcrumbAdapter, Features.Content.Pages.TharBlazorBreadcrumbAdapter>();
         // TryAdd so AddQuilt4NetBlazor*-AI registrations can register it too without conflict.
         services.TryAddScoped<IBrowserTimeZoneAccessor, BrowserTimeZoneAccessor>();
         services.AddBlazoredLocalStorage();
