@@ -99,6 +99,105 @@ Renders a Radzen button with managed text.
 | `Click` | Async click handler (`Func<Task>`). |
 | `Style` | Custom CSS styles. |
 
+## Hierarchical pages
+
+Snippets (`Quilt4Content`, `Quilt4Text`, …) are key/value content embedded in a host page's
+markup. **Pages** are the full thing — a hierarchical tree of pages, each composed of sections
+and typed elements, authored in the Quilt4Net.Server admin. The consumer hosts a single route
+and lets the toolkit render whichever page the slug resolves to.
+
+### Reader
+
+Add a catch-all route in your consumer app:
+
+```razor
+@page "/pages/{*Slug}"
+@using Quilt4Net.Toolkit.Blazor.Features.Content.Pages
+
+<ContentPageView Slug="@Slug" SlugRoutePrefix="/pages/" />
+
+@code {
+    [Parameter] public string Slug { get; set; }
+}
+```
+
+`<ContentPageView>` fetches the page via `IContentPageReader`, renders title + sections, and
+pushes the ancestor chain into Tharga.Blazor's `BreadCrumbService` (when registered — silent
+no-op otherwise). Section layouts (`OneColumn` / `TwoColumn` / `Hero`) ship with inline-style
+fallbacks so it renders sensibly with no stylesheet. Page not found at any stage in the fallback
+chain renders a `RadzenAlert` instead of throwing. Element types unknown to the toolkit fall
+back to a `<MissingElementPlaceholder>` so a down-version client doesn't blank the page.
+
+Parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `Slug` | Slug to render (required). |
+| `SlugRoutePrefix` | Path-prefix breadcrumb links use, e.g. `/pages/`. Default `/`. |
+| `NotFoundMessage` | Text shown when no page exists. Default `"Page not found."`. |
+| `Application` | Application override forwarded to the reader. Most consumers leave null. |
+
+### Menu
+
+`<ContentMenu>` renders the page tree as a `RadzenPanelMenu`, filtering to `ShowInMenu` pages
+and sorted by `Order`. Hosts that already have their own `RadzenPanelMenu` slot the items inline
+with `WrapInPanelMenu="false"`:
+
+```razor
+<RadzenPanelMenu>
+    <Quilt4RadzenPanelMenuItem TextKey="menu.home" DefaultText="Home" Icon="home" Path="/" />
+    <ContentMenu RoutePrefix="/pages/" WrapInPanelMenu="false" />
+</RadzenPanelMenu>
+```
+
+Auto-refreshes on `NavigationManager.LocationChanged` so a menu that came up empty (server
+unreachable at boot) recovers without a manual page reload. Re-fetches on language change too.
+
+Parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `RoutePrefix` | Path-prefix for generated hrefs. Default `/`. Pass `/pages/` for the route above. |
+| `WrapInPanelMenu` | `true` (default) emits its own `RadzenPanelMenu`; `false` emits just items for inline use. |
+| `ShowEmptyPlaceholder` | `null` (default) shows `(no menu pages)` in development, hides in production. Override with `true`/`false`. |
+| `EmptyPlaceholderText` | Placeholder text. Default `(no menu pages)`. |
+| `Application` | Application override forwarded to the reader. |
+
+Radzen quirk to know about: a `RadzenPanelMenuItem` with a `Path` is treated as a navigation
+leaf and won't expand. So `<ContentMenu>` automatically omits `Path` on parents (items with
+children). If you want a parent to also navigate, author an explicit child with the same slug.
+
+### Breadcrumbs
+
+`<ContentPageView>` pushes ancestors + the page itself into Tharga.Blazor's `BreadCrumbService`
+via the `IPageBreadcrumbAdapter` abstraction (`TharBlazorBreadcrumbAdapter` is the default
+implementation, registered automatically). To display them, add `<BreadCrumbs />` to your
+layout — and register Tharga.Blazor in `Program.cs`:
+
+```csharp
+using Tharga.Blazor.Framework;
+
+builder.Services.AddThargaBlazor(o => { o.Title = "My Site"; });
+```
+
+Hosts that don't register `AddThargaBlazor` get a silent no-op (the adapter looks up
+`BreadCrumbService` optionally), so the reader still works without Tharga.Blazor's breadcrumb
+system.
+
+### Pages from code
+
+Inject `IContentPageReader` to fetch programmatically:
+
+```csharp
+@inject IContentPageReader PageReader
+
+var page = await PageReader.GetBySlugAsync("about", languageKey, application: null);
+var menuItems = await PageReader.GetTreeAsync(languageKey);
+```
+
+The default-language sentinel is `Guid.Empty`. The reader returns `null` for a missing page and
+an empty list for an empty/unreachable tree — neither throws.
+
 ## Content from code
 
 Inject `IQuilt4ContentService` to retrieve content programmatically. It automatically uses the currently selected language.
