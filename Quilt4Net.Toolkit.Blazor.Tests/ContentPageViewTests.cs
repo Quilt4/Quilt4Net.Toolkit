@@ -176,6 +176,9 @@ public class ContentPageViewTests : BunitContext
 
         public Task<ContentPageDto> GetBySlugAsync(string slug, Guid languageKey, string application = null)
             => Task.FromResult(Page);
+
+        public Task<IReadOnlyList<ContentMenuItemDto>> GetTreeAsync(Guid languageKey, string application = null)
+            => Task.FromResult<IReadOnlyList<ContentMenuItemDto>>(Array.Empty<ContentMenuItemDto>());
     }
 
     private sealed class StubLanguageState : ILanguageStateService

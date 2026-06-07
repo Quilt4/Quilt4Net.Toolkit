@@ -74,4 +74,40 @@ internal sealed class RemoteContentPageReader : IContentPageReader
             return null;
         }
     }
+
+    public async Task<IReadOnlyList<ContentMenuItemDto>> GetTreeAsync(Guid languageKey, string application = null)
+    {
+        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return [];
+
+        var effectiveApplication = application ?? _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+
+        try
+        {
+            using var cts = new CancellationTokenSource(_contentOptions.HttpTimeout);
+            using var client = _httpClientFactory.CreateClient(Features.Content.RemoteContentCallService.HttpClientName);
+
+            var query = $"env={WebUtility.UrlEncode(_environmentName?.Name ?? "")}&languageKey={languageKey}&application={WebUtility.UrlEncode(effectiveApplication ?? "")}";
+            var response = await client.GetAsync($"Api/ContentPage/tree?{query}", cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to fetch content page tree. Response was {StatusCode} {ReasonPhrase}.",
+                    response.StatusCode, response.ReasonPhrase);
+                return [];
+            }
+
+            return await response.Content.ReadFromJsonAsync<ContentMenuItemDto[]>(cancellationToken: cts.Token) ?? [];
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("HTTP request timed out fetching content page tree after {Timeout}ms.",
+                _contentOptions.HttpTimeout.TotalMilliseconds);
+            return [];
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "{Message} Falling back to empty menu tree.", e.Message);
+            return [];
+        }
+    }
 }

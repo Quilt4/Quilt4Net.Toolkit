@@ -1,0 +1,65 @@
+@using Quilt4Net.Toolkit.Features.Content.Pages
+@using Radzen
+@using Radzen.Blazor
+@implements IDisposable
+@inject IContentPageReader ContentPageReader
+@inject ILanguageStateService LanguageStateService
+
+<RadzenPanelMenu DisplayStyle="MenuItemDisplayStyle.IconAndText" ShowArrow="false">
+    @foreach (var root in RootItems)
+    {
+        <ContentMenuItem Item="root" AllItems="_items" RoutePrefix="@RoutePrefix" />
+    }
+</RadzenPanelMenu>
+
+@code {
+    private IReadOnlyList<ContentMenuItemDto> _items = Array.Empty<ContentMenuItemDto>();
+
+    /// <summary>Path-prefix the menu items link to. Defaults to <c>"/"</c> — pass
+    /// <c>"/content/"</c> when the consumer's route is <c>/content/{*slug}</c>.</summary>
+    [Parameter]
+    public string RoutePrefix { get; set; } = "/";
+
+    /// <summary>Application override forwarded to the reader.</summary>
+    [Parameter]
+    public string Application { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += OnLanguageChanged;
+        await LoadAsync();
+    }
+
+    private async void OnLanguageChanged(object sender, EventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAsync()
+    {
+        var languageKey = LanguageStateService.Selected?.Key ?? Guid.Empty;
+        _items = await ContentPageReader.GetTreeAsync(languageKey, Application);
+        StateHasChanged();
+    }
+
+    private IEnumerable<ContentMenuItemDto> RootItems
+    {
+        get
+        {
+            // A root is a ShowInMenu page with no parent OR with a parent that isn't itself
+            // ShowInMenu / not in our set — the latter case keeps half-hidden subtrees visible
+            // instead of orphaning the leaves when an operator unticks ShowInMenu mid-tree.
+            if (_items == null || _items.Count == 0) return Array.Empty<ContentMenuItemDto>();
+            var visibleIds = _items.Where(i => i.ShowInMenu).Select(i => i.Id).ToHashSet();
+            return _items
+                .Where(i => i.ShowInMenu && (string.IsNullOrEmpty(i.ParentPageId) || !visibleIds.Contains(i.ParentPageId)))
+                .OrderBy(i => i.Order);
+        }
+    }
+
+    public void Dispose()
+    {
+        LanguageStateService.LanguageChangedEvent -= OnLanguageChanged;
+    }
+}

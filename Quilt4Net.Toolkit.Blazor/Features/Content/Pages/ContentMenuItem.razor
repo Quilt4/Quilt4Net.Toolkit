@@ -1,0 +1,38 @@
+@using Quilt4Net.Toolkit.Features.Content.Pages
+@using Radzen
+@using Radzen.Blazor
+
+@* Self-referencing recursive helper. Each instance renders a RadzenPanelMenuItem for its own
+   page, then nests one of these for each child (filtered to ShowInMenu) sorted by Order.
+   The recursion terminates naturally — a leaf has no children, so the inner @foreach loops zero
+   times and the menu item renders with no nested content. *@
+<RadzenPanelMenuItem Text="@Item.Title" Path="@Href">
+    @foreach (var child in Children)
+    {
+        <ContentMenuItem Item="child" AllItems="AllItems" RoutePrefix="@RoutePrefix" />
+    }
+</RadzenPanelMenuItem>
+
+@code {
+    [Parameter, EditorRequired]
+    public ContentMenuItemDto Item { get; set; }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ContentMenuItemDto> AllItems { get; set; }
+
+    [Parameter]
+    public string RoutePrefix { get; set; } = "/";
+
+    private string Href => $"{RoutePrefix.TrimEnd('/')}/{Item.Slug}";
+
+    private IEnumerable<ContentMenuItemDto> Children
+    {
+        get
+        {
+            if (AllItems == null) return Array.Empty<ContentMenuItemDto>();
+            return AllItems
+                .Where(i => i.ShowInMenu && i.ParentPageId == Item.Id)
+                .OrderBy(i => i.Order);
+        }
+    }
+}
