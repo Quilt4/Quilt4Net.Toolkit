@@ -1,8 +1,8 @@
 ﻿namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
 /// <summary>
-/// How a content value should be rendered. Stored on <see cref="ContentEntity"/> as the BSON
-/// string representation so future additions don't break old documents.
+/// How a content value should be rendered. Stored on the server's <c>ContentEntity</c> as the
+/// BSON string representation so future additions don't break old documents.
 /// </summary>
 public enum ContentFormat
 {
