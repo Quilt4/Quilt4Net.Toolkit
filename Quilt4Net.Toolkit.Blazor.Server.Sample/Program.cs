@@ -3,13 +3,24 @@ using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Blazor;
 using Quilt4Net.Toolkit.Blazor.Server.Sample.Components;
 using Radzen;
+using Tharga.Blazor.Framework;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Registers Radzen's DialogService / NotificationService / ContextMenuService / TooltipService.
+// The visual hosts (RadzenDialog / RadzenNotification / ...) live in MainLayout.razor.
 builder.Services.AddRadzenComponents();
+
+// Tharga.Blazor's BreadCrumbService (used by <BreadCrumbs /> in NavMenu and by the toolkit's
+// IPageBreadcrumbAdapter when the page reader pushes its ancestor chain). No team service
+// wired up since the Sample doesn't have auth — pass the bare minimum config.
+builder.Services.AddThargaBlazor(o =>
+{
+    o.Title = "Quilt4Net Blazor Sample";
+});
 
 builder.AddQuilt4NetBlazorContent(o =>
 {

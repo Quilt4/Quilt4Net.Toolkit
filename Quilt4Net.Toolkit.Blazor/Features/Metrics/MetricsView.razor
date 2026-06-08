@@ -1,0 +1,241 @@
+@using Microsoft.Extensions.DependencyInjection
+@using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Blazor.Framework
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IServiceProvider ServiceProvider
+@inject IApplicationInsightsService Ai
+@implements System.IDisposable
+
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+    return;
+}
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    @* RadzenStack horizontal + FlexWrap.Wrap so each filter sizes to its content and the row
+       reflows onto extra lines as the window narrows — same shape as LogCountByServiceView /
+       VersionMatrixDisplay / /monitor/log. *@
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+        @if (_selector != null && _selector.Available.Count > 1)
+        {
+            <ApplicationInsightsConfigurationDropdown />
+        }
+        else if (Configs is { Count: > 1 })
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
+                <RadzenDropDown Data="@Configs" @bind-Value="_selectedConfig" TValue="ApplicationInsightsConfigurationResponse"
+                                TextProperty="Name" Change="@(_ => ReloadAsync(force: false))" />
+            </RadzenStack>
+        }
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+            <RadzenSelectBar @bind-Value="_window" TValue="System.TimeSpan" Size="ButtonSize.Small"
+                             Change="@(_ => ReloadAsync(force: false))">
+                <Items>
+                    <RadzenSelectBarItem Text="1h" Value="@System.TimeSpan.FromHours(1)" />
+                    <RadzenSelectBarItem Text="24h" Value="@System.TimeSpan.FromHours(24)" />
+                    <RadzenSelectBarItem Text="7d" Value="@System.TimeSpan.FromDays(7)" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+        @* Test toggle: forwards to FullPercentScale on the CPU/Memory charts. Flipping it doesn't
+           re-fetch data — the Y-axis just redraws against a fixed 0..100 vs auto-scaled range. *@
+        @* <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_fullPercentScale" TValue="bool" Name="fullPercentScale" />
+            <RadzenLabel Component="fullPercentScale" Text="0–100 % scale" />
+        </RadzenStack> *@
+        @* Native `title` tooltip — DataAgeFormat reports the absolute load timestamp (restored
+           from the scoped cache on page-navigation revisit) so the text doesn't go stale between
+           renders the way a relative "X minutes ago" string would. *@
+        <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                      IsBusy="@_busy"
+                      title="@DataAgeFormat.Describe(_lastRefreshUtc, _browserTime?.Current, _cacheTtl)"
+                      Click="@(_ => ReloadAsync(force: true))" />
+    </RadzenStack>
+
+    @if (_loadError != null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+            Could not query Application Insights: @_loadError
+        </RadzenAlert>
+    }
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
+        <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+        <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+        @* Disk free uses a bar-per-host snapshot — over a 1h/24h/7d window the value barely
+           moves so a line chart degenerates into N flat lines. The bar gives the current value
+           at a glance, the delta badge (▼ −1.2 GB / 24h) signals trend direction with a
+           free-space-is-good colour scheme, and the inline sparkline keeps the shape visible
+           for cases where a sudden drop matters. *@
+        <MetricLatestChart Title="Disk free (GB)" Unit="GB" Samples="@_disk" Capacity="@_diskCapacity" Range="@_window" Loading="@_busy" LessIsBad="true" />
+        @* Network values commonly span 3-4 orders of magnitude across hosts — idle web boxes sit
+           at ~0.01 MB/s while a single backup job spikes to 50+ MB/s. On a linear axis the idle
+           hosts vanish into a flat line at the bottom; log scale gives each host's shape its own
+           visible band. Ticks reverse-format back to MB/s so the axis still reads naturally. *@
+        <MetricChart Title="Network (MB/s)" Unit="MB/s" Samples="@_network" Loading="@_busy" LogScale="true" />
+    </div>
+</RadzenStack>
+
+@code {
+    private string _configError;
+    private string _loadError;
+    private bool _busy;
+    private System.DateTime? _lastRefreshUtc;
+    private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
+    private System.TimeSpan _window = System.TimeSpan.FromHours(1);
+    // Default ON — matches the new MetricChart default. Wired to the page's "0–100 % scale" switch
+    // so testers can toggle the axis pinning live without code changes.
+    private bool _fullPercentScale = true;
+
+    private MetricSample[] _cpu = [];
+    private MetricSample[] _memory = [];
+    private MetricSample[] _disk = [];
+    private MetricSample[] _network = [];
+    private DiskCapacity[] _diskCapacity = [];
+
+    private IApplicationInsightsConfigurationSelector _selector;
+    private ApplicationInsightsConfigurationResponse _selectedConfig;
+    private MetricsSeriesCache _scopedCache;
+    private IBrowserTimeZoneAccessor _browserTime;
+
+    /// <summary>Optional explicit context. When set, the selector is ignored.</summary>
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    /// <summary>
+    /// Optional explicit set of configurations to pick from. When more than one is supplied a
+    /// dropdown is rendered. Takes precedence over the DI selector; ignored when <see cref="Context"/>
+    /// is set. Mirrors the same parameter on <c>LogView</c> so the two compose on the same page.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ApplicationInsightsConfigurationResponse> Configs { get; set; }
+
+    private IApplicationInsightsContext EffectiveContext
+        => Context ?? _selectedConfig ?? _selector?.Selected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Scoped cache: per-circuit so the four series + load timestamp survive page navigation.
+        // Optional — hosts that didn't call AddQuilt4NetBlazorApplicationInsightsClientRemote
+        // still work, they just lose cross-page persistence.
+        _scopedCache = ServiceProvider.GetService<MetricsSeriesCache>();
+        _browserTime = ServiceProvider.GetService<IBrowserTimeZoneAccessor>();
+
+        // Explicit Context / Configs bypass the DI selector entirely.
+        if (Context == null && Configs is not { Count: > 0 })
+        {
+            _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+            if (_selector != null)
+            {
+                _selector.OnChanged += OnSelectorChanged;
+                if (!_selector.IsLoaded)
+                {
+                    await _selector.LoadAsync();
+                }
+            }
+        }
+
+        if (Configs is { Count: > 0 } && _selectedConfig == null)
+        {
+            _selectedConfig = Configs[0];
+        }
+
+        if (EffectiveContext == null)
+        {
+            _configError = "No Application Insights configuration available.";
+            return;
+        }
+
+        await ReloadAsync(force: false);
+    }
+
+    private async void OnSelectorChanged()
+    {
+        await InvokeAsync(() => ReloadAsync(force: false));
+    }
+
+    private async Task ReloadAsync(bool force)
+    {
+        var ctx = EffectiveContext;
+        if (ctx == null) return;
+        var key = MetricsSeriesCache.KeyForContext(ctx);
+
+        if (force)
+        {
+            _scopedCache?.Invalidate(key, _window);
+        }
+
+        // Cache hit: render immediately and skip the spinner. The restored LoadedUtc keeps the
+        // refresh-button tooltip honest ("Data loaded at 14:03:11") across page navigations.
+        if (!force && _scopedCache != null && _scopedCache.TryGet(key, _window, _cacheTtl, out var entry))
+        {
+            _cpu = entry.Cpu;
+            _memory = entry.Memory;
+            _disk = entry.Disk;
+            _network = entry.Network;
+            _diskCapacity = entry.DiskCapacity;
+            _lastRefreshUtc = entry.LoadedUtc;
+            _loadError = null;
+            _busy = false;
+            StateHasChanged();
+            return;
+        }
+
+        _busy = true;
+        _loadError = null;
+        StateHasChanged();
+        try
+        {
+            // Sequential, not parallel — keeps the AI query rate-limit polite. Charts paint as
+            // each completes via StateHasChanged between awaits.
+            _cpu = await Ai.GetCpuUtilizationAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            _memory = await Ai.GetMemoryUtilizationAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            _disk = await Ai.GetDiskFreeAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            // Capacity is sequenced with the other queries so a single-query failure can't leave
+            // the bars half-rendered. It's quick — one KQL pass that aggregates per volume.
+            _diskCapacity = await Ai.GetDiskCapacityAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            _network = await Ai.GetNetworkThroughputAsync(ctx, _window).ToArrayAsync();
+            // Stamp the load completion. Only on success — a failed load shouldn't claim freshness.
+            var loadedUtc = System.DateTime.UtcNow;
+            _lastRefreshUtc = loadedUtc;
+            _scopedCache?.Set(key, _window, _cpu, _memory, _disk, _network, _diskCapacity, loadedUtc);
+        }
+        catch (System.Exception e)
+        {
+            _loadError = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // JS interop is unavailable during prerender, so the browser timezone lookup runs
+            // here on the first interactive render. The accessor is optional in DI: when a host
+            // doesn't call AddQuilt4NetBlazorContent or AddQuilt4NetBlazorApplicationInsightsClient-
+            // Remote, the charts simply fall back to TimeZoneInfo.Local (handled in MetricChart).
+            var browserTime = ServiceProvider.GetService<IBrowserTimeZoneAccessor>();
+            if (browserTime != null)
+            {
+                await browserTime.EnsureLoadedAsync();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
+    }
+}

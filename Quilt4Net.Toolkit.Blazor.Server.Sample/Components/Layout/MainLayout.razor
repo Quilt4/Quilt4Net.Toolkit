@@ -1,20 +1,20 @@
 @inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@* RadzenComponents bundles DialogService / NotificationService / TooltipService / ContextMenuService
+   visual hosts into a single component. Match Quilt4Net.Server's setup. *@
+<RadzenComponents @rendermode="InteractiveAuto" />
 
-    <main>
-        <div class="top-row px-4">
-            <LanguageSelector @rendermode="InteractiveServer" />
-        </div>
-
-        <article class="content px-4">
+<RadzenLayout>
+    <NavMenu />
+    <RadzenBody>
+        <article class="content" style="padding: 1.5rem;">
             @Body
         </article>
-    </main>
-</div>
+    </RadzenBody>
+    <RadzenFooter>
+        Quilt4Net Blazor Sample
+    </RadzenFooter>
+</RadzenLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.

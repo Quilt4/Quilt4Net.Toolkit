@@ -1,0 +1,119 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.Content.Pages
+@using Radzen.Blazor
+@inject IContentPageReader ContentPageReader
+@inject ILanguageStateService LanguageStateService
+@inject IPageBreadcrumbAdapter BreadcrumbAdapter
+
+@if (_loading)
+{
+    <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" ShowValue="false" />
+}
+else if (_page == null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Variant="Variant.Flat" Shade="Shade.Light" AllowClose="false">
+        @NotFoundMessage
+    </RadzenAlert>
+}
+else
+{
+    <article class="quilt4net-content-page">
+        <header>
+            <h1 class="quilt4net-content-page-title">@_page.Title</h1>
+        </header>
+        @foreach (var section in OrderedSections)
+        {
+            <ContentPageSection Section="section" />
+        }
+    </article>
+}
+
+@code {
+    private ContentPageDto _page;
+    private bool _loading = true;
+
+    /// <summary>Slug to render. Setting it (or the language changing) re-fetches.</summary>
+    [Parameter, EditorRequired]
+    public string Slug { get; set; }
+
+    /// <summary>Override the host route that breadcrumb links point to. Defaults to
+    /// <c>/{slug}</c>; consumers mounted under <c>/content/{*slug}</c> should pass
+    /// <c>"/content/"</c>.</summary>
+    [Parameter]
+    public string SlugRoutePrefix { get; set; } = "/";
+
+    /// <summary>Custom not-found message — defaults to a generic line. Override when the page is a
+    /// known consumer route so the message can read naturally.</summary>
+    [Parameter]
+    public string NotFoundMessage { get; set; } = "Page not found.";
+
+    /// <summary>Application override forwarded to the reader. Most consumers leave this null.</summary>
+    [Parameter]
+    public string Application { get; set; }
+
+    private IEnumerable<ContentSectionDto> OrderedSections
+    {
+        get
+        {
+            if (_page?.Sections == null) return Array.Empty<ContentSectionDto>();
+            return _page.Sections.OrderBy(s => s.Order);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += OnLanguageChanged;
+        await LoadAsync();
+    }
+
+    /// <summary>Called by Blazor when the parent re-renders with a different <see cref="Slug"/>.
+    /// Without this, navigating from <c>/about</c> to <c>/contact</c> would still show the cached
+    /// "/about" content because <see cref="OnInitializedAsync"/> only fires once per component.</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        // OnInit triggers a load too, so guard against double-fetching by only re-loading when the
+        // slug or language actually changed AFTER the first init.
+        if (_page != null && !string.Equals(_page.Slug, Slug, StringComparison.OrdinalIgnoreCase))
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnLanguageChanged(object sender, EventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var languageKey = LanguageStateService.Selected?.Key ?? Guid.Empty;
+        _page = await ContentPageReader.GetBySlugAsync(Slug, languageKey, Application);
+        _loading = false;
+
+        if (_page != null) PushBreadcrumbs();
+        StateHasChanged();
+    }
+
+    private void PushBreadcrumbs()
+    {
+        // Ancestors are already root → parent ordered. Tack the current page on as the leaf.
+        var chain = new List<PageBreadcrumbSegment>(_page.Ancestors.Count + 1);
+        foreach (var ancestor in _page.Ancestors)
+        {
+            chain.Add(new PageBreadcrumbSegment(ancestor.Title, BuildHref(ancestor.Slug)));
+        }
+        chain.Add(new PageBreadcrumbSegment(_page.Title, BuildHref(_page.Slug)));
+        BreadcrumbAdapter.Push(chain);
+    }
+
+    private string BuildHref(string slug) => $"{SlugRoutePrefix.TrimEnd('/')}/{slug}";
+
+    public void Dispose()
+    {
+        LanguageStateService.LanguageChangedEvent -= OnLanguageChanged;
+    }
+}

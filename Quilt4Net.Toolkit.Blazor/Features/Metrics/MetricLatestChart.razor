@@ -1,0 +1,306 @@
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+
+@* Bar-per-host snapshot of the most recent value, with a delta-vs-window-start badge and a tiny
+   sparkline of the trend. Used in place of <MetricChart> for metrics where the absolute current
+   value matters more than its shape over time (disk free is the canonical case — disk space
+   doesn't fluctuate minute-to-minute so a line chart degenerates into N flat lines that all
+   require the operator to read the y-axis to make sense of them). *@
+<RadzenCard Style="padding: 1rem; min-height: 320px; display: flex; flex-direction: column;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Style="margin-bottom: 0.5rem;">
+        <RadzenText TextStyle="TextStyle.H6" Text="@Title" Style="margin: 0;" />
+        @if (Loading)
+        {
+            <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Primary" Size="ProgressBarCircularSize.Small" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        }
+    </RadzenStack>
+
+    @if (_rows.Count == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Caption"
+                    Text="@(Loading ? "Loading…" : "No data in the selected range.")"
+                    Style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--rz-text-tertiary-color);" />
+    }
+    else
+    {
+        @* RadzenRow + RadzenColumn at each host. Five columns: Drive | Size-bar | Size-text |
+           Change-text | Change-graph. Radzen's underlying Bootstrap-style grid resolves each
+           Size against the row's parent width — identical across sibling rows — so each cell's
+           x position lines up vertically. Size totals 12: drive(3) + bar(2) + text(3) +
+           change(2) + graph(2). *@
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+            @foreach (var row in _rows)
+            {
+                <RadzenRow AlignItems="AlignItems.Center" Gap="0.5rem">
+                    <RadzenColumn Size="3">
+                        <div class="quilt-metric-host" title="@row.Host">@row.Host</div>
+                    </RadzenColumn>
+                    <RadzenColumn Size="2">
+                        <div class="quilt-metric-bar" title="@BarTooltip(row)">
+                            <div class="quilt-metric-bar-fill" style="@BarFillStyle(row)"></div>
+                        </div>
+                    </RadzenColumn>
+                    <RadzenColumn Size="3">
+                        <div class="quilt-metric-value" title="@FormatValueCell(row)">@FormatValueCell(row)</div>
+                    </RadzenColumn>
+                    <RadzenColumn Size="2">
+                        <div class="quilt-metric-delta" style="@($"color: {row.DeltaColor};")" title="@row.DeltaTooltip">@row.DeltaLabel</div>
+                    </RadzenColumn>
+                    <RadzenColumn Size="2">
+                        @if (!string.IsNullOrEmpty(row.SparkPoints))
+                        {
+                            <svg class="quilt-metric-sparkline" viewBox="0 0 100 24" preserveAspectRatio="none" title="@row.DeltaTooltip">
+                                <polyline points="@row.SparkPoints" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <span class="quilt-metric-sparkline-empty">—</span>
+                        }
+                    </RadzenColumn>
+                </RadzenRow>
+            }
+        </RadzenStack>
+    }
+</RadzenCard>
+
+<style>
+    /* Layout is RadzenRow + RadzenColumn (Bootstrap-like 12-column grid). The .quilt-metric-*
+       classes below style individual cells; cross-row alignment is handled by RadzenColumn Size. */
+    .quilt-metric-host {
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .quilt-metric-bar {
+        background: var(--rz-base);
+        border-radius: 4px;
+        height: 10px;
+        overflow: hidden;
+        /* Fill grows from the LEFT — the colored portion (free space) sits at the bar's left
+           edge, the empty portion fills the right. Natural reading direction: a longer fill
+           means more free, shorter means filling up. */
+    }
+    .quilt-metric-bar-fill {
+        background: var(--rz-primary, #2196f3);
+        height: 100%;
+        transition: width 200ms ease-out;
+    }
+    .quilt-metric-value {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .quilt-metric-delta {
+        font-size: 0.85rem;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+    .quilt-metric-sparkline {
+        width: 100%;
+        height: 24px;
+        color: var(--rz-text-tertiary-color);
+    }
+    .quilt-metric-sparkline-empty {
+        text-align: center;
+        color: var(--rz-text-tertiary-color);
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; }
+    [Parameter] public string Unit { get; set; }
+    [Parameter] public MetricSample[] Samples { get; set; } = [];
+
+    /// <summary>The time window the samples cover; used for the delta-badge suffix ("/ 24h").</summary>
+    [Parameter] public System.TimeSpan Range { get; set; }
+
+    [Parameter] public bool Loading { get; set; }
+
+    /// <summary>
+    /// Optional per-series capacity (typically free+used+reserved for disk volumes). When supplied,
+    /// the bar fill represents the latest value as a percent of capacity ("42 GB of 60 GB free")
+    /// — the operator-meaningful scale — instead of a relative max-across-hosts comparison. Series
+    /// names that don't match any entry here fall back to the max-across-hosts scale.
+    /// </summary>
+    [Parameter] public DiskCapacity[] Capacity { get; set; } = [];
+
+    /// <summary>
+    /// True when a downward trend is bad — appropriate for "free / available" metrics like
+    /// Disk free where less is worse. When false (utilisation metrics like CPU/memory %),
+    /// an upward trend is bad instead. The colour and arrow direction of the delta badge
+    /// follows this flag.
+    /// </summary>
+    [Parameter] public bool LessIsBad { get; set; } = true;
+
+    private readonly System.Collections.Generic.List<Row> _rows = new();
+    private double _maxValue;
+    private bool _hasCapacity;
+
+    private sealed record Row(
+        string Host,
+        double Value,
+        double? TotalCapacity,
+        string DeltaLabel,
+        string DeltaColor,
+        string DeltaTooltip,
+        string SparkPoints,
+        double BarPercent);
+
+    protected override void OnParametersSet()
+    {
+        _rows.Clear();
+        _maxValue = 0;
+
+        if (Samples == null || Samples.Length == 0) return;
+
+        // Build a capacity lookup once so each row can ask "what's my total" by series key. Empty /
+        // null capacity is fine — rows then fall back to the cross-host max-value scale.
+        var capacityByVolume = (Capacity ?? [])
+            .Where(c => c.TotalGb > 0)
+            .GroupBy(c => c.Series ?? "", System.StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().TotalGb, System.StringComparer.OrdinalIgnoreCase);
+        _hasCapacity = capacityByVolume.Count > 0;
+
+        // One row per Series (e.g. "host" for CPU/mem, "host / device" for disk).
+        var grouped = Samples
+            .GroupBy(s => s.Series ?? "")
+            .OrderBy(g => g.Key, System.StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var ordered = g.OrderBy(s => s.Timestamp).ToArray();
+                return new { Host = g.Key, Points = ordered, Newest = ordered[^1].Value, Oldest = ordered[0].Value };
+            })
+            .ToList();
+
+        // Fallback scale for series with no capacity entry. Largest current value across hosts.
+        var maxNewest = grouped.Count == 0 ? 1 : System.Math.Max(grouped.Max(g => g.Newest), 1e-9);
+        // _maxValue tracks what the bars are scaled against for the tooltip — when capacity is in
+        // play it's per-row, so we keep the cross-host max only as a fallback signal.
+        _maxValue = maxNewest;
+
+        foreach (var g in grouped)
+        {
+            var delta = g.Newest - g.Oldest;
+            // Use the per-volume capacity as the bar denominator when we have it: a half-full bar
+            // genuinely means "this volume is half full", regardless of how big the neighbouring
+            // volume is. Series without a capacity entry fall back to cross-host max scaling.
+            double? capacity = capacityByVolume.TryGetValue(g.Host, out var cap) ? cap : null;
+            var (label, color, tooltip) = FormatDelta(delta, g.Points, capacity);
+            var spark = BuildSparkline(g.Points);
+            var bar = capacity is { } c
+                ? g.Newest / c * 100
+                : g.Newest / maxNewest * 100;
+            if (bar < 0) bar = 0;
+            if (bar > 100) bar = 100;
+            _rows.Add(new Row(g.Host, g.Newest, capacity, label, color, tooltip, spark, bar));
+        }
+    }
+
+    private (string Label, string Color, string Tooltip) FormatDelta(double delta, MetricSample[] points, double? capacity)
+    {
+        // "near zero" threshold scaled to the metric range — 1% of capacity (when known) or of the
+        // cross-host max, floored at 0.05. Stops a stray ±0.0001 GB jiggle from reading as a "△".
+        var refValue = capacity ?? _maxValue;
+        var noiseFloor = System.Math.Max(0.05, refValue * 0.01);
+        var capacitySuffix = capacity is { } c ? $" of {c:N1} {Unit}" : "";
+        if (System.Math.Abs(delta) < noiseFloor)
+        {
+            return ("— no change", "var(--rz-text-tertiary-color)", $"Steady at {points[^1].Value:N1} {Unit}{capacitySuffix} over the last {FormatRange(Range)}.");
+        }
+
+        var arrow = delta > 0 ? "▲" : "▼";
+        var bad = LessIsBad ? delta < 0 : delta > 0;
+        var color = bad ? "var(--rz-danger, #d32f2f)" : "var(--rz-success, #2e7d32)";
+        var sign = delta > 0 ? "+" : "−";
+        var label = $"{arrow} {sign}{System.Math.Abs(delta):N1} {Unit} / {FormatRange(Range)}";
+        var tooltip = $"Was {points[0].Value:N1} {Unit}{capacitySuffix} {FormatRange(Range)} ago; now {points[^1].Value:N1} {Unit}{capacitySuffix}.";
+        return (label, color, tooltip);
+    }
+
+    private string FormatValueCell(Row row)
+    {
+        // "42.1 / 60.0 GB" when capacity is known — fits a glance. Without capacity, fall back to
+        // just the value with its unit. Percent goes in the bar tooltip, not crammed into the cell.
+        return row.TotalCapacity is { } cap
+            ? $"{row.Value.ToString("N1", System.Globalization.CultureInfo.CurrentCulture)} / {cap.ToString("N1", System.Globalization.CultureInfo.CurrentCulture)} {Unit}"
+            : $"{row.Value.ToString("N1", System.Globalization.CultureInfo.CurrentCulture)} {Unit}";
+    }
+
+    private string BarFillStyle(Row row)
+    {
+        // Only the capacity-bound case earns a colour signal — "10% of 60 GB free" is a real
+        // alert; "10% of the host with the most space" isn't comparable across volumes. Defaults
+        // to Radzen --rz-primary; switches to warning at <20% and danger at <10% of capacity when
+        // LessIsBad (the disk-free semantics). When !LessIsBad (utilisation metrics where up is
+        // bad), thresholds flip: warning at >80%, danger at >90%.
+        var width = row.BarPercent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+        var color = "var(--rz-primary, #2196f3)";
+        if (row.TotalCapacity is not null)
+        {
+            var pct = row.BarPercent;
+            if (LessIsBad)
+            {
+                if (pct < 10) color = "var(--rz-danger, #d32f2f)";
+                else if (pct < 20) color = "var(--rz-warning, #f9a825)";
+            }
+            else
+            {
+                if (pct > 90) color = "var(--rz-danger, #d32f2f)";
+                else if (pct > 80) color = "var(--rz-warning, #f9a825)";
+            }
+        }
+        return $"width: {width}%; background: {color};";
+    }
+
+    private string BarTooltip(Row row)
+    {
+        // When we have capacity, the bar is a real percentage of the volume — meaningful on its
+        // own. Without capacity, callers see "scaled relative to the host with the most" so they
+        // don't misread a short bar as "almost empty" when it just means "smaller than another".
+        return row.TotalCapacity is { } cap
+            ? $"{row.BarPercent:0.#}% of {cap:N1} {Unit} capacity."
+            : $"Bar scaled to the largest current value across hosts ({_maxValue:N1} {Unit}).";
+    }
+
+    private static string FormatRange(System.TimeSpan r)
+    {
+        // Short token used in the delta badge — "1h", "24h", "7d". Matches the Range selector chips.
+        if (r.TotalDays >= 1) return $"{(int)System.Math.Round(r.TotalDays)}d";
+        if (r.TotalHours >= 1) return $"{(int)System.Math.Round(r.TotalHours)}h";
+        return $"{(int)System.Math.Round(r.TotalMinutes)}m";
+    }
+
+    /// <summary>
+    /// SVG polyline points for a tiny inline sparkline. Each sample maps linearly to the 0..100
+    /// x range; y is normalised to the per-series min/max so the line uses the full vertical
+    /// space — the sparkline shows *shape*, not absolute height (that's the bar's job).
+    /// </summary>
+    private static string BuildSparkline(MetricSample[] points)
+    {
+        if (points.Length < 2) return string.Empty;
+
+        var min = double.PositiveInfinity;
+        var max = double.NegativeInfinity;
+        foreach (var p in points)
+        {
+            if (p.Value < min) min = p.Value;
+            if (p.Value > max) max = p.Value;
+        }
+        var span = max - min;
+        if (span <= 0) span = 1; // flat line — render mid-height
+
+        var sb = new System.Text.StringBuilder(points.Length * 10);
+        for (var i = 0; i < points.Length; i++)
+        {
+            var x = i / (double)(points.Length - 1) * 100.0;
+            var yNorm = span <= 0 ? 0.5 : (points[i].Value - min) / span; // 0..1, higher = larger value
+            var y = 23.0 - yNorm * 22.0; // invert: SVG y grows downward; pad 1px top/bottom
+            if (i > 0) sb.Append(' ');
+            sb.Append(x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append(',');
+            sb.Append(y.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+        }
+        return sb.ToString();
+    }
+}

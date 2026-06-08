@@ -1,0 +1,589 @@
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
+@using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Blazor.Framework
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IServiceProvider ServiceProvider
+@inject IApplicationInsightsService Ai
+@inject IOptions<ApplicationInsightsOptions> AiOptions
+@implements IDisposable
+
+@* TTL applied to both the scoped cell cube and the service-level TtlCache below it: a flip away
+   and back within 10 minutes shows the cached cube; after that we re-fetch. The Refresh button
+   still force-evicts both layers and runs a fresh KQL pass. *@
+
+@* Pivot of log counts: rows = services, columns = severity. Configuration / Environment / Source
+   are all multi-select with "nothing selected = include all" semantics; only Range changes hit
+   AI — every other filter toggle is a local regroup over the cell cube already in memory. Each
+   distinct Range is cached for the lifetime of the circuit so flipping back to 1h after 24h is
+   instant. *@
+
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+    return;
+}
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    @* RadzenStack horizontal + FlexWrap.Wrap so each filter sizes to its content and the row
+       reflows onto extra lines as the window narrows — matches /monitor/log's behaviour. With
+       a RadzenRow/RadzenColumn grid the columns share width evenly, leaving the narrow Range
+       column padded with whitespace; with RadzenStack each child takes only the space it needs.
+       Refresh sits last so it lines up on the right at full width, and falls below the chips
+       on narrow views. *@
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+        @if (_candidateConfigs.Count > 1)
+        {
+            <div class="quilt-nowrap-buttons">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                    <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
+                    <RadzenSelectBar @bind-Value="_selectedConfigIds" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
+                                     Change="@(_ => RecomputeRows())">
+                        <Items>
+                            @foreach (var c in _candidateConfigs)
+                            {
+                                <RadzenSelectBarItem Text="@c.Name" Value="@c.Id" />
+                            }
+                        </Items>
+                    </RadzenSelectBar>
+                </RadzenStack>
+            </div>
+        }
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+            <RadzenSelectBar @bind-Value="_window" TValue="System.TimeSpan" Size="ButtonSize.Small"
+                             Change="@(_ => OnRangeChangedAsync())">
+                <Items>
+                    <RadzenSelectBarItem Text="1h" Value="@System.TimeSpan.FromHours(1)" />
+                    <RadzenSelectBarItem Text="24h" Value="@System.TimeSpan.FromHours(24)" />
+                    <RadzenSelectBarItem Text="7d" Value="@System.TimeSpan.FromDays(7)" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+        @if (_candidateEnvironments.Count > 0)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Environment" />
+                <RadzenSelectBar @bind-Value="_selectedEnvironments" TValue="IEnumerable<string>" Multiple="true" Size="ButtonSize.Small"
+                                 Change="@(_ => RecomputeRows())">
+                    <Items>
+                        @foreach (var env in _candidateEnvironments)
+                        {
+                            <RadzenSelectBarItem Text="@env" Value="@env" />
+                        }
+                    </Items>
+                </RadzenSelectBar>
+            </RadzenStack>
+        }
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Source" />
+            <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
+                             Change="@(_ => RecomputeRows())">
+                <Items>
+                    <RadzenSelectBarItem Text="Trace" Value="LogSource.Trace" />
+                    <RadzenSelectBarItem Text="Exception" Value="LogSource.Exception" />
+                    <RadzenSelectBarItem Text="Request" Value="LogSource.Request" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+        @* Per-machine toggle: regroups the cell cube by (Service, Machine, Severity) instead of
+           (Service, Severity). Same data, pure local recompute — no fetch. *@
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+            <RadzenSwitch @bind-Value="_perMachine" TValue="bool" Name="perMachine"
+                          Change="@(_ => RecomputeRows())" />
+            <RadzenLabel Component="perMachine" Text="Per machine" />
+        </RadzenStack>
+        @* Native `title` tooltip — fixed at render time, but DataAgeFormat now reports the
+           absolute load timestamp (not a relative age) so it doesn't drift between renders. The
+           timestamp itself is restored from the scoped cache on revisit, so even a stale render
+           shows the real fetch time. *@
+        <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light"
+                      IsBusy="@_busy"
+                      title="@DataAgeFormat.Describe(_lastRefreshUtc, _browserTime?.Current, _cacheTtl)"
+                      Click="@(_ => ReloadAsync(force: true))" />
+    </RadzenStack>
+
+    <style>
+        /* Configuration names can run long; without this they wrap inside the SelectBar pill
+           and turn into two-line buttons. white-space:nowrap keeps each option on one line
+           and lets the SelectBar size to its content. */
+        .quilt-nowrap-buttons .rz-button-text { white-space: nowrap; }
+    </style>
+
+    @if (_loadError != null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+            Could not query Application Insights: @_loadError
+        </RadzenAlert>
+    }
+
+    @if (_busy)
+    {
+        <Loading />
+    }
+    else if (_rows.Count == 0)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
+            No log entries in the selected range / filter combination.
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenDataGrid Data="@_rows" TItem="ServiceRow" AllowSorting="true">
+            <Columns>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Service" Property="@nameof(ServiceRow.Service)" SortOrder="SortOrder.Ascending">
+                    <FooterTemplate><strong>Total</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Machine" Property="@nameof(ServiceRow.Machine)" Visible="@_perMachine" />
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Verbose" Property="@nameof(ServiceRow.Verbose)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Verbose].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Information" Property="@nameof(ServiceRow.Information)" Width="140px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Information].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Warning" Property="@nameof(ServiceRow.Warning)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Warning].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Error" Property="@nameof(ServiceRow.Error)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Error].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Critical" Property="@nameof(ServiceRow.Critical)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Critical].ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Total" Property="@nameof(ServiceRow.Total)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
+                    <FooterTemplate><strong>@_grandTotal.ToString("N0")</strong></FooterTemplate>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+</RadzenStack>
+
+@code {
+    private string _configError;
+    private string _loadError;
+    private bool _busy;
+    private System.TimeSpan _window = System.TimeSpan.FromHours(24);
+
+    // Candidate sets (everything offered by the AI workspaces) — separate from the user's picks.
+    private IReadOnlyList<ApplicationInsightsConfigurationResponse> _candidateConfigs = [];
+    private IReadOnlyList<string> _candidateEnvironments = [];
+
+    // Current user selections. Empty enumerable everywhere means "include all".
+    private IEnumerable<string> _selectedConfigIds = [];
+    private IEnumerable<string> _selectedEnvironments = [];
+    private IEnumerable<LogSource> _selectedSources = [];
+    // Per-machine toggle. When on, rows are keyed on (Service, Machine) instead of Service —
+    // each machine gets its own row in the grid. Default off; pure local regroup on flip.
+    private bool _perMachine;
+
+    // Per-range cache of every cell fetched from AI (across every candidate config). Filter
+    // changes recompute _rows from this map — no fetch. Range changes look up / populate it.
+    // Each cell is tagged with its owning config id so the configuration filter is local too.
+    //
+    // Backing storage is the scoped LogCountCellCache when available (survives page navigation
+    // within the same Blazor circuit), otherwise this in-component dictionary (lost on dispose).
+    // All access goes through TryGetCells / SetCells / InvalidateCells so the component doesn't
+    // care which path is live.
+    private readonly Dictionary<System.TimeSpan, IReadOnlyList<LogCountTaggedCell>> _cellCache = new();
+    private LogCountCellCache _scopedCellCache;
+
+    // Output of the current filter combination — what the grid binds to + the pinned totals row.
+    private List<ServiceRow> _rows = [];
+    private Dictionary<SeverityLevel, long> _columnTotals = NewEmptyTotals();
+    private long _grandTotal;
+    private System.DateTime? _lastRefreshUtc; // for the refresh-button "loaded at" tooltip
+    private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
+    private Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor _browserTime;
+
+    private IApplicationInsightsConfigurationSelector _selector;
+
+    /// <summary>Optional explicit context. When set, the configuration multi-select is bypassed.</summary>
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    /// <summary>
+    /// Optional explicit set of configurations. Multi-select bar lists these; "nothing selected"
+    /// means aggregate across all. Takes precedence over the DI selector; ignored when
+    /// <see cref="Context"/> is set.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ApplicationInsightsConfigurationResponse> Configs { get; set; }
+
+    /// <summary>
+    /// Preferred display order for environments. Named entries come first in the supplied order;
+    /// any extras the AI workspace surfaces fall back to alphabetical. When null,
+    /// <see cref="EnvironmentOrdering.DefaultOrder"/> (Development, CI, Staging, Test, Production)
+    /// is used. Hosts that pull a team-specific order from their own config — e.g. via
+    /// <c>IEnvironmentService</c> on Quilt4Net.Server — should pass it here.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string> EnvironmentOrder { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Scoped cache holds the cell cube across page navigations within this Blazor circuit.
+        // Optional — hosts that didn't call AddQuilt4NetBlazorApplicationInsightsClientRemote
+        // still work, they just lose the cross-page persistence.
+        _scopedCellCache = ServiceProvider.GetService<LogCountCellCache>();
+        // Browser timezone for the refresh-button tooltip; optional, falls back to server-local.
+        _browserTime = ServiceProvider.GetService<Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor>();
+
+        // _busy stays true through env discovery + the first fetch so the loading spinner is the
+        // only thing on screen between component mount and the data landing. The exception is a
+        // warm scoped cache: if the current range is already cached we skip the spinner entirely
+        // and render synchronously — that's the point of the scoped cache.
+        _busy = true;
+        StateHasChanged();
+
+        try
+        {
+            // Resolve the candidate-config set first — explicit Context bypasses selection.
+            if (Context == null)
+            {
+                if (Configs is { Count: > 0 })
+                {
+                    _candidateConfigs = Configs;
+                }
+                else
+                {
+                    _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+                    if (_selector != null)
+                    {
+                        _selector.OnChanged += OnSelectorChanged;
+                        if (!_selector.IsLoaded) await _selector.LoadAsync();
+                        _candidateConfigs = _selector.Available ?? [];
+                    }
+                }
+
+                if (_candidateConfigs.Count == 0)
+                {
+                    _configError = "No Application Insights configuration available.";
+                    _busy = false;
+                    return;
+                }
+            }
+
+            // Warm-load from the scoped cache before deciding whether to spin: if the default
+            // range is already there, ReloadAsync will see it and short-circuit the fetch. We also
+            // adopt the entry's LoadedUtc so the refresh-button tooltip reports the real fetch time
+            // (not the moment this component instance happened to mount).
+            if (TryGetScopedCacheEntry(_window, out var warm))
+            {
+                _cellCache[_window] = warm.Cells;
+                _lastRefreshUtc = warm.LoadedUtc;
+            }
+
+            await LoadEnvironmentsAsync();
+            await ReloadAsync(force: false);
+        }
+        finally
+        {
+            // ReloadAsync clears _busy on success; this guards the early returns and exceptions.
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Configs identity for the scoped cache key — explicit Context uses its own slot;
+    /// otherwise the joined ids of the candidate configurations.</summary>
+    private string ConfigsCacheKey()
+        => Context != null
+            ? LogCountCellCache.KeyForContext(Context)
+            : LogCountCellCache.KeyForConfigs(_candidateConfigs.Select(c => c.Id));
+
+    private bool TryGetScopedCacheEntry(System.TimeSpan range, out LogCountCellCache.CacheEntry entry)
+    {
+        entry = default;
+        return _scopedCellCache != null && _scopedCellCache.TryGet(ConfigsCacheKey(), range, _cacheTtl, out entry);
+    }
+
+    private async void OnSelectorChanged() => await InvokeAsync(async () =>
+    {
+        _candidateConfigs = _selector?.Available ?? [];
+        _cellCache.Clear(); // workspaces changed; previous fetches are no longer authoritative
+        await LoadEnvironmentsAsync();
+        await ReloadAsync(force: false);
+    });
+
+    /// <summary>
+    /// Discover environments via <c>GetEnvironments</c> on each candidate context, then order them
+    /// using <see cref="EnvironmentOrdering.Order"/> with either the host-supplied
+    /// <see cref="EnvironmentOrder"/> or the options-level <see cref="ApplicationInsightsOptions.EnvironmentOrder"/>.
+    /// </summary>
+    private async Task LoadEnvironmentsAsync()
+    {
+        try
+        {
+            var contexts = ResolveAllContexts();
+            var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var ctx in contexts)
+            {
+                await foreach (var env in Ai.GetEnvironments(ctx))
+                {
+                    if (!string.IsNullOrWhiteSpace(env.Value)) set.Add(env.Value);
+                }
+            }
+            var order = EnvironmentOrder ?? AiOptions.Value.EnvironmentOrder;
+            _candidateEnvironments = EnvironmentOrdering.Order(set, order)
+                // EnvironmentOrdering appends the "(unknown)" sentinel for blank rows — we filter
+                // those out of the selectable set because the cube already carries the empty-string
+                // environment, which the "no selection = all" path handles transparently.
+                .Where(e => e != EnvironmentOrderingUnknownSentinel)
+                .ToArray();
+
+            // Drop any selected env that disappeared so the chip state doesn't lie.
+            _selectedEnvironments = _selectedEnvironments?
+                .Where(e => _candidateEnvironments.Contains(e, System.StringComparer.OrdinalIgnoreCase))
+                .ToArray() ?? [];
+        }
+        catch (System.Exception)
+        {
+            _candidateEnvironments = [];
+            _selectedEnvironments = [];
+        }
+    }
+
+    /// <summary>EnvironmentOrdering's internal sentinel is "(unknown)" — same literal here.</summary>
+    private const string EnvironmentOrderingUnknownSentinel = "(unknown)";
+
+    private IReadOnlyList<IApplicationInsightsContext> ResolveAllContexts()
+    {
+        if (Context != null) return [Context];
+        if (_candidateConfigs.Count == 0) return [];
+        return _candidateConfigs.Cast<IApplicationInsightsContext>().ToArray();
+    }
+
+    private async Task OnRangeChangedAsync()
+    {
+        // Range changes are the only filter that triggers a fetch. Cached ranges return instantly.
+        await ReloadAsync(force: false);
+    }
+
+    /// <summary>
+    /// Ensure the current range is in the cache (fetching from every candidate config in parallel
+    /// if not), then regroup into _rows. <paramref name="force"/> evicts the current range's
+    /// cache entry first — what the Refresh button does.
+    /// </summary>
+    private async Task ReloadAsync(bool force)
+    {
+        var contexts = ResolveAllContexts();
+        if (contexts.Count == 0)
+        {
+            _rows = [];
+            _columnTotals = NewEmptyTotals();
+            _grandTotal = 0;
+            return;
+        }
+
+        if (force)
+        {
+            _cellCache.Remove(_window);
+            _scopedCellCache?.Invalidate(ConfigsCacheKey(), _window);
+        }
+
+        // If the local dict misses, check the scoped cache before fetching — that's how a
+        // page-navigation revisit skips the AI round-trip (and the spinner) entirely. We pull
+        // the LoadedUtc back into _lastRefreshUtc too so the refresh-button tooltip stays
+        // accurate ("Data loaded at 14:03:11") instead of resetting to "now".
+        if (!_cellCache.ContainsKey(_window) && TryGetScopedCacheEntry(_window, out var cached))
+        {
+            _cellCache[_window] = cached.Cells;
+            _lastRefreshUtc = cached.LoadedUtc;
+        }
+
+        if (!_cellCache.ContainsKey(_window))
+        {
+            _busy = true;
+            _loadError = null;
+            StateHasChanged();
+            try
+            {
+                // Parallel fan-out across configs — each Log Analytics query is independent and
+                // typically takes seconds; running them in sequence multiplies the wait.
+                var range = _window;
+                var perContext = await System.Threading.Tasks.Task.WhenAll(contexts.Select(async ctx =>
+                {
+                    var configId = (ctx as ApplicationInsightsConfigurationResponse)?.Id ?? "";
+                    var cells = await Ai.GetLogCountByServiceAsync(ctx, range).ToArrayAsync();
+                    return cells.Select(c => new LogCountTaggedCell(configId, c)).ToArray();
+                }));
+                var merged = perContext.SelectMany(x => x).ToArray();
+                _cellCache[_window] = merged;
+                // Stamp the load completion so the refresh-button tooltip can report the actual
+                // fetch time. Only on success — a failed load shouldn't claim freshness.
+                var loadedUtc = System.DateTime.UtcNow;
+                _lastRefreshUtc = loadedUtc;
+                _scopedCellCache?.Set(ConfigsCacheKey(), _window, merged, loadedUtc);
+            }
+            catch (System.Exception e)
+            {
+                _loadError = e.Message;
+                _cellCache[_window] = System.Array.Empty<LogCountTaggedCell>();
+                // Don't poison the scoped cache with an empty failure result — leave the slot
+                // missing so the next visit can re-attempt instead of being stuck on "no data".
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+
+        RecomputeRows();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Pure client-side: slice the cached cell cube by the current configuration / environment /
+    /// source selections (empty selection = include all), aggregate counts by (service, severity),
+    /// and rebuild the column totals + grand total for the pinned footer row. Called whenever any
+    /// non-range filter toggles.
+    /// <para>
+    /// Row keyset is the *unfiltered* set of services seen in the current range — so toggling a
+    /// filter never makes a service vanish; it just zeroes its row. That keeps the table stable
+    /// across filter clicks and makes "this app stopped logging warnings to Production" visible
+    /// as a row that drops to zero rather than disappearing.
+    /// </para>
+    /// </summary>
+    private void RecomputeRows()
+    {
+        if (!_cellCache.TryGetValue(_window, out var allCells))
+        {
+            _rows = [];
+            _columnTotals = NewEmptyTotals();
+            _grandTotal = 0;
+            return;
+        }
+
+        var configSet = (_selectedConfigIds ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var envSet = (_selectedEnvironments ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var sourceSet = (_selectedSources ?? []).ToHashSet();
+
+        // Row key shape depends on the per-machine toggle: (Service, "") when off — every machine
+        // collapses into one row per service — vs (Service, Machine) when on — one row per
+        // (service, machine) tuple. Cells with empty Machine read "(unknown)" so they stay
+        // distinguishable from real-named hosts.
+        string MachineKey(LogCountTaggedCell t) => _perMachine
+            ? (string.IsNullOrWhiteSpace(t.Cell.Machine) ? "(unknown)" : t.Cell.Machine)
+            : "";
+
+        // Pre-collect every (service, machine) pair that appears in the range's cube. These are the
+        // rows we render no matter what the filter matches — entries with no matches show a row of
+        // zeros so toggling a filter never makes a row vanish (keeps the grid stable across clicks).
+        var allKeys = allCells
+            .Select(t => (Service: t.Cell.Service ?? "unknown", Machine: MachineKey(t)))
+            .Distinct(new ServiceMachineComparer())
+            .ToArray();
+
+        var aggregated = new Dictionary<(string Service, string Machine, SeverityLevel Severity), long>(
+            new ServiceMachineSeverityComparer());
+        foreach (var t in allCells)
+        {
+            if (configSet.Count > 0 && !configSet.Contains(t.ConfigId)) continue;
+            if (envSet.Count > 0 && !envSet.Contains(t.Cell.Environment)) continue;
+            if (sourceSet.Count > 0 && !sourceSet.Contains(t.Cell.Source)) continue;
+
+            var key = (t.Cell.Service ?? "unknown", MachineKey(t), t.Cell.Severity);
+            aggregated[key] = aggregated.GetValueOrDefault(key) + t.Cell.Count;
+        }
+
+        _rows = allKeys
+            .OrderBy(k => k.Service, System.StringComparer.OrdinalIgnoreCase)
+            .ThenBy(k => k.Machine, System.StringComparer.OrdinalIgnoreCase)
+            .Select(k =>
+            {
+                var counts = new Dictionary<SeverityLevel, long>();
+                foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
+                {
+                    counts[sev] = aggregated.GetValueOrDefault((k.Service, k.Machine, sev));
+                }
+                return new ServiceRow(k.Service, k.Machine, counts);
+            })
+            .ToList();
+
+        _columnTotals = NewEmptyTotals();
+        foreach (var row in _rows)
+        {
+            foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
+            {
+                _columnTotals[sev] += row.GetCount(sev);
+            }
+        }
+        _grandTotal = _rows.Sum(r => r.Total);
+    }
+
+    /// <summary>
+    /// Case-insensitive comparer for the (Service, Machine, Severity) aggregation key so two
+    /// service / machine names that differ only in casing don't end up split across rows.
+    /// When the per-machine toggle is off, Machine is "" for every cell — the comparer still
+    /// works, the Machine axis just collapses into a single bucket per Service.
+    /// </summary>
+    private sealed class ServiceMachineSeverityComparer : IEqualityComparer<(string Service, string Machine, SeverityLevel Severity)>
+    {
+        public bool Equals((string Service, string Machine, SeverityLevel Severity) x, (string Service, string Machine, SeverityLevel Severity) y)
+            => x.Severity == y.Severity
+                && System.StringComparer.OrdinalIgnoreCase.Equals(x.Service, y.Service)
+                && System.StringComparer.OrdinalIgnoreCase.Equals(x.Machine, y.Machine);
+        public int GetHashCode((string Service, string Machine, SeverityLevel Severity) obj)
+            => System.HashCode.Combine(
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Service ?? ""),
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Machine ?? ""),
+                obj.Severity);
+    }
+
+    /// <summary>Same idea but for the row-key Distinct() — no severity dimension, just the
+    /// (Service, Machine) pair.</summary>
+    private sealed class ServiceMachineComparer : IEqualityComparer<(string Service, string Machine)>
+    {
+        public bool Equals((string Service, string Machine) x, (string Service, string Machine) y)
+            => System.StringComparer.OrdinalIgnoreCase.Equals(x.Service, y.Service)
+                && System.StringComparer.OrdinalIgnoreCase.Equals(x.Machine, y.Machine);
+        public int GetHashCode((string Service, string Machine) obj)
+            => System.HashCode.Combine(
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Service ?? ""),
+                System.StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Machine ?? ""));
+    }
+
+    private static Dictionary<SeverityLevel, long> NewEmptyTotals()
+    {
+        var d = new Dictionary<SeverityLevel, long>();
+        foreach (var sev in (SeverityLevel[])System.Enum.GetValues(typeof(SeverityLevel)))
+        {
+            d[sev] = 0L;
+        }
+        return d;
+    }
+
+    public void Dispose()
+    {
+        if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
+    }
+
+    /// <summary>
+    /// Row shape with one explicit property per severity so the grid can sort each amount column
+    /// numerically — sort works off of the property name, not a runtime Template expression.
+    /// </summary>
+    private sealed class ServiceRow
+    {
+        private readonly IReadOnlyDictionary<SeverityLevel, long> _counts;
+
+        public ServiceRow(string service, string machine, IReadOnlyDictionary<SeverityLevel, long> counts)
+        {
+            Service = service;
+            Machine = machine;
+            _counts = counts;
+            Total = counts.Values.Sum();
+        }
+
+        public string Service { get; }
+        // Empty when the per-machine toggle is off; the data grid's Machine column is hidden in
+        // that case (Visible="@_perMachine") so the empty string is never shown.
+        public string Machine { get; }
+        public long Verbose => GetCount(SeverityLevel.Verbose);
+        public long Information => GetCount(SeverityLevel.Information);
+        public long Warning => GetCount(SeverityLevel.Warning);
+        public long Error => GetCount(SeverityLevel.Error);
+        public long Critical => GetCount(SeverityLevel.Critical);
+        public long Total { get; }
+        public long GetCount(SeverityLevel s) => _counts.TryGetValue(s, out var v) ? v : 0;
+    }
+}

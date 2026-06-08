@@ -79,7 +79,7 @@
                     var payload = await item.Content.ReadFromJsonAsync<Article>();
                     defaultHtml = payload.content;
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     defaultHtml = $"No content for '{Key}'.";
                 }

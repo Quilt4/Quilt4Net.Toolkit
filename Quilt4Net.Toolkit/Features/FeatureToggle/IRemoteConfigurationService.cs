@@ -45,8 +45,10 @@ public interface IRemoteConfigurationService
     ValueTask<bool> GetToggleAsync(string key, bool fallback = default, TimeSpan? ttl = null, string application = "");
 
     /// <summary>
-    /// Lists all configuration entries (feature toggles and configuration values) for the current
-    /// application and environment — for admin / overview UIs.
+    /// Lists every configuration entry (feature toggles and configuration values) the calling API
+    /// key can read on the team — across all applications and environments. Intended for admin /
+    /// overview UIs (e.g. <c>RemoteConfigurationAdmin</c>); for per-app value lookup use
+    /// <see cref="GetAsync{T}(string, T, System.TimeSpan?, string)"/> instead.
     /// </summary>
     Task<ConfigurationResponse[]> GetAsync();
 

@@ -1,0 +1,132 @@
+@using Microsoft.Extensions.Hosting
+@using Quilt4Net.Toolkit.Features.Content.Pages
+@using Radzen
+@using Radzen.Blazor
+@implements IDisposable
+@inject IContentPageReader ContentPageReader
+@inject ILanguageStateService LanguageStateService
+@inject NavigationManager NavigationManager
+@inject IHostEnvironment HostEnvironment
+
+@* Two render modes:
+   - WrapInPanelMenu=true (default): emits its own RadzenPanelMenu shell, so dropping the
+     component into any layout produces a complete menu.
+   - WrapInPanelMenu=false: emits just the RadzenPanelMenuItem children, so a host that already
+     has its own RadzenPanelMenu (e.g. a NavMenu mixing static items with content-driven ones)
+     can slot it inline without nesting two panel menus — which Radzen renders as nothing. *@
+@* Empty-state placeholder: when ShowEmptyPlaceholder is true (default) AND there are no items,
+   we still emit a disabled RadzenPanelMenuItem so the developer sees *something* — silent absence
+   is the worst failure mode (api key missing / wrong address / no ShowInMenu pages all look the
+   same to the user otherwise). Consumers shipping to end users can set false to suppress this. *@
+@if (WrapInPanelMenu)
+{
+    <RadzenPanelMenu DisplayStyle="MenuItemDisplayStyle.IconAndText" ShowArrow="false">
+        @MenuBody
+    </RadzenPanelMenu>
+}
+else
+{
+    @MenuBody
+}
+
+@code {
+    private RenderFragment MenuBody => __builder =>
+    {
+        var rootItems = RootItems.ToArray();
+        if (rootItems.Length == 0)
+        {
+            if (ShouldShowPlaceholder)
+            {
+                <RadzenPanelMenuItem Text="@EmptyPlaceholderText" Icon="info" Disabled="true" />
+            }
+            return;
+        }
+
+        foreach (var root in rootItems)
+        {
+            <ContentMenuItem Item="root" AllItems="_items" RoutePrefix="@RoutePrefix" />
+        }
+    };
+}
+
+@code {
+    private IReadOnlyList<ContentMenuItemDto> _items = Array.Empty<ContentMenuItemDto>();
+
+    /// <summary>Path-prefix the menu items link to. Defaults to <c>"/"</c> — pass
+    /// <c>"/content/"</c> when the consumer's route is <c>/content/{*slug}</c>.</summary>
+    [Parameter]
+    public string RoutePrefix { get; set; } = "/";
+
+    /// <summary>Application override forwarded to the reader.</summary>
+    [Parameter]
+    public string Application { get; set; }
+
+    /// <summary>When <c>true</c> (default), wraps the items in a <c>RadzenPanelMenu</c>. Set to
+    /// <c>false</c> when slotting inside an existing <c>RadzenPanelMenu</c> so the items render
+    /// as direct children rather than producing a nested (invisible) panel menu.</summary>
+    [Parameter]
+    public bool WrapInPanelMenu { get; set; } = true;
+
+    /// <summary>Forces the empty-state placeholder on or off. Leave unset (default <c>null</c>) to
+    /// let the component pick automatically: shown in development, hidden in production. The
+    /// placeholder helps developers tell "no data yet" apart from "component not rendering", but
+    /// end-users on a production site don't need to see it.</summary>
+    [Parameter]
+    public bool? ShowEmptyPlaceholder { get; set; }
+
+    private bool ShouldShowPlaceholder => ShowEmptyPlaceholder ?? HostEnvironment.IsDevelopment();
+
+    /// <summary>Text shown in the empty-state placeholder. Defaults to a generic English label.</summary>
+    [Parameter]
+    public string EmptyPlaceholderText { get; set; } = "(no menu pages)";
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += OnLanguageChanged;
+        // Refresh on navigation so a menu that came up empty (server unreachable / no pages yet)
+        // recovers without the user manually reloading. The tree endpoint is cheap and the menu
+        // changes rarely, so the every-navigation cost is negligible vs. the UX win.
+        NavigationManager.LocationChanged += OnLocationChanged;
+        await LoadAsync();
+    }
+
+    private async void OnLanguageChanged(object sender, EventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnLocationChanged(object sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAsync()
+    {
+        var languageKey = LanguageStateService.Selected?.Key ?? Guid.Empty;
+        _items = await ContentPageReader.GetTreeAsync(languageKey, Application);
+        StateHasChanged();
+    }
+
+    private IEnumerable<ContentMenuItemDto> RootItems
+    {
+        get
+        {
+            // A root is a ShowInMenu page with no parent OR with a parent that isn't itself
+            // ShowInMenu / not in our set — the latter case keeps half-hidden subtrees visible
+            // instead of orphaning the leaves when an operator unticks ShowInMenu mid-tree.
+            if (_items == null || _items.Count == 0) return Array.Empty<ContentMenuItemDto>();
+            var visibleIds = _items.Where(i => i.ShowInMenu).Select(i => i.Id).ToHashSet();
+            return _items
+                .Where(i => i.ShowInMenu && (string.IsNullOrEmpty(i.ParentPageId) || !visibleIds.Contains(i.ParentPageId)))
+                .OrderBy(i => i.Order);
+        }
+    }
+
+    public void Dispose()
+    {
+        LanguageStateService.LanguageChangedEvent -= OnLanguageChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

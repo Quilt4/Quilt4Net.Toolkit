@@ -4,40 +4,52 @@
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 
-<RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" Style="margin-bottom: 0.5rem;">
+@* Label-above + horizontal flow, matching LogCountByServiceView / MetricsView / VersionMatrixDisplay.
+   At full width all four filter chips line up on one row; as the window narrows individual chips
+   wrap to extra lines. Configuration / Application names can be long — .quilt-nowrap-buttons keeps
+   each option on a single line so the SelectBar pill widens to fit instead of stacking text. *@
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap" Style="margin-bottom: 0.5rem;">
     @if (_sourceOptions.Length > 0)
     {
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-            <RadzenText Text="Source" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText Text="Source" TextStyle="TextStyle.Caption" />
             <RadzenSelectBar Data="@_sourceOptions" Value="@_value.Sources" TValue="IEnumerable<LogSource>" Multiple="true" AllowSelectAll="false"
                              Change="@(EventCallback.Factory.Create<IEnumerable<LogSource>>(this, OnSourcesChanged))" />
         </RadzenStack>
     }
     @if (_levelOptions.Length > 0)
     {
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-            <RadzenText Text="Level" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText Text="Level" TextStyle="TextStyle.Caption" />
             <RadzenSelectBar Data="@_levelOptions" Value="@_value.Levels" TValue="IEnumerable<SeverityLevel>" Multiple="true" AllowSelectAll="false"
                              Change="@(EventCallback.Factory.Create<IEnumerable<SeverityLevel>>(this, OnLevelsChanged))" />
         </RadzenStack>
     }
     @if (Applications is { Length: > 0 })
     {
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
-            <RadzenText Text="Application" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
-            <RadzenSelectBar Data="@Applications" Value="@_value.Applications" TValue="IEnumerable<string>" Multiple="true" AllowSelectAll="false"
-                             Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, OnApplicationsChanged))" />
-        </RadzenStack>
+        <div class="quilt-nowrap-buttons">
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText Text="Application" TextStyle="TextStyle.Caption" />
+                <RadzenSelectBar Data="@Applications" Value="@_value.Applications" TValue="IEnumerable<string>" Multiple="true" AllowSelectAll="false"
+                                 Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, OnApplicationsChanged))" />
+            </RadzenStack>
+        </div>
     }
     @if (Environments is { Length: > 0 })
     {
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
-            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" Style="min-width: 5rem;" />
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText Text="Environment" TextStyle="TextStyle.Caption" />
             <RadzenSelectBar Data="@Environments" Value="@_value.Environments" TValue="IEnumerable<string>" Multiple="true" AllowSelectAll="false"
                              Change="@(EventCallback.Factory.Create<IEnumerable<string>>(this, OnEnvironmentsChanged))" />
         </RadzenStack>
     }
 </RadzenStack>
+
+<style>
+    /* Application names can run long; without this they wrap inside the SelectBar pill and turn
+       into multi-line buttons. white-space:nowrap keeps each option on a single line. */
+    .quilt-nowrap-buttons .rz-button-text { white-space: nowrap; }
+</style>
 
 @code {
     private static readonly LogSource[] _sourceOptions = Enum.GetValues<LogSource>();

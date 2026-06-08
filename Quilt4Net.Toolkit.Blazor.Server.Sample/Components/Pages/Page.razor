@@ -1,0 +1,9 @@
+﻿@page "/pages/{*Slug}"
+@using Quilt4Net.Toolkit.Blazor.Features.Content.Pages
+
+<ContentPageView Slug="@Slug" />
+
+@code {
+    [Parameter]
+    public string Slug { get; set; }
+}
