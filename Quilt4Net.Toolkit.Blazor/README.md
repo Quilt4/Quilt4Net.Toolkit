@@ -308,7 +308,7 @@ View and search Application Insights logs with the `LogView` component. Requires
 builder.AddQuilt4NetApplicationInsightsClient();
 ```
 
-In local mode the host picks the auth flavour via the `AuthMode` option: `ClientSecret` (TenantId + ClientId + ClientSecret), `ManagedIdentity` (Azure-hosted, no secret in config), or `DefaultAzureCredential` (one config that works locally via `az login` and in Azure via MI). See the [`Quilt4Net.Toolkit` README — Managed Identity / DefaultAzureCredential sections](../Quilt4Net.Toolkit/README.md#managed-identity) for the full table, `appsettings.json` shape, and the Azure IAM step (Log Analytics Reader). The Log and Version components inherit whichever auth mode is configured — no per-component setting.
+In local mode the host picks the auth flavour via the `AuthMode` option: `ClientSecret` (TenantId + ClientId + ClientSecret), `ManagedIdentity` (Azure-hosted, no secret in config), or `DefaultAzureCredential` (one config that works locally via `az login` and in Azure via MI). See the [`Quilt4Net.Toolkit` README — Managed Identity / DefaultAzureCredential sections](../Quilt4Net.Toolkit/README.md#managed-identity) for the full table, `appsettings.json` shape, and the Azure IAM step (Log Analytics Reader). **All AI-querying components inherit whichever auth mode is configured** — `LogView`, `VersionMatrixDisplay`, `MetricsView`, `MetricChart`, `MetricLatestChart`, `LogCountView`, `LogCountByServiceView`, and `LogSummaryView` all go through one shared `LogsQueryClient` built once from the configured credential. No per-component setting.
 
 **Remote mode** — credentials are pulled from Quilt4Net.Server using an API key that carries the `monitor:read` scope:
 ```csharp
