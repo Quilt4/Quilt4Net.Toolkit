@@ -18,12 +18,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Quilt4Net.Toolkit.Blazor.Tests" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Remove="wwwroot\**" />
-    <Content Remove="wwwroot\**" />
-    <EmbeddedResource Remove="wwwroot\**" />
-    <None Remove="wwwroot\**" />
-  </ItemGroup>
+  <!-- wwwroot lives at the project root and the Razor SDK packs it under staticwebassets/ in
+       the nupkg automatically. Earlier <Compile/Content/EmbeddedResource/None Remove="wwwroot\**"/>
+       items were stripping it out of every item collection the SDK uses to discover static web
+       assets — silently shipping a package without browser-time-zone.js (and any future JS we
+       add). With those removed, dotnet pack now produces a nupkg with staticwebassets/, and
+       consumers can fetch _content/Quilt4Net.Toolkit.Blazor/<asset> at runtime. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Authentication.WebAssembly.Msal" Version="10.0.8" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.84.1" />
