@@ -7,6 +7,15 @@ internal class ApplicationInsightsConfigurationSelector : IApplicationInsightsCo
 {
     private const string StorageKeyPrefix = "Quilt4Net.Monitor.SelectedConfig.";
 
+    /// <summary>
+    /// Scope used when the caller doesn't pass one to <see cref="LoadAsync"/>. Without this, every
+    /// view that didn't opt in (MetricsView, LogCountByServiceView, VersionMatrixDisplay, plus
+    /// LogView when the host omits <c>FilterStorageScope</c>) silently dropped the selection on
+    /// every reload. Hosts that need per-team isolation still pass an explicit scope and get a
+    /// separate key.
+    /// </summary>
+    private const string DefaultStorageScope = "default";
+
     private readonly IApplicationInsightsConfigurationProvider _provider;
     private readonly ILocalStorageService _localStorage;
     private readonly SemaphoreSlim _loadGate = new(1, 1);
@@ -34,7 +43,12 @@ internal class ApplicationInsightsConfigurationSelector : IApplicationInsightsCo
         {
             if (IsLoaded) return;
 
-            _storageKey = !string.IsNullOrEmpty(storageScope) ? StorageKeyPrefix + storageScope : null;
+            // Fall back to the default scope when the caller doesn't supply one, so the dropdown
+            // remembers the operator's choice across page reloads without each view having to opt
+            // in. Explicit scopes (LogView's FilterStorageScope, anything host-supplied) still win
+            // and keep their per-team / per-tenant isolation.
+            var effectiveScope = !string.IsNullOrEmpty(storageScope) ? storageScope : DefaultStorageScope;
+            _storageKey = StorageKeyPrefix + effectiveScope;
             Available = await _provider.GetAllAsync(cancellationToken);
             IsLoaded = true;
 
