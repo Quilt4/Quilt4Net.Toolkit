@@ -65,12 +65,13 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
         <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
         <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
-        @* Disk free uses a bar-per-host snapshot — over a 1h/24h/7d window the value barely
-           moves so a line chart degenerates into N flat lines. The bar gives the current value
-           at a glance, the delta badge (▼ −1.2 GB / 24h) signals trend direction with a
-           free-space-is-good colour scheme, and the inline sparkline keeps the shape visible
-           for cases where a sudden drop matters. *@
-        <MetricLatestChart Title="Disk free (GB)" Unit="GB" Samples="@_disk" Capacity="@_diskCapacity" Range="@_window" Loading="@_busy" LessIsBad="true" />
+        @* Disk used uses a bar-per-host snapshot — over a 1h/24h/7d window the value barely
+           moves so a line chart degenerates into N flat lines. The bar fills as the volume fills
+           up (longer = more used), and the chart's LessIsBad=false threshold logic turns the bar
+           amber over 80% and red over 90% of capacity. The delta badge (▲ +1.2 GB / 24h) signals
+           growth with a utilisation-is-bad colour scheme; the inline sparkline keeps the shape
+           visible for cases where a sudden spike matters. *@
+        <MetricLatestChart Title="Disk used (GB)" Unit="GB" Samples="@_disk" Capacity="@_diskCapacity" Range="@_window" Loading="@_busy" LessIsBad="false" />
         @* Network values commonly span 3-4 orders of magnitude across hosts — idle web boxes sit
            at ~0.01 MB/s while a single backup job spikes to 50+ MB/s. On a linear axis the idle
            hosts vanish into a flat line at the bottom; log scale gives each host's shape its own
@@ -195,11 +196,16 @@
             StateHasChanged();
             _memory = await Ai.GetMemoryUtilizationAsync(ctx, _window).ToArrayAsync();
             StateHasChanged();
-            _disk = await Ai.GetDiskFreeAsync(ctx, _window).ToArrayAsync();
+            var freeSamples = await Ai.GetDiskFreeAsync(ctx, _window).ToArrayAsync();
             StateHasChanged();
             // Capacity is sequenced with the other queries so a single-query failure can't leave
             // the bars half-rendered. It's quick — one KQL pass that aggregates per volume.
             _diskCapacity = await Ai.GetDiskCapacityAsync(ctx, _window).ToArrayAsync();
+            // The server still queries disk-free (operator-meaningful in the KQL view), but the UI
+            // shows disk-used so the bar fills as the volume fills. We transform per series here
+            // because the cache stores whatever we display, and we want a cache hit to skip the
+            // capacity-join the second time.
+            _disk = ToDiskUsed(freeSamples, _diskCapacity);
             StateHasChanged();
             _network = await Ai.GetNetworkThroughputAsync(ctx, _window).ToArrayAsync();
             // Stamp the load completion. Only on success — a failed load shouldn't claim freshness.
@@ -237,5 +243,39 @@
     public void Dispose()
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
+    }
+
+    /// <summary>
+    /// Turn a disk-free series into disk-used by subtracting each sample's value from the volume's
+    /// total capacity (joined on <see cref="MetricSample.Series"/>). Volumes with no matching
+    /// capacity entry fall through to their original free value — a degraded state, but the
+    /// alternative is dropping the row entirely which is worse for the operator. Negative deltas
+    /// (free &gt; reported capacity, possible during a brief capacity expansion window) clamp to 0.
+    /// </summary>
+    private static MetricSample[] ToDiskUsed(MetricSample[] freeSamples, DiskCapacity[] capacities)
+    {
+        if (freeSamples == null || freeSamples.Length == 0) return [];
+
+        var capacityByVolume = (capacities ?? [])
+            .Where(c => c.TotalGb > 0)
+            .GroupBy(c => c.Series ?? "", System.StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().TotalGb, System.StringComparer.OrdinalIgnoreCase);
+
+        var transformed = new MetricSample[freeSamples.Length];
+        for (var i = 0; i < freeSamples.Length; i++)
+        {
+            var s = freeSamples[i];
+            if (capacityByVolume.TryGetValue(s.Series ?? "", out var total))
+            {
+                var used = total - s.Value;
+                if (used < 0) used = 0;
+                transformed[i] = s with { Value = used };
+            }
+            else
+            {
+                transformed[i] = s;        // no capacity → leave the value alone
+            }
+        }
+        return transformed;
     }
 }
