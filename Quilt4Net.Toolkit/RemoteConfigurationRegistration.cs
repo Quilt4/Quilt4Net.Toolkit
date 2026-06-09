@@ -52,7 +52,13 @@ public static class RemoteConfigurationRegistration
         services.AddHttpClient(Features.FeatureToggle.RemoteConfigCallService.HttpClientName, client =>
             {
                 client.BaseAddress = new Uri(o.Quilt4NetAddress);
-                if (!string.IsNullOrEmpty(o.ApiKey)) client.DefaultRequestHeaders.Add("X-API-KEY", o.ApiKey);
+                if (!string.IsNullOrEmpty(o.ApiKey))
+                {
+                    // Remove-then-Add so a duplicate registration can't send X-API-KEY twice; the server
+                    // rejects a doubled header value as "Invalid API key" (401). (Idempotent across reruns.)
+                    client.DefaultRequestHeaders.Remove("X-API-KEY");
+                    client.DefaultRequestHeaders.Add("X-API-KEY", o.ApiKey);
+                }
             })
             .AddQuilt4NetCorrelationId();
 
