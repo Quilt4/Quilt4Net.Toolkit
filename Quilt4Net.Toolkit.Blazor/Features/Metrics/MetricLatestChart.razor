@@ -2,7 +2,7 @@
 
 @* Bar-per-host snapshot of the most recent value, with a delta-vs-window-start badge and a tiny
    sparkline of the trend. Used in place of <MetricChart> for metrics where the absolute current
-   value matters more than its shape over time (disk free is the canonical case — disk space
+   value matters more than its shape over time (disk used is the canonical case — disk space
    doesn't fluctuate minute-to-minute so a line chart degenerates into N flat lines that all
    require the operator to read the y-axis to make sense of them). *@
 <RadzenCard Style="padding: 1rem; min-height: 320px; display: flex; flex-direction: column;">
@@ -77,9 +77,10 @@
         border-radius: 4px;
         height: 10px;
         overflow: hidden;
-        /* Fill grows from the LEFT — the colored portion (free space) sits at the bar's left
-           edge, the empty portion fills the right. Natural reading direction: a longer fill
-           means more free, shorter means filling up. */
+        /* Fill grows from the LEFT — the coloured portion shows the metric value as a percent of
+           capacity. For disk-used (the LessIsBad=false case), a longer fill = more used = bar
+           amber over 80% and red over 90%; for free-style metrics (LessIsBad=true) a longer fill
+           means more available. Either way the fill represents the value, not the inverse. */
     }
     .quilt-metric-bar-fill {
         background: var(--rz-primary, #2196f3);
@@ -126,10 +127,10 @@
     [Parameter] public DiskCapacity[] Capacity { get; set; } = [];
 
     /// <summary>
-    /// True when a downward trend is bad — appropriate for "free / available" metrics like
-    /// Disk free where less is worse. When false (utilisation metrics like CPU/memory %),
-    /// an upward trend is bad instead. The colour and arrow direction of the delta badge
-    /// follows this flag.
+    /// True (default) when a downward trend is bad — appropriate for "free / available" metrics
+    /// where less is worse. False flips it: an upward trend is bad (utilisation metrics like CPU,
+    /// memory %, or disk used) — the bar turns amber over 80% of capacity and red over 90%. The
+    /// colour and arrow direction of the delta badge follows this flag too.
     /// </summary>
     [Parameter] public bool LessIsBad { get; set; } = true;
 

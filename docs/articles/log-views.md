@@ -119,7 +119,54 @@ The Stack Trace tab is exception-only; trace and request rows show a friendly "n
 
 Adds a tab that triggers traces and exceptions at every `LogLevel` via `ILogger`, plus an uncaught throw caught by `Tharga.Blazor.CustomErrorBoundary` so the correlation guid surfaces in the recovery banner and in `customDimensions["CorrelationId"]`. Off by default so external apps don't accidentally expose log-injection controls.
 
+## Standalone count components
+
+`LogView` exposes a `Count` tab, but the two underlying components — `LogCountView` and `LogCountByServiceView` — can also be placed on their own when a host wants the volume view without the search / summary / measure tabs around it.
+
+### `LogCountView` — per-action histogram
+
+A bar chart (and tabular companion) of log volume grouped by Action, optionally faceted by Environment. Same component Quilt4Net Server's `/developer/log` Count tab uses.
+
+```razor
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+
+<LogCountView Context="@ApplicationInsightsContextExtensions.Current"
+              Range="TimeSpan.FromHours(1)" />
+```
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `Context` | `IApplicationInsightsContext` | `null` | The workspace to query. When null, resolved via the DI selector / configured options. |
+| `Environment` | `string` | `null` | Restrict the query to one environment. When null, every environment in the workspace is included and each series is keyed `Environment.Action`. |
+| `Range` | `TimeSpan` | `1 day` | Lookback window. |
+
+Cascading `LogNavigationOptions` is honoured for detail drill-downs — when a host sets `DetailPath`, clicking a grid row navigates instead of opening the Radzen dialog.
+
+### `LogCountByServiceView` — service × severity pivot
+
+A pivot of log counts grouped by service across the Verbose / Information / Warning / Error / Critical severity columns, with multi-select filters for Configuration, Environment and Source, plus a "Per machine" toggle that splits each service row by machine. Every filter except Range is a local regroup over the cached cell cube — only Range changes hit AI. Same component Quilt4Net Server's `/developer/log-count` page uses.
+
+```razor
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<LogCountByServiceView Configs="@_workspaces" />
+```
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `Context` | `IApplicationInsightsContext` | `null` | Explicit single workspace. Bypasses the configuration multi-select. |
+| `Configs` | `IReadOnlyList<ApplicationInsightsConfigurationResponse>` | `null` | Explicit set; multi-select bar lists each as a chip — *nothing selected* means aggregate across all. Takes precedence over the DI selector; ignored when `Context` is set. |
+| `EnvironmentOrder` | `IReadOnlyList<string>` | `null` | Preferred display order for environment chips. Named entries come first; extras fall back to alphabetical. When null, `EnvironmentOrdering.DefaultOrder` (Development, CI, Staging, Test, Production) is used. Hosts pulling team-specific ordering from their own config (e.g. via `IEnvironmentService` on Quilt4Net.Server) should pass it here. |
+
+Ranges (1h / 24h / 7d) and the Refresh button work the same way as in [`MetricsView`](metrics.md) — the cell cube is cached per circuit in a scoped `LogCountCellCache` for 10 minutes so range flips and page-navigation revisits skip the AI round-trip.
+
+### Remote vs local mode
+
+The same `Context` precedence applies to `LogView` / `VersionMatrixDisplay` / `MetricsView` / `LogCountByServiceView`. Hosts that already resolved a `Context` from local options *and* registered the remote selector can pick one explicitly — see [Metrics → Remote vs local mode](metrics.md#remote-vs-local-mode).
+
 ## Where next
 
+- **[Metrics](metrics.md)** — host telemetry (CPU, memory, disk, network) from the same workspace.
 - **[Telemetry identity & correlation](telemetry-identity.md)** — how the data shown by these components reaches AI in the first place.
 - **API reference** for the new types: `xref:Quilt4Net.Toolkit.Features.ApplicationInsights.LogItem.CorrelationId`, `xref:Quilt4Net.Toolkit.Features.ApplicationInsights.StackFrameParser`.
