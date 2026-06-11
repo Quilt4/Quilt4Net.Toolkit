@@ -53,10 +53,13 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             _localCache.TryGetValue(cacheKey, out var cached);
             var needRefresh = cached == null || DateTime.UtcNow > cached.ValidTo;
 
+            // Per-resolution result lines are Debug — they fire on every flag check (typically a
+            // 0ms cache hit) and produced ~449k Information traces/week per app in production.
+            // Errors / warnings / actual value changes still log at their original levels.
             if (!needRefresh)
             {
                 var cachedValue = GetCachedOrDefault(cached, defaultValue);
-                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false, Value: '{Value}'.",
+                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, cachedValue);
                 return cachedValue;
             }
@@ -68,7 +71,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, ttl, effectiveApplication);
                 var staleValue = GetCachedOrDefault(cached, defaultValue);
-                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
+                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, staleValue);
                 return staleValue;
             }
@@ -84,11 +87,11 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             {
                 CacheFailure(cacheKey, stale);
                 var staleValue = GetCachedOrDefault(stale, defaultValue);
-                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
+                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, staleValue);
                 return staleValue;
             }
-            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
                 key, sw.ElapsedMilliseconds, defaultValue);
             return defaultValue;
         }
@@ -122,7 +125,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 _logger.LogError("Unable to get feature toggle for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
                     key, response.StatusCode, response.ReasonPhrase);
                 CacheFailure(cacheKey, null);
-                _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
                     key, sw.ElapsedMilliseconds, defaultValue);
                 return defaultValue;
             }
@@ -136,7 +139,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
 
             var serverValue = GetCachedOrDefault(result, defaultValue);
-            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
+            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
                 key, sw.ElapsedMilliseconds, serverValue);
             return serverValue;
         }
@@ -145,7 +148,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             _logger.LogWarning("HTTP request timed out for configuration '{Key}' after {Timeout}ms. Using default value.",
                 key, _options.HttpTimeout.TotalMilliseconds);
             CacheFailure(cacheKey, null);
-            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
                 key, sw.ElapsedMilliseconds, defaultValue);
             return defaultValue;
         }
@@ -153,7 +156,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         {
             _logger.LogError(e, "{Message} Using default for key {Key}.", e.Message, key);
             CacheFailure(cacheKey, null);
-            _logger.LogInformation("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
+            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
                 key, sw.ElapsedMilliseconds, defaultValue);
             return defaultValue;
         }

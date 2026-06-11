@@ -2,6 +2,7 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
 using Quilt4Net.Toolkit.Framework;
 using Xunit;
@@ -202,5 +203,100 @@ public class FeatureToggleTests
         var port = ((IPEndPoint)l.LocalEndpoint).Port;
         l.Stop();
         return port;
+    }
+
+    [Fact]
+    public async Task GetToggleAsync_Logs_Resolution_Result_At_Debug_Not_Information()
+    {
+        // Issue #108: the per-resolution "Configuration '{Key}' resolved … Source: …" lines fired
+        // on every flag check and dwarfed any actionable telemetry (~449k Information traces/week
+        // per app at Eplicta, ~99% Cache hits). They must log at Debug now so Application Insights
+        // (default Information threshold) doesn't ingest them. Errors / warnings / background-
+        // refresh value-change lines stay at their original levels.
+        var port = GetFreePort();
+        var prefix = $"http://127.0.0.1:{port}/";
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(prefix);
+        listener.Start();
+
+        var listenerTask = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                HttpListenerContext ctx;
+                try { ctx = await listener.GetContextAsync(); }
+                catch { return; }
+                ctx.Response.StatusCode = 200;
+                ctx.Response.ContentType = "application/json";
+                var body = $$"""{"value":"True","validTo":"{{DateTime.UtcNow.AddHours(1):o}}"}""";
+                var buf = System.Text.Encoding.UTF8.GetBytes(body);
+                await ctx.Response.OutputStream.WriteAsync(buf);
+                ctx.Response.Close();
+            }
+        });
+
+        var recorder = new RecordingLoggerProvider();
+        try
+        {
+            var host = Host.CreateDefaultBuilder()
+                .ConfigureServices(services =>
+                {
+                    services.AddQuilt4NetRemoteConfiguration(null, o =>
+                    {
+                        o.Quilt4NetAddress = prefix;
+                        o.ApiKey = "test-key";
+                    });
+                    services.AddLogging(b =>
+                    {
+                        b.ClearProviders();
+                        b.SetMinimumLevel(LogLevel.Debug);
+                        b.AddProvider(recorder);
+                    });
+                })
+                .Build();
+
+            var service = host.Services.GetRequiredService<IFeatureToggleService>();
+
+            await service.GetToggleAsync("my-toggle", fallback: false);
+            await service.GetToggleAsync("my-toggle", fallback: false); // second call: cache hit
+
+            var resolvedEntries = recorder.Entries
+                .Where(e => e.Message.Contains("resolved in") && e.Message.Contains("Source:"))
+                .ToArray();
+
+            resolvedEntries.Should().NotBeEmpty("the resolution-result line should still be logged, just at Debug");
+            resolvedEntries.Should().OnlyContain(e => e.Level == LogLevel.Debug,
+                "per-resolution result lines must be Debug to avoid flooding Application Insights");
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    private sealed class RecordingLoggerProvider : ILoggerProvider
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(Entries);
+        public void Dispose() { }
+
+        private sealed class RecordingLogger : ILogger
+        {
+            private readonly List<(LogLevel, string)> _entries;
+            public RecordingLogger(List<(LogLevel, string)> entries) => _entries = entries;
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception,
+                Func<TState, Exception, string> formatter)
+            {
+                lock (_entries) _entries.Add((logLevel, formatter(state, exception)));
+            }
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
     }
 }
