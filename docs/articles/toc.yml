@@ -6,5 +6,7 @@
   href: telemetry-identity.md
 - name: Log views
   href: log-views.md
+- name: Metrics
+  href: metrics.md
 - name: Version matrix
   href: version-matrix.md
