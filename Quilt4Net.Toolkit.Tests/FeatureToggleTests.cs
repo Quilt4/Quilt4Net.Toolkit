@@ -26,7 +26,7 @@ public class FeatureToggleTests
             var ctx = await listener.GetContextAsync();
             ctx.Response.StatusCode = 401;
             ctx.Response.Close();
-        });
+        }, TestContext.Current.CancellationToken);
 
         try
         {
@@ -93,7 +93,7 @@ public class FeatureToggleTests
             var ctx = await listener.GetContextAsync();
             ctx.Response.StatusCode = 500;
             ctx.Response.Close();
-        });
+        }, TestContext.Current.CancellationToken);
 
         try
         {
@@ -162,7 +162,7 @@ public class FeatureToggleTests
                 await ctx.Response.OutputStream.WriteAsync(buf);
                 ctx.Response.Close();
             }
-        });
+        }, TestContext.Current.CancellationToken);
 
         try
         {
@@ -233,7 +233,7 @@ public class FeatureToggleTests
                 await ctx.Response.OutputStream.WriteAsync(buf);
                 ctx.Response.Close();
             }
-        });
+        }, TestContext.Current.CancellationToken);
 
         var recorder = new RecordingLoggerProvider();
         try
