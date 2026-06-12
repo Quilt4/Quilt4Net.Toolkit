@@ -1,0 +1,44 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+
+@*
+    Content-aware wrapper around <RadzenLabel>. The Text param is resolved through the
+    content service; Component (the associated input's Name) and the rest of the Radzen
+    label params are pass-through.
+*@
+<RadzenLabel Text="@LoadedText"
+             Component="@Component"
+             Visible="@Visible"
+             Style="@Style" />
+
+@code {
+    /// <summary>Content key resolved for the label's Text. Falls back to <see cref="DefaultText"/>
+    /// on miss / empty / lookup failure.</summary>
+    [Parameter] public string TextKey { get; set; }
+
+    /// <summary>Fallback label text used when the key isn't set or the lookup yields nothing.</summary>
+    [Parameter] public string DefaultText { get; set; }
+
+    /// <summary>Name of the associated input — same semantics as <c>RadzenLabel.Component</c>.</summary>
+    [Parameter] public string Component { get; set; }
+
+    [Parameter] public bool Visible { get; set; } = true;
+    [Parameter] public string Style { get; set; }
+
+    internal string LoadedText { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+        => LoadedText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TextKey, DefaultText);
+}
