@@ -1,0 +1,64 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+@typeparam TValue
+
+@* Content-aware wrapper around <RadzenNumeric>. See Quilt4RadzenTextBox for the rationale —
+   only Placeholder is resolved through the content service; everything else is pass-through.
+   Generic on TValue to mirror RadzenNumeric's signature (int, decimal, double, ...). *@
+<RadzenNumeric TValue="TValue"
+               Value="@Value"
+               ValueChanged="@ValueChanged"
+               Placeholder="@LoadedPlaceholder"
+               Min="@Min"
+               Max="@Max"
+               Step="@Step"
+               Format="@Format"
+               ShowUpDown="@ShowUpDown"
+               Name="@Name"
+               Disabled="@Disabled"
+               ReadOnly="@ReadOnly"
+               Visible="@Visible"
+               Style="@Style"
+               Change="@Change" />
+
+@code {
+    /// <summary>Content key resolved for the numeric input's placeholder. Falls back to
+    /// <see cref="DefaultPlaceholder"/> on miss / empty / lookup failure.</summary>
+    [Parameter] public string PlaceholderKey { get; set; }
+
+    /// <summary>Fallback placeholder used when the key isn't set or the lookup yields nothing.</summary>
+    [Parameter] public string DefaultPlaceholder { get; set; }
+
+    [Parameter] public TValue Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    // Min/Max/Step are 'dynamic' here to mirror RadzenNumeric's loosely-typed surface — pinning
+    // to decimal? gave CS1503 because Radzen accepts the value as object and coerces against TValue.
+    [Parameter] public dynamic Min { get; set; }
+    [Parameter] public dynamic Max { get; set; }
+    [Parameter] public dynamic Step { get; set; }
+    [Parameter] public string Format { get; set; }
+    [Parameter] public bool ShowUpDown { get; set; } = true;
+    [Parameter] public string Name { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public bool Visible { get; set; } = true;
+    [Parameter] public string Style { get; set; }
+    [Parameter] public EventCallback<TValue> Change { get; set; }
+
+    internal string LoadedPlaceholder { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+        => LoadedPlaceholder = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, PlaceholderKey, DefaultPlaceholder);
+}

@@ -34,9 +34,20 @@ builder.AddQuilt4NetBlazorContent(o =>
 
 ## Content components
 
-Render managed content using built-in Blazor components. Each component takes a `Key` to identify the content and a default value used when no content exists on the server.
+Two shapes ship in this package, with the same purpose — render text managed via Quilt4Net.Server in a Blazor app and have it switch language live without per-component plumbing.
 
-### Quilt4Text
+- **Standalone components** (`Quilt4Text`, `Quilt4Content`, `Quilt4Span`, `Quilt4Raw`, `Quilt4Button`, `Quilt4PageTitle`) — content-aware controls. Drop them in where you'd otherwise hard-code a string.
+- **Content-aware Radzen wrappers** (`Quilt4Radzen*`) — thin wrappers around Radzen components that resolve a specific `string` attribute (Text / Title / Placeholder / EmptyText / Tooltip) through the content service. Drop them in where the only thing you need to localise on a Radzen control is one or two text attributes.
+
+Every component below:
+
+- Subscribes to `ILanguageStateService.LanguageChangedEvent` so the resolved text re-renders live on language switch.
+- Falls back to the supplied default on miss / empty value / lookup failure — never throws.
+- Uses the same convention: `{Property}Key` for the content key and `Default{Property}` for the fallback.
+
+### Standalone components
+
+#### Quilt4Text
 
 Renders plain text using a Radzen `TextStyle`.
 
@@ -46,13 +57,13 @@ Renders plain text using a Radzen `TextStyle`.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `Key` | | Content key. |
-| `Default` | | Fallback text when no content exists. |
+| `Key` | — | Content key. |
+| `Default` | — | Fallback text when no content exists. |
 | `TextStyle` | `Body1` | Radzen `TextStyle` (H1, H2, Body1, etc.). |
 | `Visible` | `true` | Show or hide the component. |
 | `Style` | `null` | Custom CSS styles. |
 
-### Quilt4Content
+#### Quilt4Content
 
 Renders HTML content. The default value is provided as child content.
 
@@ -67,7 +78,7 @@ Renders HTML content. The default value is provided as child content.
 | `Key` | Content key. |
 | `ChildContent` | Default HTML content used when no content exists. |
 
-### Quilt4Span
+#### Quilt4Span
 
 Renders plain text in a `<span>` tag.
 
@@ -75,7 +86,7 @@ Renders plain text in a `<span>` tag.
 <Quilt4Span Key="MyLabel" Default="Status:" />
 ```
 
-### Quilt4Raw
+#### Quilt4Raw
 
 Renders plain text directly without any HTML wrapper.
 
@@ -83,12 +94,16 @@ Renders plain text directly without any HTML wrapper.
 <Quilt4Raw Key="MyValue" Default="OK" />
 ```
 
-### Quilt4Button
+#### Quilt4Button
 
-Renders a Radzen button with managed text.
+Renders a Radzen button with managed text — and, optionally, a managed hover tooltip (HTML `title` attribute). Particularly useful for icon-only buttons whose label is the icon alone.
 
 ```razor
 <Quilt4Button TextKey="SubmitBtn" DefaultText="Submit" Icon="send" Click="@OnSubmitClick" />
+
+<Quilt4Button Icon="delete"
+              TooltipKey="btn.delete.tooltip" DefaultTooltip="Delete this row"
+              Click="@OnDelete" />
 ```
 
 | Parameter | Description |
@@ -96,8 +111,233 @@ Renders a Radzen button with managed text.
 | `TextKey` | Content key for the button text. |
 | `DefaultText` | Fallback text. |
 | `Icon` | Radzen icon name. |
+| `TooltipKey` | Optional content key resolved into the button's `title` attribute. |
+| `DefaultTooltip` | Optional fallback tooltip text. Set without `TooltipKey` for a static, non-localised tooltip. |
 | `Click` | Async click handler (`Func<Task>`). |
 | `Style` | Custom CSS styles. |
+
+#### Quilt4PageTitle
+
+Wraps Blazor's `<PageTitle>` with a content-aware text.
+
+```razor
+<Quilt4PageTitle Key="page.about.title" Default="About us" />
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `Key` | Content key for the page title. |
+| `Default` | Fallback used when the key isn't set or the lookup yields nothing. |
+
+#### Quilt4Tooltip
+
+Wraps arbitrary child content with a `<span title="...">` that pulls the tooltip text from the content service. Use it on any element that doesn't already have a `TooltipKey` parameter (custom controls, links, plain `<div>` elements, etc.).
+
+```razor
+<Quilt4Tooltip TooltipKey="status.idle.tooltip" DefaultTooltip="Service is idle">
+    <i class="rzi rz-icon-check" />
+</Quilt4Tooltip>
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TooltipKey` | Content key resolved into the HTML `title` attribute on the wrapping span. |
+| `DefaultTooltip` | Fallback tooltip text. |
+| `ChildContent` | The element(s) the tooltip is attached to. |
+| `Style` | Optional inline style on the wrapping span. |
+
+### Content-aware Radzen wrappers
+
+Drop-in wrappers around Radzen components. Pass the same parameters you would pass to the underlying Radzen control; the wrapper resolves one or two text attributes through the content service and forwards the rest unchanged.
+
+#### Quilt4RadzenAlert
+
+Wraps `<RadzenAlert>`. Resolves `Text` (required) and `Title` (optional) — keep the title slot null for a title-less alert.
+
+```razor
+<Quilt4RadzenAlert AlertStyle="AlertStyle.Info"
+                   TextKey="alert.permission.body"
+                   DefaultText="You don't have permission to do that."
+                   TitleKey="alert.permission.title"
+                   DefaultTitle="Permission denied" />
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TextKey` / `DefaultText` | Content key + fallback for the alert body. |
+| `TitleKey` / `DefaultTitle` | Optional title pair. Omit both for a title-less alert. |
+| `AlertStyle`, `Shade`, `ShowIcon`, `Icon`, `Variant`, `Size`, `AllowClose`, `Visible`, `Style`, `Close`, `ChildContent` | Pass-through to `<RadzenAlert>`. |
+
+#### Quilt4RadzenDataGridColumn&lt;TItem&gt;
+
+Wraps `<RadzenDataGridColumn>`. Resolves the `Title` attribute. Drop in inline inside a `<RadzenDataGrid>` (or `Quilt4RadzenDataGrid`).
+
+```razor
+<RadzenDataGrid TItem="Customer" Data="@_customers">
+    <Columns>
+        <Quilt4RadzenDataGridColumn TItem="Customer" Property="@nameof(Customer.Name)"
+                                    TitleKey="col.customer.name" DefaultTitle="Name" />
+    </Columns>
+</RadzenDataGrid>
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TitleKey` / `DefaultTitle` | Content key + fallback for the column header. |
+| `Property`, `Width`, `Sortable`, `Filterable`, `Visible`, `SortOrder`, `TextAlign`, `FormatString`, `Template` | Pass-through to `<RadzenDataGridColumn>`. |
+
+#### Quilt4RadzenDataGrid&lt;TItem&gt;
+
+Wraps `<RadzenDataGrid>`. Resolves the `EmptyText` attribute. Use for plain string empty-states; for richer empty content (icons, buttons), pass an `EmptyTemplate` instead and Radzen picks the template over the resolved text.
+
+```razor
+<Quilt4RadzenDataGrid TItem="Customer" Data="@_customers"
+                      EmptyTextKey="grid.customers.empty" DefaultEmptyText="No customers yet.">
+    <Columns>
+        <RadzenDataGridColumn TItem="Customer" Property="@nameof(Customer.Name)" Title="Name" />
+    </Columns>
+</Quilt4RadzenDataGrid>
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `EmptyTextKey` / `DefaultEmptyText` | Content key + fallback for the empty-state text. |
+| `Data`, `AllowSorting`, `AllowFiltering`, `FilterMode`, `FilterCaseSensitivity`, `AllowPaging`, `PageSize`, `PageSizeOptions`, `ShowPagingSummary`, `PagingSummaryFormat`, `Visible`, `Style`, `Columns`, `EmptyTemplate` | Pass-through to `<RadzenDataGrid>`. |
+
+> Note: this wrapper deliberately forwards only the most-used `RadzenDataGrid` parameters — wider mirroring drifts every Radzen release. If you need finer control, use `<RadzenDataGrid>` directly and place a `<Quilt4Text>` inside its `EmptyTemplate`.
+
+#### Quilt4RadzenPanelMenuItem
+
+Wraps `<RadzenPanelMenuItem>`. Resolves `Text`. Use inside a `<RadzenPanelMenu>`.
+
+```razor
+<RadzenPanelMenu>
+    <Quilt4RadzenPanelMenuItem TextKey="menu.home" DefaultText="Home" Icon="home" Path="/" />
+    <Quilt4RadzenPanelMenuItem TextKey="menu.customers" DefaultText="Customers" Icon="people" Path="/customers" />
+</RadzenPanelMenu>
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TextKey` / `DefaultText` | Content key + fallback for the menu-item label. |
+| `Icon`, `Path`, `Target`, `Expanded`, `ExpandedChanged`, `Selected`, `Disabled`, `IconColor`, `Image`, `ImageAlternateText`, `Click`, `ChildContent` | Pass-through to `<RadzenPanelMenuItem>`. |
+
+#### Quilt4RadzenTabsItem
+
+Wraps `<RadzenTabsItem>`. Resolves `Text`. Use inside `<RadzenTabs>`'s `Tabs` slot.
+
+```razor
+<RadzenTabs>
+    <Tabs>
+        <Quilt4RadzenTabsItem TextKey="tab.overview" DefaultText="Overview">
+            ...
+        </Quilt4RadzenTabsItem>
+    </Tabs>
+</RadzenTabs>
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TextKey` / `DefaultText` | Content key + fallback for the tab label. |
+| `Icon`, `Disabled`, `Visible`, `ChildContent` | Pass-through. |
+
+#### Quilt4RadzenLabel
+
+Wraps `<RadzenLabel>`. Resolves `Text`.
+
+```razor
+<Quilt4RadzenLabel TextKey="form.name.label" DefaultText="Name" Component="Name" />
+<Quilt4RadzenTextBox Name="Name" @bind-Value="@_name" />
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TextKey` / `DefaultText` | Content key + fallback for the label text. |
+| `Component` | Name of the associated input — same as `RadzenLabel.Component`. |
+| `Visible`, `Style` | Pass-through. |
+
+#### Quilt4RadzenTextBox / Quilt4RadzenTextArea / Quilt4RadzenDropDown&lt;TValue&gt; / Quilt4RadzenNumeric&lt;TValue&gt;
+
+Wrap the four input controls. All resolve `Placeholder` only; the rest is pass-through. Use these whenever the only content-bound attribute is the placeholder — for any richer localisation, drop back to the underlying Radzen control with `<Quilt4Text>` inside as a label.
+
+```razor
+<Quilt4RadzenTextBox @bind-Value="@_name"
+                     PlaceholderKey="input.name" DefaultPlaceholder="Type your name..." />
+
+<Quilt4RadzenTextArea @bind-Value="@_notes"
+                      PlaceholderKey="input.notes" DefaultPlaceholder="Notes..." Rows="4" />
+
+<Quilt4RadzenDropDown TValue="string" Data="@_countries"
+                      @bind-Value="@_country"
+                      PlaceholderKey="input.country" DefaultPlaceholder="Choose country" />
+
+<Quilt4RadzenNumeric TValue="int" @bind-Value="@_quantity"
+                     PlaceholderKey="input.quantity" DefaultPlaceholder="Quantity"
+                     Min="1" Max="100" />
+```
+
+All four share these content-aware parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `PlaceholderKey` | Content key for the input's placeholder. |
+| `DefaultPlaceholder` | Fallback placeholder. |
+
+Plus the type-specific pass-through (`Value`, `ValueChanged`, `Name`, `Disabled`, `ReadOnly`, plus the control-specific ones — `Rows` / `Cols` on TextArea, `Data` / `TextProperty` / `ValueProperty` / `Multiple` / `AllowFiltering` / `AllowClear` on DropDown, `Min` / `Max` / `Step` / `Format` / `ShowUpDown` on Numeric).
+
+### Content-aware Radzen services
+
+For the two Radzen services that take text as a method argument rather than as a component attribute, this package ships content-aware wrappers registered alongside `AddQuilt4NetBlazorContent`:
+
+#### IQuilt4DialogService
+
+Confirm / Alert dialogs whose message and (optional) title come from content keys.
+
+```razor
+@inject IQuilt4DialogService Q4Dialogs
+
+@code {
+    private async Task DeleteAsync()
+    {
+        var ok = await Q4Dialogs.ConfirmAsync(
+            messageKey: "delete.customer.confirm",
+            defaultMessage: "Are you sure you want to delete this customer?",
+            titleKey: "delete.confirm.title",
+            defaultTitle: "Confirm delete");
+        if (ok == true) { ... }
+    }
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `ConfirmAsync(messageKey, defaultMessage, titleKey?, defaultTitle?)` | Resolves the keys then calls Radzen's `DialogService.Confirm`. Returns the same `bool?`. |
+| `AlertAsync(messageKey, defaultMessage, titleKey?, defaultTitle?)` | Resolves the keys then calls `DialogService.Alert`. |
+
+#### IQuilt4NotificationService
+
+Notifications whose summary and (optional) detail come from content keys.
+
+```razor
+@inject IQuilt4NotificationService Q4Notifications
+
+@code {
+    private async Task SaveAsync()
+    {
+        ...
+        await Q4Notifications.NotifyAsync(
+            NotificationSeverity.Success,
+            summaryKey: "save.success.summary",
+            defaultSummary: "Saved",
+            detailKey: "save.success.detail",
+            defaultDetail: "Your changes have been saved.");
+    }
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `NotifyAsync(severity, summaryKey, defaultSummary, detailKey?, defaultDetail?, duration = 3000)` | Resolves the keys then posts via `NotificationService.Notify`. |
 
 ## Hierarchical pages
 

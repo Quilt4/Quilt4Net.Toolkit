@@ -1,0 +1,91 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+
+@*
+    Content-aware wrapper around <RadzenAlert>. Resolves Text and (optionally) Title from
+    the content service so an alert can carry a content key directly in markup, instead of
+    every host wiring up a code-behind GetAsync. Matches the existing Quilt4Radzen* shape:
+    {Property}Key + Default{Property}, with all other RadzenAlert parameters pass-through.
+    Subscribes to LanguageChangedEvent so the text updates live on language switch.
+*@
+<RadzenAlert Text="@LoadedText"
+             Title="@LoadedTitle"
+             AlertStyle="@AlertStyle"
+             Shade="@Shade"
+             ShowIcon="@ShowIcon"
+             Icon="@Icon"
+             Variant="@Variant"
+             Size="@Size"
+             AllowClose="@AllowClose"
+             Visible="@Visible"
+             Style="@Style"
+             Close="@Close">
+    @ChildContent
+</RadzenAlert>
+
+@code {
+    /// <summary>Content key resolved for the alert's Text. When the key is missing or the
+    /// resolved value is empty, <see cref="DefaultText"/> is shown.</summary>
+    [Parameter]
+    public string TextKey { get; set; }
+
+    /// <summary>Fallback text used when <see cref="TextKey"/> isn't set, the content service
+    /// returns an empty value, or the lookup fails.</summary>
+    [Parameter]
+    public string DefaultText { get; set; }
+
+    /// <summary>Optional content key for the alert's Title. Resolved the same way as
+    /// <see cref="TextKey"/>. Leave both this and <see cref="DefaultTitle"/> null for a
+    /// title-less alert.</summary>
+    [Parameter]
+    public string TitleKey { get; set; }
+
+    /// <summary>Fallback title used when <see cref="TitleKey"/> isn't set, the content service
+    /// returns an empty value, or the lookup fails.</summary>
+    [Parameter]
+    public string DefaultTitle { get; set; }
+
+    [Parameter] public AlertStyle AlertStyle { get; set; } = AlertStyle.Primary;
+    [Parameter] public Shade Shade { get; set; } = Shade.Default;
+    [Parameter] public bool ShowIcon { get; set; } = true;
+    [Parameter] public string Icon { get; set; }
+    [Parameter] public Variant Variant { get; set; } = Variant.Filled;
+    [Parameter] public AlertSize Size { get; set; } = AlertSize.Medium;
+    [Parameter] public bool AllowClose { get; set; } = true;
+    [Parameter] public bool Visible { get; set; } = true;
+    [Parameter] public string Style { get; set; }
+    [Parameter] public EventCallback Close { get; set; }
+    [Parameter] public RenderFragment ChildContent { get; set; }
+
+    internal string LoadedText { get; private set; }
+    internal string LoadedTitle { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        LoadedText = await ResolveAsync(TextKey, DefaultText);
+        LoadedTitle = await ResolveAsync(TitleKey, DefaultTitle);
+    }
+
+    // Same precedence as Quilt4RadzenDataGridColumn / Quilt4RadzenPanelMenuItem: take the
+    // service's value when present and non-empty, else fall back to the supplied default.
+    // Null/empty key is fine — GetContentAsync handles it (returns the default).
+    private async Task<string> ResolveAsync(string key, string @default)
+    {
+        if (string.IsNullOrEmpty(key)) return @default;
+        var response = await ContentService.GetContentAsync(key, @default, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        return !string.IsNullOrEmpty(response.Value) ? response.Value : @default;
+    }
+}

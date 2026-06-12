@@ -1,0 +1,62 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+@typeparam TValue
+
+@* Content-aware wrapper around <RadzenDropDown>. See Quilt4RadzenTextBox for the rationale —
+   only Placeholder is resolved through the content service; everything else is pass-through.
+   Generic on TValue to mirror RadzenDropDown's signature. *@
+<RadzenDropDown TValue="TValue"
+                Value="@Value"
+                ValueChanged="@ValueChanged"
+                Data="@Data"
+                TextProperty="@TextProperty"
+                ValueProperty="@ValueProperty"
+                Placeholder="@LoadedPlaceholder"
+                AllowClear="@AllowClear"
+                AllowFiltering="@AllowFiltering"
+                Multiple="@Multiple"
+                Name="@Name"
+                Disabled="@Disabled"
+                Visible="@Visible"
+                Style="@Style"
+                Change="@Change" />
+
+@code {
+    /// <summary>Content key resolved for the dropdown's placeholder. Falls back to
+    /// <see cref="DefaultPlaceholder"/> on miss / empty / lookup failure.</summary>
+    [Parameter] public string PlaceholderKey { get; set; }
+
+    /// <summary>Fallback placeholder used when the key isn't set or the lookup yields nothing.</summary>
+    [Parameter] public string DefaultPlaceholder { get; set; }
+
+    [Parameter] public TValue Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter] public System.Collections.IEnumerable Data { get; set; }
+    [Parameter] public string TextProperty { get; set; }
+    [Parameter] public string ValueProperty { get; set; }
+    [Parameter] public bool AllowClear { get; set; }
+    [Parameter] public bool AllowFiltering { get; set; }
+    [Parameter] public bool Multiple { get; set; }
+    [Parameter] public string Name { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Visible { get; set; } = true;
+    [Parameter] public string Style { get; set; }
+    [Parameter] public EventCallback<object> Change { get; set; }
+
+    internal string LoadedPlaceholder { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+        => LoadedPlaceholder = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, PlaceholderKey, DefaultPlaceholder);
+}

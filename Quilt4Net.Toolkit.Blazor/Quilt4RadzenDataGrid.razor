@@ -1,0 +1,89 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+@typeparam TItem
+
+@*
+    Content-aware wrapper around <RadzenDataGrid>. The most common ask from #112: the
+    empty-state text. Existing `EmptyTemplate` + `<Quilt4Text>` works today, but a single
+    EmptyTextKey + DefaultEmptyText pair is tidier when the empty state is a plain string.
+
+    Note on scope. RadzenDataGrid has dozens of parameters; this wrapper deliberately
+    forwards only the most-used ones (sorting / filtering / paging / data binding +
+    the Columns / EmptyTemplate render fragments). Callers that need more granular
+    Radzen options should drop back to <RadzenDataGrid> directly with a
+    <Quilt4Text> inside their EmptyTemplate. The narrow surface is intentional —
+    wider mirroring drifts every Radzen release.
+*@
+<RadzenDataGrid TItem="TItem"
+                Data="@Data"
+                EmptyText="@LoadedEmptyText"
+                AllowSorting="@AllowSorting"
+                AllowFiltering="@AllowFiltering"
+                FilterMode="@FilterMode"
+                FilterCaseSensitivity="@FilterCaseSensitivity"
+                AllowPaging="@AllowPaging"
+                PageSize="@PageSize"
+                PageSizeOptions="@PageSizeOptions"
+                ShowPagingSummary="@ShowPagingSummary"
+                PagingSummaryFormat="@PagingSummaryFormat"
+                Visible="@Visible"
+                Style="@Style">
+    <Columns>
+        @Columns
+    </Columns>
+    <EmptyTemplate>
+        @EmptyTemplate
+    </EmptyTemplate>
+</RadzenDataGrid>
+
+@code {
+    /// <summary>Content key resolved for the grid's empty-state text. When the key is missing
+    /// or the resolved value is empty, <see cref="DefaultEmptyText"/> is shown. Ignored if the
+    /// host supplies an <see cref="EmptyTemplate"/> (Radzen falls back to its template-vs-text
+    /// precedence in that case).</summary>
+    [Parameter]
+    public string EmptyTextKey { get; set; }
+
+    /// <summary>Fallback empty-state text used when <see cref="EmptyTextKey"/> isn't set or
+    /// the lookup yields nothing.</summary>
+    [Parameter]
+    public string DefaultEmptyText { get; set; }
+
+    [Parameter] public System.Collections.Generic.IEnumerable<TItem> Data { get; set; }
+    [Parameter] public bool AllowSorting { get; set; } = true;
+    [Parameter] public bool AllowFiltering { get; set; }
+    [Parameter] public FilterMode FilterMode { get; set; } = FilterMode.Simple;
+    [Parameter] public FilterCaseSensitivity FilterCaseSensitivity { get; set; } = FilterCaseSensitivity.CaseInsensitive;
+    [Parameter] public bool AllowPaging { get; set; }
+    [Parameter] public int PageSize { get; set; } = 10;
+    [Parameter] public IEnumerable<int> PageSizeOptions { get; set; }
+    [Parameter] public bool ShowPagingSummary { get; set; }
+    [Parameter] public string PagingSummaryFormat { get; set; }
+    [Parameter] public bool Visible { get; set; } = true;
+    [Parameter] public string Style { get; set; }
+
+    /// <summary>Forwarded to RadzenDataGrid.Columns. Place the same RadzenDataGridColumn /
+    /// Quilt4RadzenDataGridColumn entries you'd put inside a plain RadzenDataGrid.</summary>
+    [Parameter] public RenderFragment Columns { get; set; }
+
+    /// <summary>Forwarded to RadzenDataGrid.EmptyTemplate. When set, Radzen prefers the
+    /// template over EmptyText regardless of how this wrapper resolved it.</summary>
+    [Parameter] public RenderFragment EmptyTemplate { get; set; }
+
+    internal string LoadedEmptyText { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+        => LoadedEmptyText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, EmptyTextKey, DefaultEmptyText);
+}

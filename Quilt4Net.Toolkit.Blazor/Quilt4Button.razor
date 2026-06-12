@@ -4,10 +4,19 @@
 @inject IContentService ContentService
 
 @* <Tharga.Blazor.StandardButton Text="@_text" Icon="@Icon" Click="@Click" /> *@
-<RadzenButton Text="@_text" Icon="@Icon" Click="@Click" Style="@Style" />
+<RadzenButton Text="@_text"
+              Icon="@Icon"
+              Click="@Click"
+              Style="@Style"
+              Attributes="@_attributes" />
 
 @code {
     private string _text;
+    // RadzenButton renders unknown DOM attributes from its `Attributes` dictionary. We use
+    // it to set the native HTML `title` for tooltips so icon-only buttons can carry a
+    // localised hover-text without TooltipService plumbing. Null/empty title attribute is
+    // dropped so we don't render `title=""` on buttons that never set a tooltip.
+    private IReadOnlyDictionary<string, object> _attributes;
 
     [Parameter]
     public string TextKey { get; set; }
@@ -23,6 +32,19 @@
 
     [Parameter]
     public string Style{ get; set; }
+
+    /// <summary>Optional content key resolved for the button's hover tooltip (HTML
+    /// <c>title</c> attribute). Falls back to <see cref="DefaultTooltip"/> on miss / empty /
+    /// lookup failure. Most useful on icon-only buttons; leave unset for buttons whose
+    /// label already speaks for itself.</summary>
+    [Parameter]
+    public string TooltipKey { get; set; }
+
+    /// <summary>Fallback tooltip used when <see cref="TooltipKey"/> isn't set or the lookup
+    /// yields nothing. Set this alone (without TooltipKey) for a static, non-localised
+    /// tooltip; set both for localised content with a sane fallback.</summary>
+    [Parameter]
+    public string DefaultTooltip { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -40,6 +62,10 @@
     private async Task LoadContentAsync()
     {
         _text = (await ContentService.GetContentAsync(TextKey, DefaultText, LanguageStateService.Selected.Key, ContentFormat.String)).Value;
+        var tooltip = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TooltipKey, DefaultTooltip);
+        _attributes = string.IsNullOrEmpty(tooltip)
+            ? null
+            : new Dictionary<string, object> { ["title"] = tooltip };
     }
 
 }

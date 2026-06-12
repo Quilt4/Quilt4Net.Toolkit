@@ -32,6 +32,11 @@ public static class Quilt4ContentRegistration
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddScoped<IQuilt4ContentService, Quilt4ContentService>();
         services.AddScoped<IContentAdminService, ContentAdminService>();
+        // Content-aware Radzen DialogService / NotificationService wrappers. Both depend on
+        // the already-registered Radzen services (host registers Radzen via AddRadzen* or
+        // AddScoped<DialogService>() / AddScoped<NotificationService>()).
+        services.AddScoped<IQuilt4DialogService, Quilt4DialogService>();
+        services.AddScoped<IQuilt4NotificationService, Quilt4NotificationService>();
         // Default adapter forwards to Tharga.Blazor's BreadCrumbService when registered, silently
         // no-ops otherwise. TryAdd so a host can swap in their own adapter ahead of this call.
         services.TryAddScoped<Features.Content.Pages.IPageBreadcrumbAdapter, Features.Content.Pages.TharBlazorBreadcrumbAdapter>();
