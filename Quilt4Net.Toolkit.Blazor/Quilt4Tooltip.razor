@@ -1,0 +1,51 @@
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+
+@*
+    Content-aware tooltip wrapper. Wraps arbitrary child content in a span that carries a
+    standard HTML `title="..."` attribute resolved through the content service. The
+    title="..." native tooltip is intentional — it's the most universal hover-tooltip
+    surface (no JS, works on icon-only buttons, links, plain text, etc.) and Radzen's
+    own components honour it.
+
+    For the Radzen popover-style RadzenTooltip + TooltipService imperative API, a host
+    that needs that surface can keep using TooltipService directly with a content-aware
+    string resolved via IQuilt4DialogService-style helpers — but the native title
+    attribute covers ~90% of real tooltip use today, and Quilt4Tooltip lands that without
+    new infrastructure.
+*@
+<span title="@LoadedTooltip" style="@Style">
+    @ChildContent
+</span>
+
+@code {
+    /// <summary>Content key resolved for the tooltip text. Falls back to <see cref="DefaultTooltip"/>
+    /// on miss / empty / lookup failure.</summary>
+    [Parameter] public string TooltipKey { get; set; }
+
+    /// <summary>Fallback tooltip text used when the key isn't set or the lookup yields nothing.</summary>
+    [Parameter] public string DefaultTooltip { get; set; }
+
+    /// <summary>The element(s) the tooltip is attached to.</summary>
+    [Parameter] public RenderFragment ChildContent { get; set; }
+
+    /// <summary>Optional inline style on the wrapping span (display: inline-block / flex / etc.).</summary>
+    [Parameter] public string Style { get; set; }
+
+    internal string LoadedTooltip { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+        => LoadedTooltip = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TooltipKey, DefaultTooltip);
+}
