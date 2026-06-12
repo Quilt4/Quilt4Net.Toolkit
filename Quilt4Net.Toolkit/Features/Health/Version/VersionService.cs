@@ -24,6 +24,7 @@ internal class VersionService : IVersionService
         var result = new VersionResponse
         {
             Version = $"{asm?.GetName().Version}",
+            InformationalVersion = ReadInformationalVersion(asm),
             Machine = Environment.MachineName,
             Environment = name,
             IpAddress = ipAddress,
@@ -31,6 +32,20 @@ internal class VersionService : IVersionService
         };
 
         return result;
+    }
+
+    // The numeric AssemblyVersion drops any "-pre.n" tag (it has to — it's a 4-part numeric).
+    // For deploy-verification flows that need to identify the exact build serving traffic, read
+    // the full SemVer string from AssemblyInformationalVersionAttribute and strip SourceLink's
+    // optional "+commit-hash" build-metadata suffix so the field carries clean SemVer.
+    internal static string ReadInformationalVersion(Assembly asm)
+        => StripBuildMetadata(asm?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+
+    internal static string StripBuildMetadata(string version)
+    {
+        if (string.IsNullOrEmpty(version)) return null;
+        var plus = version.IndexOf('+');
+        return plus >= 0 ? version[..plus] : version;
     }
 
     private async Task<string> GetExternalIpAsync(Uri ipAddressCheck)
