@@ -4,6 +4,8 @@
   href: getting-started.md
 - name: Telemetry identity & correlation
   href: telemetry-identity.md
+- name: Content components
+  href: content-components.md
 - name: Log views
   href: log-views.md
 - name: Metrics
