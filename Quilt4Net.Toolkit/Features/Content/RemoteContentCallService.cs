@@ -174,6 +174,61 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _localCache.Clear();
     }
 
+    public async Task WarmCacheAsync(Guid languageKey, string application = null)
+    {
+        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return;
+        if (languageKey == Language.DeveloperLanguageKey || languageKey == Language.NoApiKeyLanguageKey) return;
+
+        var effectiveApplication = ResolveApplication(application);
+        if (string.IsNullOrEmpty(effectiveApplication)) return;
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            using var cts = new CancellationTokenSource(_contentOptions.HttpTimeout);
+            using var client = GetHttpClient();
+            var address = $"Api/Content/all/{Uri.EscapeDataString(effectiveApplication)}/{Uri.EscapeDataString(_environmentName.Name ?? "")}/{languageKey}";
+            var response = await client.GetAsync(address, cts.Token);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.LogInformation("Content warm-up endpoint unavailable (404). Server predates bulk content; falling back to per-key fetching.");
+                return;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Content warm-up failed. Response was {StatusCode} {ReasonPhrase}. Falling back to per-key fetching.",
+                    response.StatusCode, response.ReasonPhrase);
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<GetAllContentResponse>(cancellationToken: cts.Token);
+            if (result?.Items == null) return;
+
+            var ttl = result.ValidTo - DateTime.UtcNow;
+            foreach (var item in result.Items)
+            {
+                var cacheKey = BuildCacheKey(item.Key, languageKey, effectiveApplication);
+                var cached = new GetContentResponse { Value = item.Value, ValidTo = result.ValidTo };
+                _localCache.AddOrUpdate(cacheKey, cached, (_, _) => cached);
+                if (ttl > TimeSpan.Zero) _lastKnownTtl[cacheKey] = ttl;
+            }
+
+            _logger.LogInformation("Content warm-up loaded {Count} item(s) in {Elapsed}ms for application '{Application}', language '{LanguageKey}'. ValidTo: {ValidTo}.",
+                result.Items.Length, sw.ElapsedMilliseconds, effectiveApplication, languageKey, result.ValidTo);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Content warm-up timed out after {Timeout}ms. Falling back to per-key fetching.",
+                _contentOptions.HttpTimeout.TotalMilliseconds);
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Content warm-up failed: {Message} Falling back to per-key fetching.", e.Message);
+        }
+    }
+
     private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string effectiveApplication)
     {
         try
@@ -323,6 +378,28 @@ internal class RemoteContentCallService : IRemoteContentCallService
     {
         // "" and null both mean "shared" so they collapse to the same cache slot.
         return $"{key}_{languageKey}|{effectiveApplication ?? ""}";
+    }
+
+    public IReadOnlyDictionary<Guid, int> GetCacheCountsByLanguage()
+    {
+        var counts = new Dictionary<Guid, int>();
+        foreach (var cacheKey in _localCache.Keys)
+        {
+            if (!TryParseLanguageFromCacheKey(cacheKey, out var languageKey)) continue;
+            counts[languageKey] = counts.GetValueOrDefault(languageKey) + 1;
+        }
+        return counts;
+    }
+
+    // Reverse of BuildCacheKey: the language key is the 36-char GUID immediately before the '|'
+    // application delimiter (application names never contain '|'). Kept beside BuildCacheKey so the
+    // two stay in sync if the format ever changes.
+    private static bool TryParseLanguageFromCacheKey(string cacheKey, out Guid languageKey)
+    {
+        languageKey = Guid.Empty;
+        var pipe = cacheKey.LastIndexOf('|');
+        if (pipe < 36) return false;
+        return Guid.TryParse(cacheKey.Substring(pipe - 36, 36), out languageKey);
     }
 
     private static string BuildKey(GetContentRequest request)

@@ -252,6 +252,39 @@ Notifications whose summary and (optional) detail come from content keys.
 | `detailKey` / `defaultDetail` | Optional detail pair. Both null → no detail line. |
 | `duration` | Display duration in ms (default 3000). |
 
+## Startup warm-up
+
+On a cold cache every content component issues its own HTTP lookup, so a content-heavy page (a menu,
+a dashboard) fans out into dozens of requests that trickle in as they complete. To avoid that,
+`AddQuilt4NetBlazorContent` registers a startup warm-up that pre-fills the cache in a **single bulk
+call per language**:
+
+- The **default language** is warmed in the background at application start (non-blocking — startup
+  is not delayed).
+- The user's **selected language** is warmed per circuit as soon as it's known, and again whenever
+  they switch language. The cache is process-wide, so the first user on a language pays the one bulk
+  call and everyone after hits the warm cache.
+- Warming is **best-effort and backward-compatible**: against a server that doesn't expose the bulk
+  endpoint (404), or on any failure/timeout, it silently falls back to the existing per-key fetching.
+
+Disable it to rely purely on lazy per-key loading:
+
+```json
+{
+  "Quilt4Net": {
+    "Content": {
+      "WarmUpEnabled": false
+    }
+  }
+}
+```
+
+### Inspecting what's loaded
+
+The content admin panel (`<ContentAdmin>`) shows content admins a **Loaded content per language**
+list — the number of cached content entries per language, with a Refresh button — so you can confirm
+the warm-up populated the cache as expected.
+
 ## Where next
 
 - **[Log views](log-views.md)** — content-aware host of the AI log surface.

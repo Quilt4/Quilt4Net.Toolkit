@@ -5,6 +5,7 @@
 @inject IContentService ContentService
 @inject IEditContentService EditContentService
 @inject IContentAdminService ContentAdminService
+@inject IRemoteContentCallService RemoteContentCallService
 @inject NavigationManager NavigationManager
 
 <ConnectionWrapper Service="Service.Content">
@@ -27,15 +28,59 @@
                 <StandardButton Text="Reload Content" Icon="bolt" Click="ReloadContent"/>
             </RadzenColumn>
         </RadzenRow>
+        @if (_isAdmin)
+        {
+            <RadzenRow>
+                <RadzenColumn>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                        <RadzenText Text="Loaded content per language" TextStyle="TextStyle.Caption"/>
+                        <StandardButton Text="Refresh" Icon="refresh" Click="RefreshCounts"/>
+                    </RadzenStack>
+                    @if (_loaded.Count == 0)
+                    {
+                        <RadzenText Text="Nothing cached yet." TextStyle="TextStyle.Body2"/>
+                    }
+                    else
+                    {
+                        @foreach (var row in _loaded)
+                        {
+                            <RadzenText Text="@($"{row.Name}: {row.Count}")" TextStyle="TextStyle.Body2"/>
+                        }
+                    }
+                </RadzenColumn>
+            </RadzenRow>
+        }
     </RadzenStack>
 </ConnectionWrapper>
 
 @code {
     private bool _isAdmin;
+    private List<(string Name, int Count)> _loaded = [];
 
     protected override async Task OnInitializedAsync()
     {
         _isAdmin = await ContentAdminService.IsContentAdminAsync();
+        await RefreshCounts();
+    }
+
+    private Task RefreshCounts()
+    {
+        var counts = RemoteContentCallService.GetCacheCountsByLanguage();
+        var languages = LanguageStateService.Languages ?? [];
+
+        string NameOf(Guid key)
+        {
+            var name = languages.FirstOrDefault(l => l.Key == key)?.Name;
+            if (!string.IsNullOrEmpty(name)) return name;
+            return key == Guid.Empty ? "Default" : key.ToString();
+        }
+
+        _loaded = counts
+            .Select(c => (Name: NameOf(c.Key), Count: c.Value))
+            .OrderByDescending(x => x.Count)
+            .ToList();
+
+        return Task.CompletedTask;
     }
 
     private async Task ReloadContent()

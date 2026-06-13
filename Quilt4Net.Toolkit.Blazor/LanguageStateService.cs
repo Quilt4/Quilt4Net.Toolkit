@@ -8,14 +8,16 @@ internal class LanguageStateService : ILanguageStateService
 {
     private readonly ILanguageService _languageService;
     private readonly ILocalStorageService _localStorageService;
+    private readonly IRemoteContentCallService _remoteContentCallService;
     private Language _selected;
     private bool _developerMode;
     private readonly Language _defaultLanguage;
 
-    public LanguageStateService(ILanguageService languageService, ILocalStorageService localStorageService)
+    public LanguageStateService(ILanguageService languageService, ILocalStorageService localStorageService, IRemoteContentCallService remoteContentCallService)
     {
         _languageService = languageService;
         _localStorageService = localStorageService;
+        _remoteContentCallService = remoteContentCallService;
         _defaultLanguage = new Language { Name = null };
 
         Task.Run(async () =>
@@ -118,9 +120,34 @@ internal class LanguageStateService : ILanguageStateService
                     catch (InvalidOperationException) { /* JS interop unavailable — selection persists for the lifetime of this session only. */ }
                     catch (JSDisconnectedException) { /* Circuit disposed mid-call — nowhere to persist. */ }
                 });
+                WarmSelected(value);
                 LanguageChangedEvent?.Invoke(this, new LanguageChangedEventArgs());
             }
         }
+    }
+
+    /// <summary>
+    /// Best-effort bulk warm-up of a newly-selected non-default language so subsequent renders in
+    /// that language hit cache instead of fanning out per key. Fire-and-forget — the per-key path
+    /// still serves the current switch if the warm-up hasn't completed yet. The default language is
+    /// warmed at startup by <see cref="ContentWarmupHostedService"/>, so it's skipped here.
+    /// </summary>
+    private void WarmSelected(Language language)
+    {
+        var key = language?.Key ?? Guid.Empty;
+        if (key == Guid.Empty || key == Language.DeveloperLanguageKey || key == Language.NoApiKeyLanguageKey) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _remoteContentCallService.WarmCacheAsync(key);
+            }
+            catch
+            {
+                // Best-effort; the per-key path remains as the fallback.
+            }
+        });
     }
 
     public Language[] Languages { get; set; }
