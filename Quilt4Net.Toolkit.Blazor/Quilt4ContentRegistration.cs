@@ -45,6 +45,11 @@ public static class Quilt4ContentRegistration
         services.AddBlazoredLocalStorage();
         services.AddQuilt4NetContent(configuration, options);
 
+        // Startup warm-up: bulk-load the default language into the (singleton) content cache so the
+        // first render avoids per-key fan-out. Honors ContentOptions.WarmUpEnabled; selected-language
+        // warming is handled per-circuit by LanguageStateService.
+        services.AddHostedService<ContentWarmupHostedService>();
+
         return services;
     }
 }

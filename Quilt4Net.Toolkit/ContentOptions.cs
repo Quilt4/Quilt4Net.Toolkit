@@ -52,6 +52,14 @@ public record ContentOptions
     public bool StaleWhileRevalidate { get; set; } = true;
 
     /// <summary>
+    /// When true (default), the Blazor content registration runs a startup warm-up that pre-fills
+    /// the cache with the default language in one bulk call (so pages render without a request per
+    /// key). The user's selected language is warmed per-circuit when it differs from the default.
+    /// Set false to disable warm-up and rely solely on lazy per-key fetching.
+    /// </summary>
+    public bool WarmUpEnabled { get; set; } = true;
+
+    /// <summary>
     /// Roles that grant content admin access (edit, debug, reload).
     /// Checked against the authenticated user's claim roles (e.g. Entra ID).
     /// Default is ["ContentAdmin", "Developer"].
