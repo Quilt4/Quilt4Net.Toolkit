@@ -1244,6 +1244,12 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
     // first (what the Quilt4Net SDK enriches every record with — `Environment.MachineName`), then
     // Properties['host.name'] (the OpenTelemetry resource attribute), and finally AppRoleInstance
     // (Azure Monitor's per-instance id) as a last-resort fallback.
+    //
+    // `where isnotempty(host)` drops rows with no host identity at all. The k3s nodes run a
+    // hostmetrics DaemonSet that emits system.* WITHOUT host.name/AppRole*, so without this filter
+    // every node's same-named device (e.g. /dev/sda1) collapses into one blank-prefixed series and
+    // averages unrelated machines together. Those cluster nodes are charted per-node via the
+    // k8s.node.* methods instead (GetClusterNode*). Identified hosts (e.g. Eplicta1-7) are unaffected.
 
     public IAsyncEnumerable<MetricSample> GetCpuUtilizationAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -1254,6 +1260,7 @@ AppMetrics
 | where Name == 'system.cpu.utilization'
 | where tostring(Properties.state) == 'idle'
 | extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
+| where isnotempty(host)
 | summarize avg_idle = sum(Sum) / todouble(sum(ItemCount)) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | extend cpu_busy_pct = 100.0 * (1 - avg_idle)
 | project Series = host, Timestamp = TimeGenerated, Value = cpu_busy_pct";
@@ -1269,6 +1276,7 @@ AppMetrics
 | where Name == 'system.memory.utilization'
 | where tostring(Properties.state) == 'used'
 | extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
+| where isnotempty(host)
 | summarize mem_used_pct = 100.0 * sum(Sum) / todouble(sum(ItemCount)) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | project Series = host, Timestamp = TimeGenerated, Value = mem_used_pct";
         return RunMetricQueryAsync(context, query, timeSpan, $"mem|{context.ToKey()}|{timeSpan}", cancellationToken);
@@ -1289,6 +1297,7 @@ AppMetrics
 | where Name == 'system.filesystem.usage'
 | where tostring(Properties.state) == 'free'
 | extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
+| where isnotempty(host)
 | extend volume = strcat(host, ' ', tostring(Properties['device']))
 | summarize free_gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | project Series = volume, Timestamp = TimeGenerated, Value = free_gb";
@@ -1307,6 +1316,7 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.filesystem.usage'
 | extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
+| where isnotempty(host)
 | extend volume = strcat(host, ' ', tostring(Properties['device']))
 | extend state = tostring(Properties.state)
 | summarize gb = (sum(Sum) / todouble(sum(ItemCount))) / 1073741824.0 by volume, state
@@ -1363,6 +1373,7 @@ AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
 | where Name == 'system.network.io'
 | extend host = coalesce(tostring(Properties['MachineName']), tostring(Properties['host.name']), AppRoleInstance)
+| where isnotempty(host)
 | summarize total_bytes = sum(Sum) by host, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
 | order by host asc, TimeGenerated asc
 | extend prev_bytes = prev(total_bytes), prev_host = prev(host), prev_t = prev(TimeGenerated)
