@@ -801,6 +801,47 @@ When the team has more than one configured workspace (remote mode, or an explici
 
 Two column toggles — **Show Development** and **Show Unknown** — are off by default. Each hides its environment column (`Development` / `(unknown)`) and drops any application row left without values in the remaining columns, so dev-only / unknown-only apps stay out of the default view. Toggling is instant (no re-query).
 
+## Metrics view
+
+`MetricsView` charts host and Kubernetes-cluster resource metrics read back from Application
+Insights (the `AppMetrics` table). Quilt4Net **reads** these — it does not produce them; the
+series come from an OpenTelemetry Collector (`hostmetrics` for machines, `kubeletstats` for the
+cluster) exporting OTel `system.*` / `k8s.*` semantic-convention metrics into your workspace.
+
+```razor
+<MetricsView />
+```
+
+It uses the same Application Insights client and configuration selector as `LogView` (local or
+remote mode — see [Log viewer](#log-viewer)), and a circuit-scoped cache so navigating away and
+back is instant. A range selector (1h / 24h / 7d) and a Refresh button sit at the top.
+
+**Hosts** (per machine, from `system.*`, grouped by `host.name`):
+
+| Chart | Source |
+|-------|--------|
+| CPU % | `system.cpu.utilization` (idle → busy %) |
+| Memory % | `system.memory.utilization` |
+| Disk used (GB) | `system.filesystem.usage` (per host + volume, with capacity bars) |
+
+**Cluster nodes** — shown only when the workspace has Kubernetes telemetry (otherwise the
+section collapses), one line per node (`k8s.node.name`):
+
+| Chart | Source | Unit |
+|-------|--------|------|
+| Node CPU | `k8s.node.cpu.usage` | cores (absolute — there is no node CPU-capacity metric to form a %) |
+| Node memory % | `k8s.node.memory.usage / (usage + available)` | % |
+| Node filesystem % | `k8s.node.filesystem.usage / capacity` | % |
+
+**Node → pod drill-down** — pick a node from the dropdown to load the pods scheduled on it
+(`k8s.pod.cpu.usage` in cores and `k8s.pod.memory.usage` in MB, labelled
+`{namespace}/{pod}`). Pod series are fetched on demand and are not cached.
+
+> Network throughput and swap/paging are intentionally not charted. Per-host load average
+> (`system.cpu.load_average.*`) is also omitted: the collector currently emits it without a host
+> resource attribute, so it can't be attributed to a machine — a producer-side fix is needed
+> before it can be shown here.
+
 ## Developer monitoring pages
 
 The usual convention is to expose the log and version views on developer-only pages at `/developer/log` and `/developer/version`, gated by a `Developer` role:

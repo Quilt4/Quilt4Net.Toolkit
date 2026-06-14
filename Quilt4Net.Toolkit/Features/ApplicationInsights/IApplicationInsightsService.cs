@@ -84,6 +84,53 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MetricSample> GetNetworkThroughputAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Kubernetes node CPU usage in <b>cores</b> per node (<c>k8s.node.name</c>) over
+    /// <paramref name="timeSpan"/>. Source: kubeletstats <c>k8s.node.cpu.usage</c> (a gauge in
+    /// cores, e.g. 1.3 = 1.3 cores busy). There is no node CPU-capacity metric in the workspace,
+    /// so this is reported as absolute cores, not a percentage. <see cref="MetricSample.Series"/>
+    /// is the node name. Bin size scales with the window (see <see cref="MetricsBinSelector"/>).
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterNodeCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kubernetes node memory-used <b>percentage</b> per node (<c>k8s.node.name</c>) over
+    /// <paramref name="timeSpan"/>. Computed per bin as
+    /// <c>100 * usage / (usage + available)</c> from kubeletstats <c>k8s.node.memory.usage</c>
+    /// and <c>k8s.node.memory.available</c> (there is no direct capacity metric; the pair sums to
+    /// total). <see cref="MetricSample.Series"/> is the node name. Bin size scales with the window.
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterNodeMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Per-pod CPU usage in <b>cores</b> for the pods scheduled on <paramref name="node"/>
+    /// (<c>k8s.node.name</c>) over <paramref name="timeSpan"/>. Source: kubeletstats
+    /// <c>k8s.pod.cpu.usage</c>. This is the node→pod drill-down for
+    /// <see cref="GetClusterNodeCpuAsync"/>. <see cref="MetricSample.Series"/> is
+    /// <c>{k8s.namespace.name}/{k8s.pod.name}</c>. Bin size scales with the window.
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterPodCpuAsync(IApplicationInsightsContext context, string node, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Per-pod memory usage in <b>MB</b> for the pods scheduled on <paramref name="node"/>
+    /// (<c>k8s.node.name</c>) over <paramref name="timeSpan"/>. Source: kubeletstats
+    /// <c>k8s.pod.memory.usage</c> (absolute bytes — pods have no consistent capacity to render a
+    /// percentage against, unlike nodes). This is the node→pod drill-down for
+    /// <see cref="GetClusterNodeMemoryAsync"/>. <see cref="MetricSample.Series"/> is
+    /// <c>{k8s.namespace.name}/{k8s.pod.name}</c>. Bin size scales with the window.
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterPodMemoryAsync(IApplicationInsightsContext context, string node, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kubernetes node filesystem-used <b>percentage</b> per node (<c>k8s.node.name</c>) over
+    /// <paramref name="timeSpan"/>. Computed as <c>100 * usage / capacity</c> from kubeletstats
+    /// <c>k8s.node.filesystem.usage</c> and <c>k8s.node.filesystem.capacity</c> — answers "is a
+    /// node running out of disk". <see cref="MetricSample.Series"/> is the node name. Bin size
+    /// scales with the window. (Host disk I/O is intentionally not surfaced: the cluster Linux
+    /// nodes' <c>system.disk.*</c> rows carry no host identity, so it cannot be attributed.)
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterNodeFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Counts log entries per (service × severity × environment × source) across <c>AppTraces</c>,
     /// <c>AppExceptions</c> and <c>AppRequests</c> over <paramref name="timeSpan"/>. Severity is
     /// unified across sources: traces use their own <c>SeverityLevel</c>; exceptions are always

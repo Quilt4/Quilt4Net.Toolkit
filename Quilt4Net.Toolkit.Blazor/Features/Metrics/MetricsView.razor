@@ -62,6 +62,7 @@
         </RadzenAlert>
     }
 
+    <RadzenText TextStyle="TextStyle.H6" Text="Hosts" Style="margin: 0;" />
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
         <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
         <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
@@ -72,12 +73,41 @@
            growth with a utilisation-is-bad colour scheme; the inline sparkline keeps the shape
            visible for cases where a sudden spike matters. *@
         <MetricLatestChart Title="Disk used (GB)" Unit="GB" Samples="@_disk" Capacity="@_diskCapacity" Range="@_window" Loading="@_busy" LessIsBad="false" />
-        @* Network values commonly span 3-4 orders of magnitude across hosts — idle web boxes sit
-           at ~0.01 MB/s while a single backup job spikes to 50+ MB/s. On a linear axis the idle
-           hosts vanish into a flat line at the bottom; log scale gives each host's shape its own
-           visible band. Ticks reverse-format back to MB/s so the axis still reads naturally. *@
-        <MetricChart Title="Network (MB/s)" Unit="MB/s" Samples="@_network" Loading="@_busy" LogScale="true" />
     </div>
+
+    @* Cluster section — Kubernetes node metrics (kubeletstats). Only shown when the workspace
+       actually has node telemetry, so non-cluster consumers don't see an empty section. CPU is
+       absolute cores (no node CPU-capacity metric to percentage against); memory and filesystem
+       are % of node total. *@
+    @if (_busy || _nodes.Length > 0)
+    {
+        <RadzenText TextStyle="TextStyle.H6" Text="Cluster nodes" Style="margin: 0.5rem 0 0 0;" />
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
+            <MetricChart Title="Node CPU (cores)" Unit="cores" Samples="@_nodeCpu" Loading="@_busy" FullPercentScale="false" />
+            <MetricChart Title="Node memory %" Unit="%" Samples="@_nodeMemory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+            <MetricChart Title="Node filesystem %" Unit="%" Samples="@_nodeFilesystem" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+        </div>
+
+        @* Node→pod drill-down: pick a node to load the pods scheduled on it. Pod series are
+           fetched on demand (not part of the scoped cache) since they're a detail view. *@
+        @if (_nodes.Length > 0)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="margin-top: 0.5rem;">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Drill into node (pods)" />
+                <RadzenDropDown Data="@_nodes" @bind-Value="_selectedNode" TValue="string"
+                                AllowClear="true" Placeholder="Select a node…"
+                                Change="@(_ => LoadPodsAsync())" Style="max-width: 320px;" />
+            </RadzenStack>
+
+            @if (!string.IsNullOrEmpty(_selectedNode))
+            {
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
+                    <MetricChart Title="@($"Pods on {_selectedNode} — CPU (cores)")" Unit="cores" Samples="@_podCpu" Loading="@_podBusy" FullPercentScale="false" />
+                    <MetricChart Title="@($"Pods on {_selectedNode} — memory (MB)")" Unit="MB" Samples="@_podMemory" Loading="@_podBusy" FullPercentScale="false" />
+                </div>
+            }
+        }
+    }
 </RadzenStack>
 
 @code {
@@ -94,8 +124,17 @@
     private MetricSample[] _cpu = [];
     private MetricSample[] _memory = [];
     private MetricSample[] _disk = [];
-    private MetricSample[] _network = [];
     private DiskCapacity[] _diskCapacity = [];
+
+    // Cluster node series + node→pod drill-down state.
+    private MetricSample[] _nodeCpu = [];
+    private MetricSample[] _nodeMemory = [];
+    private MetricSample[] _nodeFilesystem = [];
+    private string[] _nodes = [];
+    private string _selectedNode;
+    private MetricSample[] _podCpu = [];
+    private MetricSample[] _podMemory = [];
+    private bool _podBusy;
 
     private IApplicationInsightsConfigurationSelector _selector;
     private ApplicationInsightsConfigurationResponse _selectedConfig;
@@ -176,8 +215,11 @@
             _cpu = entry.Cpu;
             _memory = entry.Memory;
             _disk = entry.Disk;
-            _network = entry.Network;
             _diskCapacity = entry.DiskCapacity;
+            _nodeCpu = entry.NodeCpu;
+            _nodeMemory = entry.NodeMemory;
+            _nodeFilesystem = entry.NodeFilesystem;
+            _nodes = NodeNames(_nodeCpu);
             _lastRefreshUtc = entry.LoadedUtc;
             _loadError = null;
             _busy = false;
@@ -207,11 +249,31 @@
             // capacity-join the second time.
             _disk = ToDiskUsed(freeSamples, _diskCapacity);
             StateHasChanged();
-            _network = await Ai.GetNetworkThroughputAsync(ctx, _window).ToArrayAsync();
+            // Cluster node series (kubeletstats). Empty on non-cluster workspaces — the Cluster
+            // section then collapses to nothing.
+            _nodeCpu = await Ai.GetClusterNodeCpuAsync(ctx, _window).ToArrayAsync();
+            _nodes = NodeNames(_nodeCpu);
+            StateHasChanged();
+            _nodeMemory = await Ai.GetClusterNodeMemoryAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            _nodeFilesystem = await Ai.GetClusterNodeFilesystemAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            // A previously-selected node may no longer exist after a reload — drop the drill-down
+            // if so, otherwise refresh its pods for the new window.
+            if (!string.IsNullOrEmpty(_selectedNode) && !_nodes.Contains(_selectedNode))
+            {
+                _selectedNode = null;
+                _podCpu = [];
+                _podMemory = [];
+            }
+            else if (!string.IsNullOrEmpty(_selectedNode))
+            {
+                await LoadPodsAsync();
+            }
             // Stamp the load completion. Only on success — a failed load shouldn't claim freshness.
             var loadedUtc = System.DateTime.UtcNow;
             _lastRefreshUtc = loadedUtc;
-            _scopedCache?.Set(key, _window, _cpu, _memory, _disk, _network, _diskCapacity, loadedUtc);
+            _scopedCache?.Set(key, _window, _cpu, _memory, _disk, _diskCapacity, _nodeCpu, _nodeMemory, _nodeFilesystem, loadedUtc);
         }
         catch (System.Exception e)
         {
@@ -243,6 +305,45 @@
     public void Dispose()
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
+    }
+
+    /// <summary>Distinct node names (sorted) from a node series, for the drill-down dropdown.</summary>
+    private static string[] NodeNames(MetricSample[] nodeSamples)
+        => MetricsViewLogic.NodeNames(nodeSamples);
+
+    /// <summary>
+    /// Load the pod CPU/memory series for the currently selected node. Cleared and skipped when
+    /// no node is selected (the AllowClear dropdown sets it to null). Errors surface in the same
+    /// banner as the main load; pod charts just stay empty.
+    /// </summary>
+    private async Task LoadPodsAsync()
+    {
+        var ctx = EffectiveContext;
+        if (ctx == null || string.IsNullOrEmpty(_selectedNode))
+        {
+            _podCpu = [];
+            _podMemory = [];
+            StateHasChanged();
+            return;
+        }
+
+        _podBusy = true;
+        StateHasChanged();
+        try
+        {
+            _podCpu = await Ai.GetClusterPodCpuAsync(ctx, _selectedNode, _window).ToArrayAsync();
+            StateHasChanged();
+            _podMemory = await Ai.GetClusterPodMemoryAsync(ctx, _selectedNode, _window).ToArrayAsync();
+        }
+        catch (System.Exception e)
+        {
+            _loadError = e.Message;
+        }
+        finally
+        {
+            _podBusy = false;
+            StateHasChanged();
+        }
     }
 
     /// <summary>
