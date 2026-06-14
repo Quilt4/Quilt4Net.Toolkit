@@ -41,7 +41,23 @@ public class MetricsViewClusterTests : BunitContext
 
     [Fact]
     public void NodeNames_of_empty_series_is_empty()
-        => MetricsViewLogic.NodeNames([]).Should().BeEmpty();
+        => MetricsViewLogic.NodeNames(System.Array.Empty<MetricSample>()).Should().BeEmpty();
+
+    [Fact]
+    public void NodeNames_unions_across_series_so_tab_survives_empty_cpu()
+    {
+        // Regression: the node list (and thus the Cluster tab) must be the union across series.
+        // CPU% can be empty when allocatable_cpu doesn't overlap the window, but memory/filesystem
+        // are always present — the tab must still show every node.
+        MetricSample S(string series) => new(series, new DateTime(2026, 6, 14, 10, 0, 0, DateTimeKind.Utc), 1);
+        var emptyCpu = System.Array.Empty<MetricSample>();
+        var memory = new[] { S("cog-audry"), S("cog-exshaw") };
+        var filesystem = new[] { S("cog-audry"), S("vm-ygg-cp-1") };
+
+        var nodes = MetricsViewLogic.NodeNames(emptyCpu, memory, filesystem);
+
+        nodes.Should().Equal("cog-audry", "cog-exshaw", "vm-ygg-cp-1");
+    }
 
     [Fact]
     public void Hides_cluster_section_when_no_node_metrics()

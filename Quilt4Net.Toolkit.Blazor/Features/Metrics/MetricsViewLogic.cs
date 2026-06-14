@@ -22,4 +22,19 @@ internal static class MetricsViewLogic
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    /// <summary>
+    /// Distinct node names across several node series (union). Used so the cluster tab / drill-down
+    /// list reflects every node seen in any chart — important because the CPU% series only has rows
+    /// where <c>allocatable_cpu</c> overlaps the window, while memory/filesystem are always present.
+    /// </summary>
+    public static string[] NodeNames(params MetricSample[][] sets)
+        => (sets ?? [])
+            .Where(s => s != null)
+            .SelectMany(s => s)
+            .Select(s => s.Series ?? "")
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 }

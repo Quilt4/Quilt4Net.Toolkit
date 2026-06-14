@@ -252,7 +252,7 @@
             _nodeCpu = entry.NodeCpu;
             _nodeMemory = entry.NodeMemory;
             _nodeFilesystem = entry.NodeFilesystem;
-            _nodes = NodeNames(_nodeCpu);
+            _nodes = NodeNames(_nodeCpu, _nodeMemory, _nodeFilesystem);
             _lastRefreshUtc = entry.LoadedUtc;
             _loadError = null;
             _busy = false;
@@ -285,13 +285,17 @@
             _disk = ToDiskUsed(freeSamples, _diskCapacity);
             StateHasChanged();
             // Cluster node series (kubeletstats). Empty on non-cluster workspaces — the Cluster
-            // section then collapses to nothing.
+            // tab then doesn't appear. The node list is the UNION across series: CPU% only has
+            // rows where allocatable overlaps the window, but memory/filesystem are always present,
+            // so the tab stays visible even when CPU% is momentarily empty.
             _nodeCpu = await Ai.GetClusterNodeCpuAsync(ctx, _window).ToArrayAsync();
             _nodes = NodeNames(_nodeCpu);
             StateHasChanged();
             _nodeMemory = await Ai.GetClusterNodeMemoryAsync(ctx, _window).ToArrayAsync();
+            _nodes = NodeNames(_nodeCpu, _nodeMemory);
             StateHasChanged();
             _nodeFilesystem = await Ai.GetClusterNodeFilesystemAsync(ctx, _window).ToArrayAsync();
+            _nodes = NodeNames(_nodeCpu, _nodeMemory, _nodeFilesystem);
             StateHasChanged();
             // A previously-selected node may no longer exist after a reload — drop the drill-down
             // if so, otherwise refresh its pods for the new window.
@@ -344,9 +348,10 @@
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
     }
 
-    /// <summary>Distinct node names (sorted) from a node series, for the drill-down dropdown.</summary>
-    private static string[] NodeNames(MetricSample[] nodeSamples)
-        => MetricsViewLogic.NodeNames(nodeSamples);
+    /// <summary>Distinct node names (sorted) across the node series — union, so a node shows even
+    /// when its CPU% series is empty (allocatable not yet in the window).</summary>
+    private static string[] NodeNames(params MetricSample[][] sets)
+        => MetricsViewLogic.NodeNames(sets);
 
     /// <summary>
     /// Load the pod CPU/memory series for the currently selected node. Cleared and skipped when
