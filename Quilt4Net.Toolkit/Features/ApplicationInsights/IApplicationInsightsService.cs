@@ -131,6 +131,31 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MetricSample> GetClusterNodeFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whole-cluster total CPU in <b>cores</b> over <paramref name="timeSpan"/> — the sum of every
+    /// node's <c>k8s.node.cpu.usage</c> per bin (each node averaged first, then summed), so a
+    /// 12-core node contributes proportionally more than a 2-core node. <see cref="MetricSample.Series"/>
+    /// is <c>"Cluster"</c>. Reported as cores, not %, because the workspace has no node
+    /// CPU-capacity metric (enable <c>k8s.node.allocatable_cpu</c> on the collector to get a %).
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterTotalCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whole-cluster total memory-used <b>percentage</b> over <paramref name="timeSpan"/>, weighted
+    /// by capacity: <c>100 * Σ usage / Σ (usage + available)</c> across all nodes per bin (so larger
+    /// nodes dominate the total). Source: <c>k8s.node.memory.usage</c> / <c>k8s.node.memory.available</c>.
+    /// <see cref="MetricSample.Series"/> is <c>"Cluster"</c>.
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterTotalMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whole-cluster total filesystem-used <b>percentage</b> over <paramref name="timeSpan"/>,
+    /// weighted by capacity: <c>100 * Σ usage / Σ capacity</c> across all nodes per bin. Source:
+    /// <c>k8s.node.filesystem.usage</c> / <c>k8s.node.filesystem.capacity</c>.
+    /// <see cref="MetricSample.Series"/> is <c>"Cluster"</c>.
+    /// </summary>
+    IAsyncEnumerable<MetricSample> GetClusterTotalFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Counts log entries per (service × severity × environment × source) across <c>AppTraces</c>,
     /// <c>AppExceptions</c> and <c>AppRequests</c> over <paramref name="timeSpan"/>. Severity is
     /// unified across sources: traces use their own <c>SeverityLevel</c>; exceptions are always

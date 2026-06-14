@@ -62,52 +62,76 @@
         </RadzenAlert>
     }
 
-    <RadzenText TextStyle="TextStyle.H6" Text="Hosts" Style="margin: 0;" />
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
-        <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
-        <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
-        @* Disk used uses a bar-per-host snapshot — over a 1h/24h/7d window the value barely
-           moves so a line chart degenerates into N flat lines. The bar fills as the volume fills
-           up (longer = more used), and the chart's LessIsBad=false threshold logic turns the bar
-           amber over 80% and red over 90% of capacity. The delta badge (▲ +1.2 GB / 24h) signals
-           growth with a utilisation-is-bad colour scheme; the inline sparkline keeps the shape
-           visible for cases where a sudden spike matters. *@
-        <MetricLatestChart Title="Disk used (GB)" Unit="GB" Samples="@_disk" Capacity="@_diskCapacity" Range="@_window" Loading="@_busy" LessIsBad="false" />
-    </div>
-
-    @* Cluster section — Kubernetes node metrics (kubeletstats). Only shown when the workspace
-       actually has node telemetry, so non-cluster consumers don't see an empty section. CPU is
-       absolute cores (no node CPU-capacity metric to percentage against); memory and filesystem
-       are % of node total. *@
-    @if (_busy || _nodes.Length > 0)
-    {
-        <RadzenText TextStyle="TextStyle.H6" Text="Cluster nodes" Style="margin: 0.5rem 0 0 0;" />
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
-            <MetricChart Title="Node CPU (cores)" Unit="cores" Samples="@_nodeCpu" Loading="@_busy" FullPercentScale="false" />
-            <MetricChart Title="Node memory %" Unit="%" Samples="@_nodeMemory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
-            <MetricChart Title="Node filesystem %" Unit="%" Samples="@_nodeFilesystem" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
-        </div>
-
-        @* Node→pod drill-down: pick a node to load the pods scheduled on it. Pod series are
-           fetched on demand (not part of the scoped cache) since they're a detail view. *@
-        @if (_nodes.Length > 0)
-        {
-            <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="margin-top: 0.5rem;">
-                <RadzenText TextStyle="TextStyle.Caption" Text="Drill into node (pods)" />
-                <RadzenDropDown Data="@_nodes" @bind-Value="_selectedNode" TValue="string"
-                                AllowClear="true" Placeholder="Select a node…"
-                                Change="@(_ => LoadPodsAsync())" Style="max-width: 320px;" />
-            </RadzenStack>
-
-            @if (!string.IsNullOrEmpty(_selectedNode))
-            {
+    @* Physical machines (hostmetrics) and the Kubernetes cluster (kubeletstats) live on separate
+       tabs. The Cluster tab only appears when the workspace actually has node telemetry, so
+       non-cluster consumers just see the Physical machines tab. *@
+    <RadzenTabs>
+        <Tabs>
+            <RadzenTabsItem Text="Physical machines">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
-                    <MetricChart Title="@($"Pods on {_selectedNode} — CPU (cores)")" Unit="cores" Samples="@_podCpu" Loading="@_podBusy" FullPercentScale="false" />
-                    <MetricChart Title="@($"Pods on {_selectedNode} — memory (MB)")" Unit="MB" Samples="@_podMemory" Loading="@_podBusy" FullPercentScale="false" />
+                    <MetricChart Title="CPU %" Unit="%" Samples="@_cpu" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+                    <MetricChart Title="Memory %" Unit="%" Samples="@_memory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+                    @* Disk used uses a bar-per-host snapshot — over a 1h/24h/7d window the value barely
+                       moves so a line chart degenerates into N flat lines. The bar fills as the volume fills
+                       up (longer = more used), and the chart's LessIsBad=false threshold logic turns the bar
+                       amber over 80% and red over 90% of capacity. The delta badge (▲ +1.2 GB / 24h) signals
+                       growth with a utilisation-is-bad colour scheme; the inline sparkline keeps the shape
+                       visible for cases where a sudden spike matters. *@
+                    <MetricLatestChart Title="Disk used (GB)" Unit="GB" Samples="@_disk" Capacity="@_diskCapacity" Range="@_window" Loading="@_busy" LessIsBad="false" />
                 </div>
+            </RadzenTabsItem>
+
+            @if (_nodes.Length > 0)
+            {
+                <RadzenTabsItem Text="Cluster">
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+                        @* Whole-cluster total toggle: off = per-node lines; on = one capacity-weighted
+                           line per metric aggregated across all nodes. Aggregates are fetched lazily. *@
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
+                            <RadzenSwitch @bind-Value="_clusterAggregate" TValue="bool" Name="clusterAggregate" Change="@(_ => OnAggregateToggledAsync())" />
+                            <RadzenLabel Component="clusterAggregate" Text="Whole-cluster total" />
+                        </RadzenStack>
+
+                        @if (_clusterAggregate)
+                        {
+                            @* Capacity-weighted totals across every node. CPU is cores (no node
+                               CPU-capacity metric yet — enable k8s.node.allocatable_cpu for a %). *@
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
+                                <MetricChart Title="Cluster CPU (cores)" Unit="cores" Samples="@_aggCpu" Loading="@(_busy || _aggBusy)" FullPercentScale="false" />
+                                <MetricChart Title="Cluster memory %" Unit="%" Samples="@_aggMemory" Loading="@(_busy || _aggBusy)" FullPercentScale="@_fullPercentScale" />
+                                <MetricChart Title="Cluster filesystem %" Unit="%" Samples="@_aggFilesystem" Loading="@(_busy || _aggBusy)" FullPercentScale="@_fullPercentScale" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
+                                <MetricChart Title="Node CPU (cores)" Unit="cores" Samples="@_nodeCpu" Loading="@_busy" FullPercentScale="false" />
+                                <MetricChart Title="Node memory %" Unit="%" Samples="@_nodeMemory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+                                <MetricChart Title="Node filesystem %" Unit="%" Samples="@_nodeFilesystem" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
+                            </div>
+
+                            @* Node→pod drill-down: pick a node to load the pods scheduled on it. Pod
+                               series are fetched on demand (not part of the scoped cache). *@
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="margin-top: 0.5rem;">
+                                <RadzenText TextStyle="TextStyle.Caption" Text="Drill into node (pods)" />
+                                <RadzenDropDown Data="@_nodes" @bind-Value="_selectedNode" TValue="string"
+                                                AllowClear="true" Placeholder="Select a node…"
+                                                Change="@(_ => LoadPodsAsync())" Style="max-width: 320px;" />
+                            </RadzenStack>
+
+                            @if (!string.IsNullOrEmpty(_selectedNode))
+                            {
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
+                                    <MetricChart Title="@($"Pods on {_selectedNode} — CPU (cores)")" Unit="cores" Samples="@_podCpu" Loading="@_podBusy" FullPercentScale="false" />
+                                    <MetricChart Title="@($"Pods on {_selectedNode} — memory (MB)")" Unit="MB" Samples="@_podMemory" Loading="@_podBusy" FullPercentScale="false" />
+                                </div>
+                            }
+                        }
+                    </RadzenStack>
+                </RadzenTabsItem>
             }
-        }
-    }
+        </Tabs>
+    </RadzenTabs>
 </RadzenStack>
 
 @code {
@@ -135,6 +159,15 @@
     private MetricSample[] _podCpu = [];
     private MetricSample[] _podMemory = [];
     private bool _podBusy;
+
+    // Whole-cluster aggregate toggle + lazily-loaded total series (one "Cluster" line each).
+    // Not in the scoped cache — fetched on demand per window and refreshed on range/refresh.
+    private bool _clusterAggregate;
+    private MetricSample[] _aggCpu = [];
+    private MetricSample[] _aggMemory = [];
+    private MetricSample[] _aggFilesystem = [];
+    private bool _aggBusy;
+    private System.TimeSpan? _aggLoadedWindow;
 
     private IApplicationInsightsConfigurationSelector _selector;
     private ApplicationInsightsConfigurationResponse _selectedConfig;
@@ -224,6 +257,8 @@
             _loadError = null;
             _busy = false;
             StateHasChanged();
+            // Aggregates aren't cached — refresh them for this window if the toggle is on.
+            await RefreshAggregatesForWindowAsync();
             return;
         }
 
@@ -270,6 +305,8 @@
             {
                 await LoadPodsAsync();
             }
+            // Aggregates are window-specific and not cached — refresh if the toggle is on.
+            await RefreshAggregatesForWindowAsync();
             // Stamp the load completion. Only on success — a failed load shouldn't claim freshness.
             var loadedUtc = System.DateTime.UtcNow;
             _lastRefreshUtc = loadedUtc;
@@ -342,6 +379,66 @@
         finally
         {
             _podBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Fired when the "Whole-cluster total" switch flips. Loads the aggregate series on first
+    /// enable for the current window (cheap no-op if already loaded for this window).
+    /// </summary>
+    private async Task OnAggregateToggledAsync()
+    {
+        if (_clusterAggregate && _aggLoadedWindow != _window)
+        {
+            await LoadAggregateAsync();
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Reset and (if the toggle is on) reload the cluster aggregate series for the current window.
+    /// Called on range change / refresh / cache-hit so the totals never show a stale window.
+    /// </summary>
+    private async Task RefreshAggregatesForWindowAsync()
+    {
+        _aggLoadedWindow = null;
+        _aggCpu = [];
+        _aggMemory = [];
+        _aggFilesystem = [];
+        if (_clusterAggregate)
+        {
+            await LoadAggregateAsync();
+        }
+    }
+
+    /// <summary>
+    /// Load the three whole-cluster total series (CPU cores, memory %, filesystem %) for the
+    /// current window. Errors surface in the shared banner; charts stay empty.
+    /// </summary>
+    private async Task LoadAggregateAsync()
+    {
+        var ctx = EffectiveContext;
+        if (ctx == null) return;
+
+        _aggBusy = true;
+        StateHasChanged();
+        try
+        {
+            _aggCpu = await Ai.GetClusterTotalCpuAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            _aggMemory = await Ai.GetClusterTotalMemoryAsync(ctx, _window).ToArrayAsync();
+            StateHasChanged();
+            _aggFilesystem = await Ai.GetClusterTotalFilesystemAsync(ctx, _window).ToArrayAsync();
+            _aggLoadedWindow = _window;
+        }
+        catch (System.Exception e)
+        {
+            _loadError = e.Message;
+        }
+        finally
+        {
+            _aggBusy = false;
             StateHasChanged();
         }
     }

@@ -50,12 +50,12 @@ public class MetricsViewClusterTests : BunitContext
 
         var cut = Render<MetricsView>(p => p.Add(c => c.Context, new TestContext()));
 
-        // The Hosts section always renders; the Cluster section must collapse once loading
-        // completes and no node series came back.
+        // The Physical machines tab always renders; the Cluster tab must not appear once loading
+        // completes and no node series came back (no "Whole-cluster total" toggle present).
         cut.WaitForAssertion(() =>
         {
-            cut.Markup.Should().Contain("Hosts");
-            cut.Markup.Should().NotContain("Cluster nodes");
+            cut.Markup.Should().Contain("Physical machines");
+            cut.Markup.Should().NotContain("Whole-cluster total");
         });
     }
 
@@ -85,6 +85,12 @@ public class MetricsViewClusterTests : BunitContext
             => Of(Sample("agents/web-1", 0.1));
         public IAsyncEnumerable<MetricSample> GetClusterPodMemoryAsync(IApplicationInsightsContext context, string node, TimeSpan timeSpan, CancellationToken cancellationToken = default)
             => Of(Sample("agents/web-1", 200));
+        public IAsyncEnumerable<MetricSample> GetClusterTotalCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
+            => _hasNodes ? Of(Sample("Cluster", 1.1)) : Empty<MetricSample>();
+        public IAsyncEnumerable<MetricSample> GetClusterTotalMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
+            => _hasNodes ? Of(Sample("Cluster", 31)) : Empty<MetricSample>();
+        public IAsyncEnumerable<MetricSample> GetClusterTotalFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
+            => _hasNodes ? Of(Sample("Cluster", 3)) : Empty<MetricSample>();
 
         // Everything else returns empty — the view only needs the metric methods to render.
         public Task<bool> CanConnectAsync(IApplicationInsightsContext context) => Task.FromResult(true);

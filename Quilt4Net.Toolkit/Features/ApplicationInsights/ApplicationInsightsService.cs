@@ -1477,6 +1477,61 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"nodefs|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
+    // Whole-cluster aggregates: average each node per bin first, THEN combine across nodes — so the
+    // result is a real capacity-weighted total (a 12-core / large-RAM node contributes more than a
+    // small one), not a mean of per-node ratios. One "Cluster" series.
+
+    public IAsyncEnumerable<MetricSample> GetClusterTotalCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var bin = MetricsBinSelector.PickBin(timeSpan);
+        var query = $@"
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name == 'k8s.node.cpu.usage'
+| extend node = tostring(Properties['k8s.node.name'])
+| where isnotempty(node)
+| summarize nodeCores = sum(Sum) / todouble(sum(ItemCount)) by node, ts = bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| summarize total = sum(nodeCores) by ts
+| project Series = 'Cluster', Timestamp = ts, Value = total";
+        return RunMetricQueryAsync(context, query, timeSpan, $"clustercpu|{context.ToKey()}|{timeSpan}", cancellationToken);
+    }
+
+    public IAsyncEnumerable<MetricSample> GetClusterTotalMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var bin = MetricsBinSelector.PickBin(timeSpan);
+        var query = $@"
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name in ('k8s.node.memory.usage', 'k8s.node.memory.available')
+| extend node = tostring(Properties['k8s.node.name'])
+| where isnotempty(node)
+| summarize val = sum(Sum) / todouble(sum(ItemCount)) by node, Name, ts = bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| extend used = iif(Name == 'k8s.node.memory.usage', val, 0.0), avail = iif(Name == 'k8s.node.memory.available', val, 0.0)
+| summarize used = sum(used), avail = sum(avail) by node, ts
+| summarize tUsed = sum(used), tAvail = sum(avail) by ts
+| where tUsed + tAvail > 0
+| project Series = 'Cluster', Timestamp = ts, Value = 100.0 * tUsed / (tUsed + tAvail)";
+        return RunMetricQueryAsync(context, query, timeSpan, $"clustermem|{context.ToKey()}|{timeSpan}", cancellationToken);
+    }
+
+    public IAsyncEnumerable<MetricSample> GetClusterTotalFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var bin = MetricsBinSelector.PickBin(timeSpan);
+        var query = $@"
+AppMetrics
+| where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
+| where Name in ('k8s.node.filesystem.usage', 'k8s.node.filesystem.capacity')
+| extend node = tostring(Properties['k8s.node.name'])
+| where isnotempty(node)
+| summarize val = sum(Sum) / todouble(sum(ItemCount)) by node, Name, ts = bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| extend used = iif(Name == 'k8s.node.filesystem.usage', val, 0.0), cap = iif(Name == 'k8s.node.filesystem.capacity', val, 0.0)
+| summarize used = sum(used), cap = sum(cap) by node, ts
+| summarize tUsed = sum(used), tCap = sum(cap) by ts
+| where tCap > 0
+| project Series = 'Cluster', Timestamp = ts, Value = 100.0 * tUsed / tCap";
+        return RunMetricQueryAsync(context, query, timeSpan, $"clusterfs|{context.ToKey()}|{timeSpan}", cancellationToken);
+    }
+
     public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Cache key bumped to v2 when the Machine column was added — without that suffix, a hot-

@@ -814,9 +814,12 @@ cluster) exporting OTel `system.*` / `k8s.*` semantic-convention metrics into yo
 
 It uses the same Application Insights client and configuration selector as `LogView` (local or
 remote mode — see [Log viewer](#log-viewer)), and a circuit-scoped cache so navigating away and
-back is instant. A range selector (1h / 24h / 7d) and a Refresh button sit at the top.
+back is instant. A range selector (1h / 24h / 7d) and a Refresh button sit at the top, and the
+charts are split across two tabs: **Physical machines** and **Cluster** (the Cluster tab appears
+only when the workspace has Kubernetes node telemetry).
 
-**Hosts** (per machine, from `system.*`, grouped by `host.name`):
+**Physical machines** tab (per machine, from `system.*`, grouped by `host.name` — rows with no
+host identity are excluded so unattributed node hostmetrics don't merge into blank series):
 
 | Chart | Source |
 |-------|--------|
@@ -824,8 +827,7 @@ back is instant. A range selector (1h / 24h / 7d) and a Refresh button sit at th
 | Memory % | `system.memory.utilization` |
 | Disk used (GB) | `system.filesystem.usage` (per host + volume, with capacity bars) |
 
-**Cluster nodes** — shown only when the workspace has Kubernetes telemetry (otherwise the
-section collapses), one line per node (`k8s.node.name`):
+**Cluster** tab — one line per node (`k8s.node.name`):
 
 | Chart | Source | Unit |
 |-------|--------|------|
@@ -833,8 +835,13 @@ section collapses), one line per node (`k8s.node.name`):
 | Node memory % | `k8s.node.memory.usage / (usage + available)` | % |
 | Node filesystem % | `k8s.node.filesystem.usage / capacity` | % |
 
-**Node → pod drill-down** — pick a node from the dropdown to load the pods scheduled on it
-(`k8s.pod.cpu.usage` in cores and `k8s.pod.memory.usage` in MB, labelled
+**Whole-cluster total toggle** — a switch on the Cluster tab swaps the per-node lines for a
+single **capacity-weighted total** line per metric, aggregated across all nodes (a 12-core node
+contributes more than a 2-core one): CPU = `Σ usage` (cores), memory = `100 × Σ usage / Σ (usage + available)`,
+filesystem = `100 × Σ usage / Σ capacity`. Totals are fetched on demand when the toggle is on.
+
+**Node → pod drill-down** — in per-node mode, pick a node from the dropdown to load the pods
+scheduled on it (`k8s.pod.cpu.usage` in cores and `k8s.pod.memory.usage` in MB, labelled
 `{namespace}/{pod}`). Pod series are fetched on demand and are not cached.
 
 > Network throughput and swap/paging are intentionally not charted. Per-host load average
