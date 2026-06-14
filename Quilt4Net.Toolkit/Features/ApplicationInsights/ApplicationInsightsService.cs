@@ -1390,18 +1390,22 @@ AppMetrics
 
     public IAsyncEnumerable<MetricSample> GetClusterNodeCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        // k8s.node.cpu.usage is a gauge in cores. No node CPU-capacity metric exists, so we
-        // surface absolute cores rather than a percentage. Series = node name.
+        // Node CPU used %, = 100 * k8s.node.cpu.usage / k8s.node.allocatable_cpu (cores / total
+        // schedulable cores). Both averaged per (node, bin) first, then combined. Only bins where
+        // allocatable is present render — i.e. from when the collector started emitting it.
         var bin = MetricsBinSelector.PickBin(timeSpan);
         var query = $@"
 AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
-| where Name == 'k8s.node.cpu.usage'
+| where Name in ('k8s.node.cpu.usage', 'k8s.node.allocatable_cpu')
 | extend node = tostring(Properties['k8s.node.name'])
 | where isnotempty(node)
-| summarize cores = sum(Sum) / todouble(sum(ItemCount)) by node, bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
-| project Series = node, Timestamp = TimeGenerated, Value = cores";
-        return RunMetricQueryAsync(context, query, timeSpan, $"nodecpu|{context.ToKey()}|{timeSpan}", cancellationToken);
+| summarize val = sum(Sum) / todouble(sum(ItemCount)) by node, Name, ts = bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| extend used = iif(Name == 'k8s.node.cpu.usage', val, 0.0), cap = iif(Name == 'k8s.node.allocatable_cpu', val, 0.0)
+| summarize used = sum(used), cap = sum(cap) by node, ts
+| where cap > 0
+| project Series = node, Timestamp = ts, Value = 100.0 * used / cap";
+        return RunMetricQueryAsync(context, query, timeSpan, $"nodecpupct|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
     public IAsyncEnumerable<MetricSample> GetClusterNodeMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -1483,17 +1487,22 @@ AppMetrics
 
     public IAsyncEnumerable<MetricSample> GetClusterTotalCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // Whole-cluster CPU used %, capacity-weighted: 100 * Σ usage / Σ allocatable_cpu across all
+        // nodes per bin (a 12-core node weighs 6× a 2-core one). Only bins with allocatable render.
         var bin = MetricsBinSelector.PickBin(timeSpan);
         var query = $@"
 AppMetrics
 | where TimeGenerated > ago({MetricsBinSelector.ToKqlLiteral(timeSpan)})
-| where Name == 'k8s.node.cpu.usage'
+| where Name in ('k8s.node.cpu.usage', 'k8s.node.allocatable_cpu')
 | extend node = tostring(Properties['k8s.node.name'])
 | where isnotempty(node)
-| summarize nodeCores = sum(Sum) / todouble(sum(ItemCount)) by node, ts = bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
-| summarize total = sum(nodeCores) by ts
-| project Series = 'Cluster', Timestamp = ts, Value = total";
-        return RunMetricQueryAsync(context, query, timeSpan, $"clustercpu|{context.ToKey()}|{timeSpan}", cancellationToken);
+| summarize val = sum(Sum) / todouble(sum(ItemCount)) by node, Name, ts = bin(TimeGenerated, {MetricsBinSelector.ToKqlLiteral(bin)})
+| extend used = iif(Name == 'k8s.node.cpu.usage', val, 0.0), cap = iif(Name == 'k8s.node.allocatable_cpu', val, 0.0)
+| summarize used = sum(used), cap = sum(cap) by node, ts
+| summarize tUsed = sum(used), tCap = sum(cap) by ts
+| where tCap > 0
+| project Series = 'Cluster', Timestamp = ts, Value = 100.0 * tUsed / tCap";
+        return RunMetricQueryAsync(context, query, timeSpan, $"clustercpupct|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
     public IAsyncEnumerable<MetricSample> GetClusterTotalMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)

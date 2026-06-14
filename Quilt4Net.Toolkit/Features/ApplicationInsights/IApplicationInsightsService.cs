@@ -84,11 +84,11 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MetricSample> GetNetworkThroughputAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Kubernetes node CPU usage in <b>cores</b> per node (<c>k8s.node.name</c>) over
-    /// <paramref name="timeSpan"/>. Source: kubeletstats <c>k8s.node.cpu.usage</c> (a gauge in
-    /// cores, e.g. 1.3 = 1.3 cores busy). There is no node CPU-capacity metric in the workspace,
-    /// so this is reported as absolute cores, not a percentage. <see cref="MetricSample.Series"/>
-    /// is the node name. Bin size scales with the window (see <see cref="MetricsBinSelector"/>).
+    /// Kubernetes node CPU-used <b>percentage</b> per node (<c>k8s.node.name</c>) over
+    /// <paramref name="timeSpan"/>. Computed as <c>100 * k8s.node.cpu.usage / k8s.node.allocatable_cpu</c>
+    /// (cores used / total schedulable cores; on k3s allocatable == physical cores). Only bins where
+    /// <c>allocatable_cpu</c> is present render, so coverage starts when the collector began emitting
+    /// it. <see cref="MetricSample.Series"/> is the node name. Bin size scales with the window.
     /// </summary>
     IAsyncEnumerable<MetricSample> GetClusterNodeCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
@@ -131,11 +131,10 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<MetricSample> GetClusterNodeFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Whole-cluster total CPU in <b>cores</b> over <paramref name="timeSpan"/> — the sum of every
-    /// node's <c>k8s.node.cpu.usage</c> per bin (each node averaged first, then summed), so a
-    /// 12-core node contributes proportionally more than a 2-core node. <see cref="MetricSample.Series"/>
-    /// is <c>"Cluster"</c>. Reported as cores, not %, because the workspace has no node
-    /// CPU-capacity metric (enable <c>k8s.node.allocatable_cpu</c> on the collector to get a %).
+    /// Whole-cluster CPU-used <b>percentage</b> over <paramref name="timeSpan"/>, capacity-weighted:
+    /// <c>100 * Σ usage / Σ allocatable_cpu</c> across all nodes per bin (a 12-core node contributes
+    /// proportionally more than a 2-core node). Source: <c>k8s.node.cpu.usage</c> /
+    /// <c>k8s.node.allocatable_cpu</c>. <see cref="MetricSample.Series"/> is <c>"Cluster"</c>.
     /// </summary>
     IAsyncEnumerable<MetricSample> GetClusterTotalCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 

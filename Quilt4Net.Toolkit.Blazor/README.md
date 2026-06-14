@@ -831,14 +831,15 @@ host identity are excluded so unattributed node hostmetrics don't merge into bla
 
 | Chart | Source | Unit |
 |-------|--------|------|
-| Node CPU | `k8s.node.cpu.usage` | cores (absolute — there is no node CPU-capacity metric to form a %) |
+| Node CPU % | `100 × k8s.node.cpu.usage / k8s.node.allocatable_cpu` | % |
 | Node memory % | `k8s.node.memory.usage / (usage + available)` | % |
 | Node filesystem % | `k8s.node.filesystem.usage / capacity` | % |
 
 **Whole-cluster total toggle** — a switch on the Cluster tab swaps the per-node lines for a
 single **capacity-weighted total** line per metric, aggregated across all nodes (a 12-core node
-contributes more than a 2-core one): CPU = `Σ usage` (cores), memory = `100 × Σ usage / Σ (usage + available)`,
-filesystem = `100 × Σ usage / Σ capacity`. Totals are fetched on demand when the toggle is on.
+contributes more than a 2-core one): CPU = `100 × Σ usage / Σ allocatable_cpu`, memory =
+`100 × Σ usage / Σ (usage + available)`, filesystem = `100 × Σ usage / Σ capacity`. Totals are
+fetched on demand when the toggle is on.
 
 **Node → pod drill-down** — in per-node mode, pick a node from the dropdown to load the pods
 scheduled on it (`k8s.pod.cpu.usage` in cores and `k8s.pod.memory.usage` in MB, labelled

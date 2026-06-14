@@ -97,7 +97,7 @@
                             @* Capacity-weighted totals across every node. CPU is cores (no node
                                CPU-capacity metric yet — enable k8s.node.allocatable_cpu for a %). *@
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
-                                <MetricChart Title="Cluster CPU (cores)" Unit="cores" Samples="@_aggCpu" Loading="@(_busy || _aggBusy)" FullPercentScale="false" />
+                                <MetricChart Title="Cluster CPU %" Unit="%" Samples="@_aggCpu" Loading="@(_busy || _aggBusy)" FullPercentScale="@_fullPercentScale" />
                                 <MetricChart Title="Cluster memory %" Unit="%" Samples="@_aggMemory" Loading="@(_busy || _aggBusy)" FullPercentScale="@_fullPercentScale" />
                                 <MetricChart Title="Cluster filesystem %" Unit="%" Samples="@_aggFilesystem" Loading="@(_busy || _aggBusy)" FullPercentScale="@_fullPercentScale" />
                             </div>
@@ -105,7 +105,7 @@
                         else
                         {
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem;">
-                                <MetricChart Title="Node CPU (cores)" Unit="cores" Samples="@_nodeCpu" Loading="@_busy" FullPercentScale="false" />
+                                <MetricChart Title="Node CPU %" Unit="%" Samples="@_nodeCpu" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
                                 <MetricChart Title="Node memory %" Unit="%" Samples="@_nodeMemory" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
                                 <MetricChart Title="Node filesystem %" Unit="%" Samples="@_nodeFilesystem" Loading="@_busy" FullPercentScale="@_fullPercentScale" />
                             </div>
