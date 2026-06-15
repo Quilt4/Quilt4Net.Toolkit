@@ -1,3 +1,5 @@
+@using Microsoft.Extensions.DependencyInjection
+@using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
 @inject IServiceProvider ServiceProvider
 
@@ -41,6 +43,7 @@ else
     private double _totalMb;
     private string _configError;
     private IApplicationInsightsService _ais;
+    private IApplicationInsightsConfigurationSelector _selector;
     private CancellationTokenSource _cts;
     private bool _loading;
 
@@ -50,24 +53,44 @@ else
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(7);
 
-    protected override void OnInitialized()
+    private IApplicationInsightsContext EffectiveContext => Context ?? _selector?.Selected;
+
+    protected override async Task OnInitializedAsync()
     {
         _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
         if (_ais == null)
         {
             _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+            return;
         }
+
+        // Remote/selector mode: no explicit Context → track the shared config selector so this view
+        // queries the same workspace as the other AI views (MetricsView, LogView, …).
+        if (Context == null)
+        {
+            _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+            if (_selector != null)
+            {
+                _selector.OnChanged += OnSelectorChanged;
+                if (!_selector.IsLoaded) await _selector.LoadAsync();
+            }
+        }
+
+        if (EffectiveContext == null)
+        {
+            _configError = "No Application Insights configuration available.";
+            return;
+        }
+
+        await LoadAsync();
     }
 
-    public void Dispose()
-    {
-        _cts?.Cancel();
-        _cts?.Dispose();
-    }
+    private async void OnSelectorChanged() => await InvokeAsync(LoadAsync);
 
-    protected override async Task OnParametersSetAsync()
+    private async Task LoadAsync()
     {
-        if (_configError != null) return;
+        var ctx = EffectiveContext;
+        if (ctx == null) return;
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -80,7 +103,7 @@ else
 
         try
         {
-            var loaded = await _ais.GetVolumeBySourceAsync(Context, Range, token).ToArrayAsync(token);
+            var loaded = await _ais.GetVolumeBySourceAsync(ctx, Range, token).ToArrayAsync(token);
             if (token.IsCancellationRequested) return;
 
             Model = loaded;
@@ -97,5 +120,12 @@ else
                 StateHasChanged();
             }
         }
+    }
+
+    public void Dispose()
+    {
+        if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 }
