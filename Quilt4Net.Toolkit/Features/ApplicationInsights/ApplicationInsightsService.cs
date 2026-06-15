@@ -102,6 +102,62 @@ union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationNa
         _logger = logger;
     }
 
+    public async IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(
+        IApplicationInsightsContext context,
+        TimeSpan timeSpan,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"volbysource|{context.ToKey()}|{timeSpan}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            // Billing-grade volume straight from the Usage table — cheap, no telemetry scan.
+            const string query = @"
+Usage
+| where IsBillable == true
+| summarize Mb = sum(Quantity) by Source = DataType
+| where Mb > 0
+| order by Mb desc";
+            try
+            {
+                var client = GetClient(context);
+                var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+                var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
+
+                var list = new List<VolumeBySource>();
+                foreach (var table in response.Value.AllTables)
+                {
+                    var sourceIdx = GetColumnIndex(table, "Source");
+                    var mbIdx = GetColumnIndex(table, "Mb");
+                    foreach (var row in table.Rows)
+                    {
+                        var source = row[sourceIdx]?.ToString();
+                        if (string.IsNullOrEmpty(source)) continue;
+                        var raw = row[mbIdx];
+                        if (raw is null) continue;
+                        list.Add(new VolumeBySource
+                        {
+                            Source = source,
+                            Mb = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture)
+                        });
+                    }
+                }
+                return list.ToArray();
+            }
+            catch (Exception e)
+            {
+                // The Usage table may be unreadable (credential lacks workspace read). Degrade to
+                // empty so the cost view shows "unavailable" rather than failing the whole page.
+                _logger.LogWarning(e, "Unable to read the Usage table for volume-by-source. Returning empty.");
+                return Array.Empty<VolumeBySource>();
+            }
+        });
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
     public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)
     {
         var incidentId = IncidentId.New();
