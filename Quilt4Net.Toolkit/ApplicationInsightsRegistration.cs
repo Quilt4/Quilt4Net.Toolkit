@@ -98,6 +98,12 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
             });
+            // Billed ingestion volume per source (from the Usage table). Billing data updates slowly;
+            // 10 minutes matches the other cost/metric surfaces. (Superseded later by the day-chunk cache.)
+            s.RegisterType<VolumeBySource[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
+            });
         });
     }
 
@@ -161,6 +167,7 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<DiskCapacity[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<LogCountByServiceCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
+            s.RegisterType<VolumeBySource[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
         });
     }
 }
