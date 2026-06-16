@@ -206,6 +206,9 @@
     // Sources actually present in the current window's cube — drives the Source filter so a source
     // with no data (e.g. Event/PageView when nothing emits them) doesn't show a 0-everywhere button.
     private IReadOnlyList<LogSource> _candidateSources = [];
+    // raw → logical application alias map (resolved in OnInitializedAsync); folds deployment/role
+    // names into their logical app so the same app doesn't split into two service rows.
+    private IReadOnlyDictionary<string, string> _effectiveAliasMap;
 
     // Current user selections. Empty enumerable everywhere means "include all".
     private IEnumerable<string> _selectedConfigIds = [];
@@ -265,8 +268,19 @@
     [Parameter]
     public IReadOnlyList<string> EnvironmentOrder { get; set; }
 
+    /// <summary>
+    /// Optional raw → logical application alias map. Service rows that fall back to a deployment /
+    /// cloud-role name (e.g. <c>eplicta-prod-aggregator-web</c>) because the row lacks a logical
+    /// <c>ApplicationName</c> are folded into their logical app, matching the other log views. When
+    /// null, falls back to the static map from <see cref="ApplicationInsightsOptions.ApplicationAlias"/>.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> ApplicationAliasMap { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        _effectiveAliasMap = ApplicationAliasMap ?? AiOptions.Value?.ApplicationAlias?.ToResolverDictionary();
+
         // Scoped cache holds the cell cube across page navigations within this Blazor circuit.
         // Optional — hosts that didn't call AddQuilt4NetBlazorApplicationInsightsClientRemote
         // still work, they just lose the cross-page persistence.
@@ -524,7 +538,7 @@
         // rows we render no matter what the filter matches — entries with no matches show a row of
         // zeros so toggling a filter never makes a row vanish (keeps the grid stable across clicks).
         var allKeys = allCells
-            .Select(t => (Service: t.Cell.Service ?? "unknown", Machine: MachineKey(t)))
+            .Select(t => (Service: Fold(t.Cell.Service), Machine: MachineKey(t)))
             .Distinct(new ServiceMachineComparer())
             .ToArray();
 
@@ -536,7 +550,7 @@
             if (envSet.Count > 0 && !envSet.Contains(t.Cell.Environment)) continue;
             if (sourceSet.Count > 0 && !sourceSet.Contains(t.Cell.Source)) continue;
 
-            var key = (t.Cell.Service ?? "unknown", MachineKey(t), t.Cell.Severity);
+            var key = (Fold(t.Cell.Service), MachineKey(t), t.Cell.Severity);
             aggregated[key] = aggregated.GetValueOrDefault(key) + (_metric == Metric.Volume ? t.Cell.Bytes : t.Cell.Count);
         }
 
@@ -632,6 +646,13 @@
         if (mb >= 1024) return $"{mb / 1024.0:N2} GB";
         if (mb >= 1) return $"{mb:N1} MB";
         return $"{mb * 1024.0:N0} KB";
+    }
+
+    // Fold a raw service/role name to its logical app via the alias map (null/empty → "unknown").
+    private string Fold(string rawService)
+    {
+        var s = string.IsNullOrEmpty(rawService) ? "unknown" : rawService;
+        return _effectiveAliasMap is { Count: > 0 } map ? map.GetValueOrDefault(s, s) : s;
     }
 
     private sealed record Slice(string Label, double Value);
