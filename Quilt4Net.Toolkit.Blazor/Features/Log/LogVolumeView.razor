@@ -7,49 +7,66 @@
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
 }
-else if (_loading || Model == null)
-{
-    <Loading />
-}
-else if (Model.Length == 0)
-{
-    <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
-        No billed ingestion volume found for this range — the workspace <code>Usage</code> table is empty or not readable.
-    </RadzenAlert>
-}
 else
 {
-    <RadzenText TextStyle="TextStyle.H6" Text="@($"Total ingested: {_totalMb:N0} MB over the last {Range.TotalDays:N0} day(s)")" />
-    <RadzenChart>
-        <RadzenPieSeries Data="@Model" CategoryProperty="Source" ValueProperty="Mb" Title="MB" />
-    </RadzenChart>
-    <RadzenDataGrid Data="@Model" TItem="VolumeBySource" AllowSorting="true" AllowPaging="true" PageSize="10">
-        <Columns>
-            <RadzenDataGridColumn Title="Source" Property="@nameof(VolumeBySource.Source)" />
-            <RadzenDataGridColumn Title="MB" Property="@nameof(VolumeBySource.Mb)">
-                <Template>@context.Mb.ToString("N1")</Template>
-            </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Share" Sortable="false">
-                <Template>@((_totalMb > 0 ? context.Mb / _totalMb : 0).ToString("P1"))</Template>
-            </RadzenDataGridColumn>
-        </Columns>
-    </RadzenDataGrid>
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0" class="rz-mb-2">
+        <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+        <RadzenSelectBar @bind-Value="_range" TValue="TimeSpan" Size="ButtonSize.Small" Change="@(_ => LoadAsync())">
+            <Items>
+                <RadzenSelectBarItem Text="1h" Value="@TimeSpan.FromHours(1)" />
+                <RadzenSelectBarItem Text="24h" Value="@TimeSpan.FromHours(24)" />
+                <RadzenSelectBarItem Text="7d" Value="@TimeSpan.FromDays(7)" />
+            </Items>
+        </RadzenSelectBar>
+    </RadzenStack>
+
+    @if (_loading || Model == null)
+    {
+        <Loading />
+    }
+    else if (Model.Length == 0)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+            No billed ingestion volume found for this range — the workspace <code>Usage</code> table is empty or not readable.
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.H6" Text="@($"Total ingested: {FormatSize(_totalMb)} over the last {RangeLabel(_range)}")" />
+        <RadzenChart>
+            <RadzenPieSeries Data="@Model" CategoryProperty="Source" ValueProperty="Mb" Title="Size" />
+        </RadzenChart>
+        <RadzenDataGrid Data="@Model" TItem="Row" AllowSorting="true" AllowPaging="true" PageSize="10">
+            <Columns>
+                <RadzenDataGridColumn Title="Source" Property="@nameof(Row.Source)" />
+                @* Sort on the raw MB value (always MB) so ordering is correct even though the cell shows GB/MB/KB. *@
+                <RadzenDataGridColumn Title="Size" Property="@nameof(Row.Mb)" TextAlign="TextAlign.Right" SortOrder="SortOrder.Descending">
+                    <Template>@FormatSize(context.Mb)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Share" Property="@nameof(Row.Share)" TextAlign="TextAlign.Right">
+                    <Template>@context.Share.ToString("P1")</Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
 }
 
 @implements IDisposable
 
 @code {
-    private VolumeBySource[] Model { get; set; }
+    private Row[] Model { get; set; }
     private double _totalMb;
     private string _configError;
     private IApplicationInsightsService _ais;
     private IApplicationInsightsConfigurationSelector _selector;
     private CancellationTokenSource _cts;
     private bool _loading;
+    private TimeSpan _range = TimeSpan.FromDays(7);
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
+    /// <summary>Initial range; the user can change it with the in-view 1h/24h/7d selector.</summary>
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(7);
 
@@ -57,6 +74,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _range = Range;
+
         _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
         if (_ais == null)
         {
@@ -103,11 +122,13 @@ else
 
         try
         {
-            var loaded = await _ais.GetVolumeBySourceAsync(ctx, Range, token).ToArrayAsync(token);
+            var loaded = await _ais.GetVolumeBySourceAsync(ctx, _range, token).ToArrayAsync(token);
             if (token.IsCancellationRequested) return;
 
-            Model = loaded;
             _totalMb = loaded.Sum(x => x.Mb);
+            Model = loaded
+                .Select(x => new Row(x.Source, x.Mb, _totalMb > 0 ? x.Mb / _totalMb : 0))
+                .ToArray();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -122,10 +143,26 @@ else
         }
     }
 
+    // Auto-scaled display from a megabyte value. Sorting uses the raw MB (always MB), so the unit
+    // shown per row (GB/MB/KB) never affects ordering.
+    private static string FormatSize(double mb)
+    {
+        if (mb >= 1024) return $"{mb / 1024.0:N2} GB";
+        if (mb >= 1) return $"{mb:N1} MB";
+        return $"{mb * 1024.0:N0} KB";
+    }
+
+    private static string RangeLabel(TimeSpan range)
+        => range >= TimeSpan.FromDays(7) ? "7 days"
+            : range >= TimeSpan.FromHours(24) ? "24 hours"
+            : "1 hour";
+
     public void Dispose()
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
         _cts?.Cancel();
         _cts?.Dispose();
     }
+
+    private sealed record Row(string Source, double Mb, double Share);
 }
