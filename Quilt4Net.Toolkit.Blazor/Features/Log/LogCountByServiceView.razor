@@ -191,6 +191,41 @@
                 </RadzenChart>
             </RadzenColumn>
         </RadzenRow>
+
+        @* Sampling correction: what the current selection would have cost without ingestion
+           sampling. Retained = records actually kept; Est. true = sum(ItemCount). When nothing is
+           sampled (ItemCount == 1 everywhere) the two are equal and we say so plainly — that itself
+           answers "are we sampling?". AppMetrics is intentionally absent (not in the cube) since its
+           ItemCount is an aggregation count, not a sampling weight. *@
+        <RadzenCard class="rz-mt-3">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Text="Sampling" />
+            @if (!_anySampling)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
+                    Ingestion sampling is <strong>not in effect</strong> for this selection — every record is
+                    retained (100%), so the @MetricNoun shown above already equals the true @MetricNoun.
+                </RadzenAlert>
+            }
+            else
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-2"
+                            Text="@($"Effective sampling: {_effectiveRatePct:N1}% of records retained. Showing {FormatMetric(_samplingRetained)} of an estimated {FormatMetric(_samplingTrue)} {MetricNoun} without sampling.")" />
+                <RadzenDataGrid Data="@_samplingRows" TItem="SamplingRow" AllowSorting="true">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Source" Property="@nameof(SamplingRow.Source)" />
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Retained" Property="@nameof(SamplingRow.Retained)" TextAlign="TextAlign.Right">
+                            <Template>@FormatMetric(context.Retained)</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Est. true" Property="@nameof(SamplingRow.EstTrue)" TextAlign="TextAlign.Right" SortOrder="SortOrder.Descending">
+                            <Template>@FormatMetric(context.EstTrue)</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Retained %" Property="@nameof(SamplingRow.RatePct)" TextAlign="TextAlign.Right">
+                            <Template>@context.RatePct.ToString("N1") %</Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
     }
 </RadzenStack>
 
@@ -240,6 +275,15 @@
     private Metric _metric = Metric.Count;
     private List<Slice> _severitySlices = [];
     private List<Slice> _serviceSlices = [];
+
+    // Sampling correction: each cell carries retained (Count/Bytes) and sampling-corrected
+    // (TrueCount/TrueBytes, via sum(ItemCount)) figures. The per-source table and overall summary
+    // are recomputed under the same filters as the main grid, in the active metric's unit.
+    private List<SamplingRow> _samplingRows = [];
+    private long _samplingRetained;   // active-metric unit (records or bytes)
+    private long _samplingTrue;       // active-metric unit, sampling-corrected
+    private double _effectiveRatePct = 100; // count-based: 100 * retained-count / true-count
+    private bool _anySampling;        // true once any source's true-count exceeds its retained-count
     private System.DateTime? _lastRefreshUtc; // for the refresh-button "loaded at" tooltip
     private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
     private Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor _browserTime;
@@ -514,6 +558,10 @@
             _severitySlices = [];
             _serviceSlices = [];
             _candidateSources = [];
+            _samplingRows = [];
+            _samplingRetained = _samplingTrue = 0;
+            _effectiveRatePct = 100;
+            _anySampling = false;
             return;
         }
 
@@ -544,6 +592,8 @@
 
         var aggregated = new Dictionary<(string Service, string Machine, SeverityLevel Severity), long>(
             new ServiceMachineSeverityComparer());
+        // Per-source sampling accumulator: (retained count, true count, retained bytes, true bytes).
+        var samp = new Dictionary<LogSource, (long Rc, long Tc, long Rb, long Tb)>();
         foreach (var t in allCells)
         {
             if (configSet.Count > 0 && !configSet.Contains(t.ConfigId)) continue;
@@ -552,7 +602,12 @@
 
             var key = (Fold(t.Cell.Service), MachineKey(t), t.Cell.Severity);
             aggregated[key] = aggregated.GetValueOrDefault(key) + (_metric == Metric.Volume ? t.Cell.Bytes : t.Cell.Count);
+
+            var cur = samp.GetValueOrDefault(t.Cell.Source);
+            samp[t.Cell.Source] = (cur.Rc + t.Cell.Count, cur.Tc + t.Cell.TrueCount, cur.Rb + t.Cell.Bytes, cur.Tb + t.Cell.TrueBytes);
         }
+
+        BuildSampling(samp);
 
         _rows = allKeys
             .OrderBy(k => k.Service, System.StringComparer.OrdinalIgnoreCase)
@@ -637,6 +692,39 @@
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
     }
 
+    /// <summary>
+    /// Turn the per-source (retained, true) sampling accumulator into the display rows + overall
+    /// summary. The effective rate is count-based (records dropped, not bytes) since that's the
+    /// cleanest measure of the sampling decision; the Retained / Est. true figures follow the active
+    /// metric. <c>TrueCount &gt;= Count</c> always (each retained row weighs <c>ItemCount &gt;= 1</c>),
+    /// so a source is "sampled" exactly when its true-count exceeds its retained-count.
+    /// </summary>
+    private void BuildSampling(Dictionary<LogSource, (long Rc, long Tc, long Rb, long Tb)> samp)
+    {
+        _samplingRows = samp
+            .Select(kv =>
+            {
+                var (rc, tc, rb, tb) = kv.Value;
+                var retained = _metric == Metric.Volume ? rb : rc;
+                var estTrue = _metric == Metric.Volume ? tb : tc;
+                var ratePct = tc > 0 ? 100.0 * rc / tc : 100.0;
+                return new SamplingRow(kv.Key.ToString(), retained, estTrue, ratePct);
+            })
+            .OrderByDescending(r => r.EstTrue)
+            .ToList();
+
+        var totRc = samp.Values.Sum(v => v.Rc);
+        var totTc = samp.Values.Sum(v => v.Tc);
+        var totRb = samp.Values.Sum(v => v.Rb);
+        var totTb = samp.Values.Sum(v => v.Tb);
+        _samplingRetained = _metric == Metric.Volume ? totRb : totRc;
+        _samplingTrue = _metric == Metric.Volume ? totTb : totTc;
+        _effectiveRatePct = totTc > 0 ? 100.0 * totRc / totTc : 100.0;
+        _anySampling = totTc > totRc;
+    }
+
+    private string MetricNoun => _metric == Metric.Volume ? "volume" : "records";
+
     // Count → "N0"; Volume → auto-scaled size from the megabyte value (Bytes are summed in the cube).
     private string FormatMetric(long value)
         => _metric == Metric.Volume ? FormatSize(value / 1048576.0) : value.ToString("N0");
@@ -656,6 +744,10 @@
     }
 
     private sealed record Slice(string Label, double Value);
+
+    /// <summary>One source's sampling picture: retained vs sampling-corrected ("true") figure in the
+    /// active metric's unit, plus the count-based retained percentage (100 = nothing sampled out).</summary>
+    private sealed record SamplingRow(string Source, long Retained, long EstTrue, double RatePct);
 
     /// <summary>
     /// Row shape with one explicit property per severity so the grid can sort each amount column

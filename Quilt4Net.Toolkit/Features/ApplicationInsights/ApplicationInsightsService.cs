@@ -1686,7 +1686,7 @@ AppMetrics
     {
         // Cache key versioned so schema changes don't serve stale cells from the TtlCache after a
         // hot reload (Machine column → v2; Bytes + extra severity-bearing sources → v3).
-        var cacheKey = $"logcount-v3|{context.ToKey()}|{timeSpan}";
+        var cacheKey = $"logcount-v4|{context.ToKey()}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             var list = new List<LogCountByServiceCell>();
@@ -1721,8 +1721,9 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies,
         _Source == 'AppEvents', 1,
         _Source == 'AppPageViews', 1,
         toint(SeverityLevel))
-| summarize Count = count(), Bytes = sum(_BilledSize) by Service, EffectiveSeverity, Environment, _Source, Machine
-| project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count, Bytes, Machine";
+| extend _w = coalesce(toint(ItemCount), 1)
+| summarize Count = count(), Bytes = sum(_BilledSize), TrueCount = sum(_w), TrueBytes = sum(_BilledSize * _w) by Service, EffectiveSeverity, Environment, _Source, Machine
+| project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count, Bytes, Machine, TrueCount, TrueBytes";
 
             var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
             foreach (var table in response.Value.AllTables)
@@ -1734,6 +1735,8 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies,
                 var countIdx = GetColumnIndex(table, "Count");
                 var bytesIdx = GetColumnIndex(table, "Bytes");
                 var machineIdx = GetColumnIndex(table, "Machine");
+                var trueCountIdx = GetColumnIndex(table, "TrueCount");
+                var trueBytesIdx = GetColumnIndex(table, "TrueBytes");
                 foreach (var row in table.Rows)
                 {
                     var service = row[serviceIdx]?.ToString() ?? "unknown";
@@ -1751,7 +1754,9 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies,
                     var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
                     var bytes = System.Convert.ToInt64(row[bytesIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
                     var machine = row[machineIdx]?.ToString() ?? "";
-                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count, bytes, machine));
+                    var trueCount = System.Convert.ToInt64(row[trueCountIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                    var trueBytes = System.Convert.ToInt64(row[trueBytesIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count, bytes, machine, trueCount, trueBytes));
                 }
             }
             return list.ToArray();
