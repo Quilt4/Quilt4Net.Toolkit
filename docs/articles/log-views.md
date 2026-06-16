@@ -147,6 +147,10 @@ Cascading `LogNavigationOptions` is honoured for detail drill-downs — when a h
 
 A pivot of log counts grouped by service across the Verbose / Information / Warning / Error / Critical severity columns, with multi-select filters for Configuration, Environment and Source, plus a "Per machine" toggle that splits each service row by machine. Every filter except Range is a local regroup over the cached cell cube — only Range changes hit AI. Same component Quilt4Net Server's `/developer/log-count` page uses.
 
+A **Show: Count / Volume** toggle flips every cell, total and pie between record count and billed ingestion volume (`_BilledSize`, auto-scaled GB/MB/KB) — a pure local recompute, since both ride on every cached cell. Two marginal pies sit below the grid: **By severity** (the table's bottom totals) and **By service** (its right totals), both following the active metric and filters.
+
+A **Sampling** section reports what the current selection would have ingested with no [ingestion sampling](https://learn.microsoft.com/azure/azure-monitor/app/sampling). Each cell carries a sampling-corrected `TrueCount = sum(ItemCount)` and `TrueBytes = sum(_BilledSize * ItemCount)` beside the retained figures; the section shows the overall effective rate ("X% of records retained, showing A of an estimated B without sampling") and a per-source table (Retained / Est. true / Retained %). When `ItemCount` is 1 everywhere — i.e. nothing is sampled — it says so plainly, which is itself the answer to "are we sampling?". `AppMetrics` is excluded (its `ItemCount` is an aggregation count, not a sampling weight).
+
 ```razor
 @using Quilt4Net.Toolkit.Blazor.Features.Log
 
@@ -164,6 +168,48 @@ Ranges (1h / 24h / 7d) and the Refresh button work the same way as in [`MetricsV
 ### Remote vs local mode
 
 The same `Context` precedence applies to `LogView` / `VersionMatrixDisplay` / `MetricsView` / `LogCountByServiceView`. Hosts that already resolved a `Context` from local options *and* registered the remote selector can pick one explicitly — see [Metrics → Remote vs local mode](metrics.md#remote-vs-local-mode).
+
+## Cost & volume
+
+Two components turn the same workspace into a cost picture — what you ingest, and how close it runs to the daily cap. Both read billing-grade data from the `Usage` table (and, for the cap, the `Operation` table), so the numbers reconcile with the Azure bill rather than with sampled telemetry counts.
+
+### `LogVolumeView` — billed ingestion by source
+
+A pie of billed ingestion volume grouped by source table (`DataType`), a total for the window, and a sortable table (Source / Size / Share). Size auto-scales to GB/MB/KB; the column sorts on the raw value so ordering is correct regardless of the unit shown.
+
+```razor
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<LogVolumeView Context="@ApplicationInsightsContextExtensions.Current"
+               Range="TimeSpan.FromDays(7)" />
+```
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `Context` | `IApplicationInsightsContext` | `null` | Workspace to query. When null, resolved via the DI selector / configured options. |
+| `Range` | `TimeSpan` | `7 days` | Initial lookback; the in-view **1h / 24h / 7d** selector changes it. |
+
+When the `Usage` table can't be read (or is empty for the range) the view shows an informational alert instead of an empty chart.
+
+### `CapTimelineView` — daily ingestion-cap graph
+
+A per-UTC-day view of billed volume against the configured daily cap: one column per day, a dashed reference line at the cap, and diamond markers for the **estimated uncapped** volume on days the cap was hit (`cap × 24 / hours-to-hit` — what the day would have ingested unthrottled). The grid below gives the precise first-hit time per day.
+
+```razor
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<CapTimelineView Context="@ApplicationInsightsContextExtensions.Current"
+                 Days="30" />
+```
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `Context` | `IApplicationInsightsContext` | `null` | Workspace to query. When null, resolved via the DI selector / configured options. |
+| `Days` | `int` | `30` | Initial range; the in-view **14 / 30 / 90 days** selector changes it. |
+
+The cap value comes from the latest `"Daily quota changed to N"` config event in the `Operation` table; first-hit times from the `"stopped due to daily limit"` events. With no cap configured the view drops the reference line and just charts daily volume; when neither table is readable it shows an informational alert. The daily cap is a *soft* limit — ingestion isn't hard-stopped at the cap, so days can finish above it, which is exactly why the est.-uncapped overlay is worth showing.
+
+Both components honour the same remote/local `Context` precedence as the other views — pass an explicit `Context`, or let the DI selector drive them. On Quilt4Net Server they appear as the **Logging volume** and **Daily cap** tabs on `/monitor/metrics` and `/developer/metrics`.
 
 ## Where next
 
