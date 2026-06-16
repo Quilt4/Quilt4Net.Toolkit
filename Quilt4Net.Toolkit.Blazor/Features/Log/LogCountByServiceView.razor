@@ -75,20 +75,21 @@
                 </RadzenSelectBar>
             </RadzenStack>
         }
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-            <RadzenText TextStyle="TextStyle.Caption" Text="Source" />
-            <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
-                             Change="@(_ => RecomputeRows())">
-                <Items>
-                    <RadzenSelectBarItem Text="Trace" Value="LogSource.Trace" />
-                    <RadzenSelectBarItem Text="Exception" Value="LogSource.Exception" />
-                    <RadzenSelectBarItem Text="Request" Value="LogSource.Request" />
-                    <RadzenSelectBarItem Text="Dependency" Value="LogSource.Dependency" />
-                    <RadzenSelectBarItem Text="Event" Value="LogSource.Event" />
-                    <RadzenSelectBarItem Text="PageView" Value="LogSource.PageView" />
-                </Items>
-            </RadzenSelectBar>
-        </RadzenStack>
+        @if (_candidateSources.Count > 1)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Source" />
+                <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
+                                 Change="@(_ => RecomputeRows())">
+                    <Items>
+                        @foreach (var source in _candidateSources)
+                        {
+                            <RadzenSelectBarItem Text="@source.ToString()" Value="@source" />
+                        }
+                    </Items>
+                </RadzenSelectBar>
+            </RadzenStack>
+        }
         <RadzenStack Orientation="Orientation.Vertical" Gap="0">
             <RadzenText TextStyle="TextStyle.Caption" Text="Show" />
             <RadzenSelectBar @bind-Value="_metric" TValue="Metric" Size="ButtonSize.Small"
@@ -202,6 +203,9 @@
     // Candidate sets (everything offered by the AI workspaces) — separate from the user's picks.
     private IReadOnlyList<ApplicationInsightsConfigurationResponse> _candidateConfigs = [];
     private IReadOnlyList<string> _candidateEnvironments = [];
+    // Sources actually present in the current window's cube — drives the Source filter so a source
+    // with no data (e.g. Event/PageView when nothing emits them) doesn't show a 0-everywhere button.
+    private IReadOnlyList<LogSource> _candidateSources = [];
 
     // Current user selections. Empty enumerable everywhere means "include all".
     private IEnumerable<string> _selectedConfigIds = [];
@@ -493,8 +497,16 @@
             _rows = [];
             _columnTotals = NewEmptyTotals();
             _grandTotal = 0;
+            _severitySlices = [];
+            _serviceSlices = [];
+            _candidateSources = [];
             return;
         }
+
+        // Data-driven source options: only sources present in the cube. Prune any selection that
+        // no longer applies so chip state stays honest.
+        _candidateSources = allCells.Select(t => t.Cell.Source).Distinct().OrderBy(s => (int)s).ToArray();
+        _selectedSources = (_selectedSources ?? []).Where(_candidateSources.Contains).ToArray();
 
         var configSet = (_selectedConfigIds ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var envSet = (_selectedEnvironments ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
