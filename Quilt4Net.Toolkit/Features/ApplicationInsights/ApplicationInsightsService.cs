@@ -158,6 +158,91 @@ Usage
         }
     }
 
+    public async Task<CapTimeline> GetCapTimelineAsync(IApplicationInsightsContext context, int days, CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"captimeline|{context.ToKey()}|{days}";
+        return await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            try
+            {
+                var client = GetClient(context);
+                var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+                // Configured cap: latest "Daily quota changed to N" config event (rare — search wide).
+                double? capGb = null;
+                var capResp = await client.QueryWorkspaceAsync(workspaceId,
+                    "Operation | where Detail has 'Daily quota changed to' | top 1 by TimeGenerated desc | project Detail",
+                    new LogsQueryTimeRange(TimeSpan.FromDays(365)));
+                foreach (var table in capResp.Value.AllTables)
+                {
+                    var detailIdx = GetColumnIndex(table, "Detail");
+                    foreach (var row in table.Rows)
+                    {
+                        var m = System.Text.RegularExpressions.Regex.Match(row[detailIdx]?.ToString() ?? "", @"Daily quota changed to (\d+(?:\.\d+)?)");
+                        if (m.Success && double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var g)) capGb = g;
+                    }
+                }
+
+                var window = new LogsQueryTimeRange(TimeSpan.FromDays(days));
+
+                // First cap-hit per day, from the workspace "data collection stopped" operation events.
+                var hits = new Dictionary<DateTime, DateTime>();
+                var hitResp = await client.QueryWorkspaceAsync(workspaceId,
+                    "Operation | where OperationCategory == 'Data Collection Status' | where Detail has 'stopped due to daily limit' | summarize HitUtc = min(TimeGenerated) by Day = startofday(TimeGenerated)",
+                    window);
+                foreach (var table in hitResp.Value.AllTables)
+                {
+                    var dayIdx = GetColumnIndex(table, "Day");
+                    var hitIdx = GetColumnIndex(table, "HitUtc");
+                    foreach (var row in table.Rows) hits[GetDateTime(row, dayIdx)] = GetDateTime(row, hitIdx);
+                }
+
+                // Billed volume per day (GB).
+                var volume = new Dictionary<DateTime, double>();
+                var volResp = await client.QueryWorkspaceAsync(workspaceId,
+                    "Usage | where IsBillable == true | summarize Gb = sum(Quantity) / 1024.0 by Day = startofday(TimeGenerated)",
+                    window);
+                foreach (var table in volResp.Value.AllTables)
+                {
+                    var dayIdx = GetColumnIndex(table, "Day");
+                    var gbIdx = GetColumnIndex(table, "Gb");
+                    foreach (var row in table.Rows)
+                    {
+                        var raw = row[gbIdx];
+                        if (raw is null) continue;
+                        volume[GetDateTime(row, dayIdx)] = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                }
+
+                var capDays = volume.Keys.Union(hits.Keys)
+                    .Distinct()
+                    .OrderByDescending(d => d)
+                    .Select(day =>
+                    {
+                        var gb = volume.GetValueOrDefault(day);
+                        DateTime? hit = hits.TryGetValue(day, out var h) ? h : null;
+                        double? est = null;
+                        if (hit.HasValue)
+                        {
+                            // Volume-at-hit ≈ the cap; extrapolate to a full day by the elapsed fraction.
+                            var hours = (hit.Value - day).TotalHours;
+                            var baseGb = capGb ?? gb;
+                            if (hours > 0) est = baseGb * 24.0 / hours;
+                        }
+                        return new CapDay { DateUtc = day, IngestedGb = gb, CapHitUtc = hit, EstimatedUncappedGb = est };
+                    })
+                    .ToArray();
+
+                return new CapTimeline { CapGb = capGb, Days = capDays };
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning(e, "Unable to build the ingestion-cap timeline (Operation/Usage not readable?). Returning empty.");
+                return new CapTimeline { CapGb = null, Days = [] };
+            }
+        });
+    }
+
     public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)
     {
         var incidentId = IncidentId.New();

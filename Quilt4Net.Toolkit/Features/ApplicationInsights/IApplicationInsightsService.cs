@@ -11,6 +11,14 @@ public interface IApplicationInsightsService
     /// (permissions) rather than throwing, so the view degrades gracefully.
     /// </summary>
     IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Daily ingestion-cap timeline over the last <paramref name="days"/> days: the configured daily
+    /// cap (GB) plus, per day, the ingested volume, the cap-hit time (from the workspace
+    /// "data collection stopped due to daily limit" operation events), and an estimate of the
+    /// uncapped volume. Degrades to an empty timeline when the Operation/Usage tables aren't readable.
+    /// </summary>
+    Task<CapTimeline> GetCapTimelineAsync(IApplicationInsightsContext context, int days, CancellationToken cancellationToken = default);
     IAsyncEnumerable<EnvironmentOption> GetEnvironments(IApplicationInsightsContext context);
     IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose, CancellationToken cancellationToken = default);
     IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, CancellationToken cancellationToken = default);
