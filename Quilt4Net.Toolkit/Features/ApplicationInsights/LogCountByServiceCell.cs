@@ -23,4 +23,5 @@ public record LogCountByServiceCell(
     string Environment,
     LogSource Source,
     long Count,
+    long Bytes = 0,
     string Machine = "");

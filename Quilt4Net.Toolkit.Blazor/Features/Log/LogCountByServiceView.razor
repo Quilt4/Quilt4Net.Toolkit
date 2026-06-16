@@ -83,6 +83,20 @@
                     <RadzenSelectBarItem Text="Trace" Value="LogSource.Trace" />
                     <RadzenSelectBarItem Text="Exception" Value="LogSource.Exception" />
                     <RadzenSelectBarItem Text="Request" Value="LogSource.Request" />
+                    <RadzenSelectBarItem Text="Dependency" Value="LogSource.Dependency" />
+                    <RadzenSelectBarItem Text="Event" Value="LogSource.Event" />
+                    <RadzenSelectBarItem Text="PageView" Value="LogSource.PageView" />
+                    <RadzenSelectBarItem Text="Availability" Value="LogSource.Availability" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Show" />
+            <RadzenSelectBar @bind-Value="_metric" TValue="Metric" Size="ButtonSize.Small"
+                             Change="@(_ => RecomputeRows())">
+                <Items>
+                    <RadzenSelectBarItem Text="Count" Value="Metric.Count" />
+                    <RadzenSelectBarItem Text="Volume" Value="Metric.Volume" />
                 </Items>
             </RadzenSelectBar>
         </RadzenStack>
@@ -135,26 +149,48 @@
                     <FooterTemplate><strong>Total</strong></FooterTemplate>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="ServiceRow" Title="Machine" Property="@nameof(ServiceRow.Machine)" Visible="@_perMachine" />
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Verbose" Property="@nameof(ServiceRow.Verbose)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Verbose].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Verbose" Property="@nameof(ServiceRow.Verbose)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Verbose)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Verbose])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Information" Property="@nameof(ServiceRow.Information)" Width="140px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Information].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Information" Property="@nameof(ServiceRow.Information)" Width="140px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Information)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Information])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Warning" Property="@nameof(ServiceRow.Warning)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Warning].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Warning" Property="@nameof(ServiceRow.Warning)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Warning)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Warning])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Error" Property="@nameof(ServiceRow.Error)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Error].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Error" Property="@nameof(ServiceRow.Error)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Error)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Error])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Critical" Property="@nameof(ServiceRow.Critical)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Critical].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Critical" Property="@nameof(ServiceRow.Critical)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Critical)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Critical])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Total" Property="@nameof(ServiceRow.Total)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_grandTotal.ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Total" Property="@nameof(ServiceRow.Total)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Total)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_grandTotal)</strong></FooterTemplate>
                 </RadzenDataGridColumn>
             </Columns>
         </RadzenDataGrid>
+
+        @* Marginal pies: severity = the table's bottom totals; service = its right totals. *@
+        <RadzenRow Gap="1rem" class="rz-mt-3">
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenText TextStyle="TextStyle.Subtitle2" Text="By severity" />
+                <RadzenChart>
+                    <RadzenPieSeries Data="@_severitySlices" CategoryProperty="Label" ValueProperty="Value" />
+                </RadzenChart>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenText TextStyle="TextStyle.Subtitle2" Text="By service" />
+                <RadzenChart>
+                    <RadzenPieSeries Data="@_serviceSlices" CategoryProperty="Label" ValueProperty="Value" />
+                </RadzenChart>
+            </RadzenColumn>
+        </RadzenRow>
     }
 </RadzenStack>
 
@@ -191,6 +227,13 @@
     private List<ServiceRow> _rows = [];
     private Dictionary<SeverityLevel, long> _columnTotals = NewEmptyTotals();
     private long _grandTotal;
+
+    // Count vs ingested-volume view. Both Count and Bytes ride on every cell, so flipping this is a
+    // pure local recompute (no fetch). Drives the table cells/totals and the two pies.
+    private enum Metric { Count, Volume }
+    private Metric _metric = Metric.Count;
+    private List<Slice> _severitySlices = [];
+    private List<Slice> _serviceSlices = [];
     private System.DateTime? _lastRefreshUtc; // for the refresh-button "loaded at" tooltip
     private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
     private Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor _browserTime;
@@ -483,7 +526,7 @@
             if (sourceSet.Count > 0 && !sourceSet.Contains(t.Cell.Source)) continue;
 
             var key = (t.Cell.Service ?? "unknown", MachineKey(t), t.Cell.Severity);
-            aggregated[key] = aggregated.GetValueOrDefault(key) + t.Cell.Count;
+            aggregated[key] = aggregated.GetValueOrDefault(key) + (_metric == Metric.Volume ? t.Cell.Bytes : t.Cell.Count);
         }
 
         _rows = allKeys
@@ -509,6 +552,17 @@
             }
         }
         _grandTotal = _rows.Sum(r => r.Total);
+
+        // Marginals for the two pies: severity = column totals (bottom row), service = row totals
+        // (right column). Both follow the active metric (count or volume) and current filters.
+        _severitySlices = _columnTotals
+            .Where(kv => kv.Value > 0)
+            .Select(kv => new Slice(kv.Key.ToString(), kv.Value))
+            .ToList();
+        _serviceSlices = _rows
+            .Where(r => r.Total > 0)
+            .Select(r => new Slice(_perMachine ? $"{r.Service} / {r.Machine}" : r.Service, r.Total))
+            .ToList();
     }
 
     /// <summary>
@@ -557,6 +611,19 @@
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
     }
+
+    // Count → "N0"; Volume → auto-scaled size from the megabyte value (Bytes are summed in the cube).
+    private string FormatMetric(long value)
+        => _metric == Metric.Volume ? FormatSize(value / 1048576.0) : value.ToString("N0");
+
+    private static string FormatSize(double mb)
+    {
+        if (mb >= 1024) return $"{mb / 1024.0:N2} GB";
+        if (mb >= 1) return $"{mb:N1} MB";
+        return $"{mb * 1024.0:N0} KB";
+    }
+
+    private sealed record Slice(string Label, double Value);
 
     /// <summary>
     /// Row shape with one explicit property per severity so the grid can sort each amount column

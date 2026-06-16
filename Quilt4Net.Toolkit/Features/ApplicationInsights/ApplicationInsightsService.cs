@@ -1599,9 +1599,9 @@ AppMetrics
 
     public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        // Cache key bumped to v2 when the Machine column was added — without that suffix, a hot-
-        // reloaded process would keep serving pre-Machine cells from the TtlCache.
-        var cacheKey = $"logcount-v2|{context.ToKey()}|{timeSpan}";
+        // Cache key versioned so schema changes don't serve stale cells from the TtlCache after a
+        // hot reload (Machine column → v2; Bytes + extra severity-bearing sources → v3).
+        var cacheKey = $"logcount-v3|{context.ToKey()}|{timeSpan}";
         var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             var list = new List<LogCountByServiceCell>();
@@ -1610,12 +1610,14 @@ AppMetrics
 
             // Group by every dimension the admin UI may filter on (env + source) so the same
             // result set powers every subsequent filter combination without another KQL run.
+            // Bytes = sum(_BilledSize) lets the view toggle count ↔ ingested volume locally.
             // Unified severity:
             //   - AppTraces: own SeverityLevel (Verbose..Critical = 0..4)
             //   - AppExceptions: always Error (3) — no useful gradient on raw exceptions
-            //   - AppRequests: Information (1) on success, Error (3) on failure
+            //   - AppRequests / AppDependencies / AppAvailabilityResults: Information (1) on success, Error (3) on failure
+            //   - AppEvents / AppPageViews: Information (1) — no severity/success on the row
             var query = $@"
-union withsource=_Source AppTraces, AppExceptions, AppRequests
+union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies, AppEvents, AppPageViews, AppAvailabilityResults
 | extend _p = todynamic(Properties)
 | extend
     Service = coalesce(tostring(_p['ApplicationName']), tostring(AppRoleName), 'unknown'),
@@ -1629,10 +1631,14 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
         'unknown'),
     EffectiveSeverity = case(
         _Source == 'AppExceptions', 3,
-        _Source == 'AppRequests',   iif(tobool(coalesce(Success, true)), 1, 3),
+        _Source == 'AppRequests', iif(tobool(coalesce(Success, true)), 1, 3),
+        _Source == 'AppDependencies', iif(tobool(coalesce(Success, true)), 1, 3),
+        _Source == 'AppAvailabilityResults', iif(tobool(coalesce(Success, true)), 1, 3),
+        _Source == 'AppEvents', 1,
+        _Source == 'AppPageViews', 1,
         toint(SeverityLevel))
-| summarize Count = count() by Service, EffectiveSeverity, Environment, _Source, Machine
-| project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count, Machine";
+| summarize Count = count(), Bytes = sum(_BilledSize) by Service, EffectiveSeverity, Environment, _Source, Machine
+| project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count, Bytes, Machine";
 
             var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
             foreach (var table in response.Value.AllTables)
@@ -1642,6 +1648,7 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
                 var envIdx = GetColumnIndex(table, "Environment");
                 var sourceIdx = GetColumnIndex(table, "Source");
                 var countIdx = GetColumnIndex(table, "Count");
+                var bytesIdx = GetColumnIndex(table, "Bytes");
                 var machineIdx = GetColumnIndex(table, "Machine");
                 foreach (var row in table.Rows)
                 {
@@ -1652,11 +1659,16 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests
                     {
                         "AppExceptions" => LogSource.Exception,
                         "AppRequests" => LogSource.Request,
+                        "AppDependencies" => LogSource.Dependency,
+                        "AppEvents" => LogSource.Event,
+                        "AppPageViews" => LogSource.PageView,
+                        "AppAvailabilityResults" => LogSource.Availability,
                         _ => LogSource.Trace,
                     };
                     var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                    var bytes = System.Convert.ToInt64(row[bytesIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
                     var machine = row[machineIdx]?.ToString() ?? "";
-                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count, machine));
+                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count, bytes, machine));
                 }
             }
             return list.ToArray();
