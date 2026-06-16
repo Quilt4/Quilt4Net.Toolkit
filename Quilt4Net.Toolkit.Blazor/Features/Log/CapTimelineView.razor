@@ -1,0 +1,221 @@
+@using Microsoft.Extensions.DependencyInjection
+@using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IServiceProvider ServiceProvider
+@implements IDisposable
+
+@* Daily ingestion-cap timeline: one column per UTC day of billed volume, a dashed reference line at
+   the configured daily cap, and — for days the cap was hit — a marker showing the extrapolated
+   "uncapped" volume (what the day would have ingested had the cap not throttled it). The grid below
+   gives the precise first-hit time per day, which is the "at what time does it happen" the operator
+   asked for. Degrades to an informational alert when the workspace Usage/Operation tables can't be
+   read (or there simply is no cap configured / no data in range). *@
+
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0" class="rz-mb-2">
+        <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+        <RadzenSelectBar @bind-Value="_days" TValue="int" Size="ButtonSize.Small" Change="@(_ => LoadAsync())">
+            <Items>
+                <RadzenSelectBarItem Text="14 days" Value="14" />
+                <RadzenSelectBarItem Text="30 days" Value="30" />
+                <RadzenSelectBarItem Text="90 days" Value="90" />
+            </Items>
+        </RadzenSelectBar>
+    </RadzenStack>
+
+    @if (_loading || Model == null)
+    {
+        <Loading />
+    }
+    else if (Model.Length == 0)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+            No ingestion-cap data for this range — the workspace <code>Usage</code>/<code>Operation</code>
+            tables are empty or not readable.
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.H6" Text="@HeaderText" />
+        @if (_capGb.HasValue && _hitDays > 0)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2"
+                        Text="@($"Estimated volume lost to the cap over this range: {_estLostGb:N1} GB (sum of est. uncapped − ingested on hit days).")" />
+        }
+
+        <RadzenChart>
+            <RadzenColumnSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="IngestedGb" Title="Ingested" />
+            @if (_capGb.HasValue)
+            {
+                @* Constant value on every row → renders as a horizontal reference line at the cap. *@
+                <RadzenLineSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="CapLineGb" Title="Daily cap" LineType="LineType.Dashed" />
+            }
+            @* Markers-only line: only hit days carry a value, so this shows as discrete points above
+               the cap line marking how much each capped day would have ingested unthrottled. *@
+            <RadzenLineSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="EstUncappedGb" Title="Est. uncapped" Smooth="false">
+                <RadzenMarkers MarkerType="MarkerType.Diamond" />
+            </RadzenLineSeries>
+            <RadzenCategoryAxis>
+                <RadzenAxisTitle Text="Day (UTC)" />
+            </RadzenCategoryAxis>
+            <RadzenValueAxis FormatString="{0:0.#} GB">
+                <RadzenAxisTitle Text="Billed volume" />
+            </RadzenValueAxis>
+            <RadzenLegend Position="LegendPosition.Bottom" />
+        </RadzenChart>
+
+        <RadzenDataGrid Data="@Model" TItem="Row" AllowSorting="true" AllowPaging="true" PageSize="15" class="rz-mt-2">
+            <Columns>
+                <RadzenDataGridColumn Title="Day (UTC)" Property="@nameof(Row.DateUtc)" SortOrder="SortOrder.Descending">
+                    <Template>@context.DateUtc.ToString("yyyy-MM-dd")</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Ingested" Property="@nameof(Row.IngestedGb)" TextAlign="TextAlign.Right">
+                    <Template>@context.IngestedGb.ToString("N2") GB</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Cap hit (UTC)" Property="@nameof(Row.HitSortKey)" TextAlign="TextAlign.Right">
+                    <Template>
+                        @if (context.CapHitUtc.HasValue)
+                        {
+                            <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="@context.CapHitUtc.Value.ToString("HH:mm")" />
+                        }
+                        else
+                        {
+                            <text>—</text>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Est. uncapped" Property="@nameof(Row.EstUncappedGb)" TextAlign="TextAlign.Right">
+                    <Template>@(context.EstUncappedGb.HasValue ? $"{context.EstUncappedGb.Value:N1} GB" : "—")</Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+}
+
+@code {
+    private Row[] Model { get; set; }
+    private double? _capGb;
+    private int _hitDays;
+    private double _estLostGb;
+    private string _configError;
+    private IApplicationInsightsService _ais;
+    private IApplicationInsightsConfigurationSelector _selector;
+    private CancellationTokenSource _cts;
+    private bool _loading;
+    private int _days = 30;
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    /// <summary>Initial number of days; the user can change it with the in-view 14/30/90 selector.</summary>
+    [Parameter]
+    public int Days { get; set; } = 30;
+
+    private IApplicationInsightsContext EffectiveContext => Context ?? _selector?.Selected;
+
+    private string HeaderText => _capGb.HasValue
+        ? $"Daily cap: {_capGb.Value:N0} GB · hit on {_hitDays} of {Model.Length} days"
+        : $"No daily cap configured · {Model.Length} days of billed volume";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _days = Days;
+
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+            return;
+        }
+
+        // Remote/selector mode: no explicit Context → track the shared config selector so this view
+        // queries the same workspace as the other AI views.
+        if (Context == null)
+        {
+            _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+            if (_selector != null)
+            {
+                _selector.OnChanged += OnSelectorChanged;
+                if (!_selector.IsLoaded) await _selector.LoadAsync();
+            }
+        }
+
+        if (EffectiveContext == null)
+        {
+            _configError = "No Application Insights configuration available.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async void OnSelectorChanged() => await InvokeAsync(LoadAsync);
+
+    private async Task LoadAsync()
+    {
+        var ctx = EffectiveContext;
+        if (ctx == null) return;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        _loading = true;
+        Model = null;
+        StateHasChanged();
+
+        try
+        {
+            var timeline = await _ais.GetCapTimelineAsync(ctx, _days, token);
+            if (token.IsCancellationRequested) return;
+
+            _capGb = timeline.CapGb;
+            Model = timeline.Days
+                .OrderBy(d => d.DateUtc)
+                .Select(d => new Row(
+                    d.DateUtc,
+                    d.DateUtc.ToString("MM-dd"),
+                    d.IngestedGb,
+                    timeline.CapGb,
+                    d.CapHitUtc,
+                    d.EstimatedUncappedGb))
+                .ToArray();
+
+            _hitDays = Model.Count(r => r.CapHitUtc.HasValue);
+            _estLostGb = Model
+                .Where(r => r.EstUncappedGb.HasValue)
+                .Sum(r => Math.Max(0, r.EstUncappedGb.Value - r.IngestedGb));
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _loading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+
+    // HitSortKey lets the "Cap hit" column sort chronologically (DateTime.MaxValue floats no-hit days
+    // to the end) while the cell itself renders just the HH:mm badge.
+    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double? CapLineGb, DateTime? CapHitUtc, double? EstUncappedGb)
+    {
+        public DateTime HitSortKey => CapHitUtc ?? DateTime.MaxValue;
+    }
+}
