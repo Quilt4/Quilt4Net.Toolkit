@@ -7,6 +7,5 @@ public enum LogSource
     Request,
     Dependency,
     Event,
-    PageView,
-    Availability
+    PageView
 }

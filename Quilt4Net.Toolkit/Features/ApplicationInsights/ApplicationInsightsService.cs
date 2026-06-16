@@ -1614,10 +1614,10 @@ AppMetrics
             // Unified severity:
             //   - AppTraces: own SeverityLevel (Verbose..Critical = 0..4)
             //   - AppExceptions: always Error (3) — no useful gradient on raw exceptions
-            //   - AppRequests / AppDependencies / AppAvailabilityResults: Information (1) on success, Error (3) on failure
+            //   - AppRequests / AppDependencies: Information (1) on success, Error (3) on failure
             //   - AppEvents / AppPageViews: Information (1) — no severity/success on the row
             var query = $@"
-union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies, AppEvents, AppPageViews, AppAvailabilityResults
+union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies, AppEvents, AppPageViews
 | extend _p = todynamic(Properties)
 | extend
     Service = coalesce(tostring(_p['ApplicationName']), tostring(AppRoleName), 'unknown'),
@@ -1633,7 +1633,6 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies,
         _Source == 'AppExceptions', 3,
         _Source == 'AppRequests', iif(tobool(coalesce(Success, true)), 1, 3),
         _Source == 'AppDependencies', iif(tobool(coalesce(Success, true)), 1, 3),
-        _Source == 'AppAvailabilityResults', iif(tobool(coalesce(Success, true)), 1, 3),
         _Source == 'AppEvents', 1,
         _Source == 'AppPageViews', 1,
         toint(SeverityLevel))
@@ -1662,7 +1661,6 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies,
                         "AppDependencies" => LogSource.Dependency,
                         "AppEvents" => LogSource.Event,
                         "AppPageViews" => LogSource.PageView,
-                        "AppAvailabilityResults" => LogSource.Availability,
                         _ => LogSource.Trace,
                     };
                     var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
