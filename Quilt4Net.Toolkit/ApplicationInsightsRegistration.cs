@@ -38,6 +38,10 @@ public static class ApplicationInsightsRegistration
         services.AddSingleton<IVersionMatrixService, VersionMatrixService>();
         services.AddTransient<IHealthClient, HealthClient>();
 
+        // Process-wide per-UTC-day cache for the log-count cube. Past days are immutable; the live
+        // "today" chunk refreshes on this short TTL. Multi-day views compose from these chunks.
+        services.AddSingleton(new LogCubeDayCache(TimeSpan.FromMinutes(5), () => DateTimeOffset.UtcNow));
+
         services.AddCache(s =>
         {
             // Environment list rarely changes — hold it for an hour.
@@ -98,6 +102,17 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
             });
+            // Billed ingestion volume per source (from the Usage table). Billing data updates slowly;
+            // 10 minutes matches the other cost/metric surfaces. (Superseded later by the day-chunk cache.)
+            s.RegisterType<VolumeBySource[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
+            });
+            // Daily ingestion-cap timeline (Operation + Usage). Daily-grained; 10 minutes is plenty.
+            s.RegisterType<CapTimeline, IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
+            });
         });
     }
 
@@ -149,6 +164,9 @@ public static class ApplicationInsightsRegistration
         services.AddSingleton<IVersionMatrixService, VersionMatrixService>();
         services.AddTransient<IHealthClient, HealthClient>();
 
+        // Process-wide per-UTC-day cache for the log-count cube (see local-mode registration above).
+        services.AddSingleton(new LogCubeDayCache(TimeSpan.FromMinutes(5), () => DateTimeOffset.UtcNow));
+
         services.AddCache(s =>
         {
             s.RegisterType<EnvironmentOption[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromHours(1); });
@@ -161,6 +179,8 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<DiskCapacity[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<LogCountByServiceCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
+            s.RegisterType<VolumeBySource[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
+            s.RegisterType<CapTimeline, IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
         });
     }
 }

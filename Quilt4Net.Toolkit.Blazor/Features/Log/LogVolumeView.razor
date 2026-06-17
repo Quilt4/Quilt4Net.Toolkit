@@ -1,0 +1,168 @@
+@using Microsoft.Extensions.DependencyInjection
+@using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
+@using Quilt4Net.Toolkit.Features.ApplicationInsights
+@inject IServiceProvider ServiceProvider
+
+@if (_configError != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">@_configError</RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0" class="rz-mb-2">
+        <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+        <RadzenSelectBar @bind-Value="_range" TValue="TimeSpan" Size="ButtonSize.Small" Change="@(_ => LoadAsync())">
+            <Items>
+                <RadzenSelectBarItem Text="1h" Value="@TimeSpan.FromHours(1)" />
+                <RadzenSelectBarItem Text="24h" Value="@TimeSpan.FromHours(24)" />
+                <RadzenSelectBarItem Text="7d" Value="@TimeSpan.FromDays(7)" />
+            </Items>
+        </RadzenSelectBar>
+    </RadzenStack>
+
+    @if (_loading || Model == null)
+    {
+        <Loading />
+    }
+    else if (Model.Length == 0)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+            No billed ingestion volume found for this range — the workspace <code>Usage</code> table is empty or not readable.
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.H6" Text="@($"Total ingested: {FormatSize(_totalMb)} over the last {RangeLabel(_range)}")" />
+        <RadzenChart>
+            <RadzenPieSeries Data="@Model" CategoryProperty="Source" ValueProperty="Mb" Title="Size" />
+        </RadzenChart>
+        <RadzenDataGrid Data="@Model" TItem="Row" AllowSorting="true" AllowPaging="true" PageSize="10">
+            <Columns>
+                <RadzenDataGridColumn Title="Source" Property="@nameof(Row.Source)" />
+                @* Sort on the raw MB value (always MB) so ordering is correct even though the cell shows GB/MB/KB. *@
+                <RadzenDataGridColumn Title="Size" Property="@nameof(Row.Mb)" TextAlign="TextAlign.Right" SortOrder="SortOrder.Descending">
+                    <Template>@FormatSize(context.Mb)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Share" Property="@nameof(Row.Share)" TextAlign="TextAlign.Right">
+                    <Template>@context.Share.ToString("P1")</Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+}
+
+@implements IDisposable
+
+@code {
+    private Row[] Model { get; set; }
+    private double _totalMb;
+    private string _configError;
+    private IApplicationInsightsService _ais;
+    private IApplicationInsightsConfigurationSelector _selector;
+    private CancellationTokenSource _cts;
+    private bool _loading;
+    private TimeSpan _range = TimeSpan.FromDays(7);
+
+    [Parameter]
+    public IApplicationInsightsContext Context { get; set; }
+
+    /// <summary>Initial range; the user can change it with the in-view 1h/24h/7d selector.</summary>
+    [Parameter]
+    public TimeSpan Range { get; set; } = TimeSpan.FromDays(7);
+
+    private IApplicationInsightsContext EffectiveContext => Context ?? _selector?.Selected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _range = Range;
+
+        _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
+        if (_ais == null)
+        {
+            _configError = LogConfigurationGuard.ServiceNotRegisteredMessage;
+            return;
+        }
+
+        // Remote/selector mode: no explicit Context → track the shared config selector so this view
+        // queries the same workspace as the other AI views (MetricsView, LogView, …).
+        if (Context == null)
+        {
+            _selector = ServiceProvider.GetService<IApplicationInsightsConfigurationSelector>();
+            if (_selector != null)
+            {
+                _selector.OnChanged += OnSelectorChanged;
+                if (!_selector.IsLoaded) await _selector.LoadAsync();
+            }
+        }
+
+        if (EffectiveContext == null)
+        {
+            _configError = "No Application Insights configuration available.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async void OnSelectorChanged() => await InvokeAsync(LoadAsync);
+
+    private async Task LoadAsync()
+    {
+        var ctx = EffectiveContext;
+        if (ctx == null) return;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        _loading = true;
+        Model = null;
+        StateHasChanged();
+
+        try
+        {
+            var loaded = await _ais.GetVolumeBySourceAsync(ctx, _range, token).ToArrayAsync(token);
+            if (token.IsCancellationRequested) return;
+
+            _totalMb = loaded.Sum(x => x.Mb);
+            Model = loaded
+                .Select(x => new Row(x.Source, x.Mb, _totalMb > 0 ? x.Mb / _totalMb : 0))
+                .ToArray();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _loading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    // Auto-scaled display from a megabyte value. Sorting uses the raw MB (always MB), so the unit
+    // shown per row (GB/MB/KB) never affects ordering.
+    private static string FormatSize(double mb)
+    {
+        if (mb >= 1024) return $"{mb / 1024.0:N2} GB";
+        if (mb >= 1) return $"{mb:N1} MB";
+        return $"{mb * 1024.0:N0} KB";
+    }
+
+    private static string RangeLabel(TimeSpan range)
+        => range >= TimeSpan.FromDays(7) ? "7 days"
+            : range >= TimeSpan.FromHours(24) ? "24 hours"
+            : "1 hour";
+
+    public void Dispose()
+    {
+        if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+
+    private sealed record Row(string Source, double Mb, double Share);
+}

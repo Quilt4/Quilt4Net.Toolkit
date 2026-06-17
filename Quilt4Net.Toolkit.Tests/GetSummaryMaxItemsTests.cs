@@ -76,6 +76,7 @@ public class GetSummaryMaxItemsTests
 
         return new ApplicationInsightsService(
             cache.Object,
+            new LogCubeDayCache(TimeSpan.FromMinutes(5), () => DateTimeOffset.UtcNow),
             options,
             NullLogger<ApplicationInsightsService>.Instance);
     }

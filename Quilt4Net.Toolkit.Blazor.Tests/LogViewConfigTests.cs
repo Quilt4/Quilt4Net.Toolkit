@@ -54,6 +54,8 @@ public class LogViewConfigTests : BunitContext
     private sealed class StubApplicationInsightsService : IApplicationInsightsService
     {
         public Task<bool> CanConnectAsync(IApplicationInsightsContext context) => Task.FromResult(false);
+        public IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default) => Empty<VolumeBySource>();
+        public Task<CapTimeline> GetCapTimelineAsync(IApplicationInsightsContext context, int days, CancellationToken cancellationToken = default) => Task.FromResult(new CapTimeline { Days = [] });
         public IAsyncEnumerable<EnvironmentOption> GetEnvironments(IApplicationInsightsContext context) => Empty<EnvironmentOption>();
         public IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose, CancellationToken cancellationToken = default) => Empty<LogItem>();
         public IAsyncEnumerable<MeasureData> GetMeasureAsync(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, CancellationToken cancellationToken = default) => Empty<MeasureData>();

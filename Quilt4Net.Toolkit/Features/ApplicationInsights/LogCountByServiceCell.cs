@@ -15,12 +15,22 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 /// (<c>deployment.environment</c> → <c>AspNetCoreEnvironment</c> fallback). Empty when neither tag
 /// was logged.</param>
 /// <param name="Source">Which AI table the row came from — Trace / Exception / Request.</param>
-/// <param name="Count">Row count in the lookback window for that (service, severity, environment,
-/// source) cell.</param>
+/// <param name="Count">Retained row count in the lookback window for that (service, severity,
+/// environment, source) cell — the number of records actually kept after ingestion sampling.</param>
+/// <param name="Bytes">Retained billed bytes (<c>sum(_BilledSize)</c>) for the cell.</param>
+/// <param name="Machine">Source host / role instance the rows came from.</param>
+/// <param name="TrueCount">Sampling-corrected ("true") count: <c>sum(ItemCount)</c> — what the count
+/// would have been with no ingestion sampling. Equals <see cref="Count"/> when the cell is unsampled
+/// (every retained row represents itself, <c>ItemCount == 1</c>).</param>
+/// <param name="TrueBytes">Sampling-corrected ("true") billed bytes: <c>sum(_BilledSize * ItemCount)</c>
+/// — the estimated volume had nothing been sampled out. Equals <see cref="Bytes"/> when unsampled.</param>
 public record LogCountByServiceCell(
     string Service,
     SeverityLevel Severity,
     string Environment,
     LogSource Source,
     long Count,
-    string Machine = "");
+    long Bytes = 0,
+    string Machine = "",
+    long TrueCount = 0,
+    long TrueBytes = 0);

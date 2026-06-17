@@ -75,14 +75,28 @@
                 </RadzenSelectBar>
             </RadzenStack>
         }
+        @if (_candidateSources.Count > 1)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Caption" Text="Source" />
+                <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
+                                 Change="@(_ => RecomputeRows())">
+                    <Items>
+                        @foreach (var source in _candidateSources)
+                        {
+                            <RadzenSelectBarItem Text="@source.ToString()" Value="@source" />
+                        }
+                    </Items>
+                </RadzenSelectBar>
+            </RadzenStack>
+        }
         <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-            <RadzenText TextStyle="TextStyle.Caption" Text="Source" />
-            <RadzenSelectBar @bind-Value="_selectedSources" TValue="IEnumerable<LogSource>" Multiple="true" Size="ButtonSize.Small"
+            <RadzenText TextStyle="TextStyle.Caption" Text="Show" />
+            <RadzenSelectBar @bind-Value="_metric" TValue="Metric" Size="ButtonSize.Small"
                              Change="@(_ => RecomputeRows())">
                 <Items>
-                    <RadzenSelectBarItem Text="Trace" Value="LogSource.Trace" />
-                    <RadzenSelectBarItem Text="Exception" Value="LogSource.Exception" />
-                    <RadzenSelectBarItem Text="Request" Value="LogSource.Request" />
+                    <RadzenSelectBarItem Text="Count" Value="Metric.Count" />
+                    <RadzenSelectBarItem Text="Volume" Value="Metric.Volume" />
                 </Items>
             </RadzenSelectBar>
         </RadzenStack>
@@ -135,26 +149,83 @@
                     <FooterTemplate><strong>Total</strong></FooterTemplate>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="ServiceRow" Title="Machine" Property="@nameof(ServiceRow.Machine)" Visible="@_perMachine" />
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Verbose" Property="@nameof(ServiceRow.Verbose)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Verbose].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Verbose" Property="@nameof(ServiceRow.Verbose)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Verbose)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Verbose])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Information" Property="@nameof(ServiceRow.Information)" Width="140px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Information].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Information" Property="@nameof(ServiceRow.Information)" Width="140px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Information)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Information])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Warning" Property="@nameof(ServiceRow.Warning)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Warning].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Warning" Property="@nameof(ServiceRow.Warning)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Warning)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Warning])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Error" Property="@nameof(ServiceRow.Error)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Error].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Error" Property="@nameof(ServiceRow.Error)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Error)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Error])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Critical" Property="@nameof(ServiceRow.Critical)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_columnTotals[SeverityLevel.Critical].ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Critical" Property="@nameof(ServiceRow.Critical)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Critical)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_columnTotals[SeverityLevel.Critical])</strong></FooterTemplate>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ServiceRow" Title="Total" Property="@nameof(ServiceRow.Total)" Width="120px" TextAlign="TextAlign.Right" FormatString="{0:N0}">
-                    <FooterTemplate><strong>@_grandTotal.ToString("N0")</strong></FooterTemplate>
+                <RadzenDataGridColumn TItem="ServiceRow" Title="Total" Property="@nameof(ServiceRow.Total)" Width="120px" TextAlign="TextAlign.Right">
+                    <Template>@FormatMetric(context.Total)</Template>
+                    <FooterTemplate><strong>@FormatMetric(_grandTotal)</strong></FooterTemplate>
                 </RadzenDataGridColumn>
             </Columns>
         </RadzenDataGrid>
+
+        @* Marginal pies: severity = the table's bottom totals; service = its right totals. *@
+        <RadzenRow Gap="1rem" class="rz-mt-3">
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenText TextStyle="TextStyle.Subtitle2" Text="By severity" />
+                <RadzenChart>
+                    <RadzenPieSeries Data="@_severitySlices" CategoryProperty="Label" ValueProperty="Value" />
+                </RadzenChart>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenText TextStyle="TextStyle.Subtitle2" Text="By service" />
+                <RadzenChart>
+                    <RadzenPieSeries Data="@_serviceSlices" CategoryProperty="Label" ValueProperty="Value" />
+                </RadzenChart>
+            </RadzenColumn>
+        </RadzenRow>
+
+        @* Sampling correction: what the current selection would have cost without ingestion
+           sampling. Retained = records actually kept; Est. true = sum(ItemCount). When nothing is
+           sampled (ItemCount == 1 everywhere) the two are equal and we say so plainly — that itself
+           answers "are we sampling?". AppMetrics is intentionally absent (not in the cube) since its
+           ItemCount is an aggregation count, not a sampling weight. *@
+        <RadzenCard class="rz-mt-3">
+            <RadzenText TextStyle="TextStyle.Subtitle2" Text="Sampling" />
+            @if (!_anySampling)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
+                    Ingestion sampling is <strong>not in effect</strong> for this selection — every record is
+                    retained (100%), so the @MetricNoun shown above already equals the true @MetricNoun.
+                </RadzenAlert>
+            }
+            else
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-2"
+                            Text="@($"Effective sampling: {_effectiveRatePct:N1}% of records retained. Showing {FormatMetric(_samplingRetained)} of an estimated {FormatMetric(_samplingTrue)} {MetricNoun} without sampling.")" />
+                <RadzenDataGrid Data="@_samplingRows" TItem="SamplingRow" AllowSorting="true">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Source" Property="@nameof(SamplingRow.Source)" />
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Retained" Property="@nameof(SamplingRow.Retained)" TextAlign="TextAlign.Right">
+                            <Template>@FormatMetric(context.Retained)</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Est. true" Property="@nameof(SamplingRow.EstTrue)" TextAlign="TextAlign.Right" SortOrder="SortOrder.Descending">
+                            <Template>@FormatMetric(context.EstTrue)</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="SamplingRow" Title="Retained %" Property="@nameof(SamplingRow.RatePct)" TextAlign="TextAlign.Right">
+                            <Template>@context.RatePct.ToString("N1") %</Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
     }
 </RadzenStack>
 
@@ -167,6 +238,12 @@
     // Candidate sets (everything offered by the AI workspaces) — separate from the user's picks.
     private IReadOnlyList<ApplicationInsightsConfigurationResponse> _candidateConfigs = [];
     private IReadOnlyList<string> _candidateEnvironments = [];
+    // Sources actually present in the current window's cube — drives the Source filter so a source
+    // with no data (e.g. Event/PageView when nothing emits them) doesn't show a 0-everywhere button.
+    private IReadOnlyList<LogSource> _candidateSources = [];
+    // raw → logical application alias map (resolved in OnInitializedAsync); folds deployment/role
+    // names into their logical app so the same app doesn't split into two service rows.
+    private IReadOnlyDictionary<string, string> _effectiveAliasMap;
 
     // Current user selections. Empty enumerable everywhere means "include all".
     private IEnumerable<string> _selectedConfigIds = [];
@@ -191,6 +268,22 @@
     private List<ServiceRow> _rows = [];
     private Dictionary<SeverityLevel, long> _columnTotals = NewEmptyTotals();
     private long _grandTotal;
+
+    // Count vs ingested-volume view. Both Count and Bytes ride on every cell, so flipping this is a
+    // pure local recompute (no fetch). Drives the table cells/totals and the two pies.
+    private enum Metric { Count, Volume }
+    private Metric _metric = Metric.Count;
+    private List<Slice> _severitySlices = [];
+    private List<Slice> _serviceSlices = [];
+
+    // Sampling correction: each cell carries retained (Count/Bytes) and sampling-corrected
+    // (TrueCount/TrueBytes, via sum(ItemCount)) figures. The per-source table and overall summary
+    // are recomputed under the same filters as the main grid, in the active metric's unit.
+    private List<SamplingRow> _samplingRows = [];
+    private long _samplingRetained;   // active-metric unit (records or bytes)
+    private long _samplingTrue;       // active-metric unit, sampling-corrected
+    private double _effectiveRatePct = 100; // count-based: 100 * retained-count / true-count
+    private bool _anySampling;        // true once any source's true-count exceeds its retained-count
     private System.DateTime? _lastRefreshUtc; // for the refresh-button "loaded at" tooltip
     private static readonly System.TimeSpan _cacheTtl = System.TimeSpan.FromMinutes(10);
     private Quilt4Net.Toolkit.Blazor.Framework.IBrowserTimeZoneAccessor _browserTime;
@@ -219,8 +312,19 @@
     [Parameter]
     public IReadOnlyList<string> EnvironmentOrder { get; set; }
 
+    /// <summary>
+    /// Optional raw → logical application alias map. Service rows that fall back to a deployment /
+    /// cloud-role name (e.g. <c>eplicta-prod-aggregator-web</c>) because the row lacks a logical
+    /// <c>ApplicationName</c> are folded into their logical app, matching the other log views. When
+    /// null, falls back to the static map from <see cref="ApplicationInsightsOptions.ApplicationAlias"/>.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> ApplicationAliasMap { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        _effectiveAliasMap = ApplicationAliasMap ?? AiOptions.Value?.ApplicationAlias?.ToResolverDictionary();
+
         // Scoped cache holds the cell cube across page navigations within this Blazor circuit.
         // Optional — hosts that didn't call AddQuilt4NetBlazorApplicationInsightsClientRemote
         // still work, they just lose the cross-page persistence.
@@ -451,8 +555,20 @@
             _rows = [];
             _columnTotals = NewEmptyTotals();
             _grandTotal = 0;
+            _severitySlices = [];
+            _serviceSlices = [];
+            _candidateSources = [];
+            _samplingRows = [];
+            _samplingRetained = _samplingTrue = 0;
+            _effectiveRatePct = 100;
+            _anySampling = false;
             return;
         }
+
+        // Data-driven source options: only sources present in the cube. Prune any selection that
+        // no longer applies so chip state stays honest.
+        _candidateSources = allCells.Select(t => t.Cell.Source).Distinct().OrderBy(s => (int)s).ToArray();
+        _selectedSources = (_selectedSources ?? []).Where(_candidateSources.Contains).ToArray();
 
         var configSet = (_selectedConfigIds ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var envSet = (_selectedEnvironments ?? []).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
@@ -470,21 +586,28 @@
         // rows we render no matter what the filter matches — entries with no matches show a row of
         // zeros so toggling a filter never makes a row vanish (keeps the grid stable across clicks).
         var allKeys = allCells
-            .Select(t => (Service: t.Cell.Service ?? "unknown", Machine: MachineKey(t)))
+            .Select(t => (Service: Fold(t.Cell.Service), Machine: MachineKey(t)))
             .Distinct(new ServiceMachineComparer())
             .ToArray();
 
         var aggregated = new Dictionary<(string Service, string Machine, SeverityLevel Severity), long>(
             new ServiceMachineSeverityComparer());
+        // Per-source sampling accumulator: (retained count, true count, retained bytes, true bytes).
+        var samp = new Dictionary<LogSource, (long Rc, long Tc, long Rb, long Tb)>();
         foreach (var t in allCells)
         {
             if (configSet.Count > 0 && !configSet.Contains(t.ConfigId)) continue;
             if (envSet.Count > 0 && !envSet.Contains(t.Cell.Environment)) continue;
             if (sourceSet.Count > 0 && !sourceSet.Contains(t.Cell.Source)) continue;
 
-            var key = (t.Cell.Service ?? "unknown", MachineKey(t), t.Cell.Severity);
-            aggregated[key] = aggregated.GetValueOrDefault(key) + t.Cell.Count;
+            var key = (Fold(t.Cell.Service), MachineKey(t), t.Cell.Severity);
+            aggregated[key] = aggregated.GetValueOrDefault(key) + (_metric == Metric.Volume ? t.Cell.Bytes : t.Cell.Count);
+
+            var cur = samp.GetValueOrDefault(t.Cell.Source);
+            samp[t.Cell.Source] = (cur.Rc + t.Cell.Count, cur.Tc + t.Cell.TrueCount, cur.Rb + t.Cell.Bytes, cur.Tb + t.Cell.TrueBytes);
         }
+
+        BuildSampling(samp);
 
         _rows = allKeys
             .OrderBy(k => k.Service, System.StringComparer.OrdinalIgnoreCase)
@@ -509,6 +632,17 @@
             }
         }
         _grandTotal = _rows.Sum(r => r.Total);
+
+        // Marginals for the two pies: severity = column totals (bottom row), service = row totals
+        // (right column). Both follow the active metric (count or volume) and current filters.
+        _severitySlices = _columnTotals
+            .Where(kv => kv.Value > 0)
+            .Select(kv => new Slice(kv.Key.ToString(), kv.Value))
+            .ToList();
+        _serviceSlices = _rows
+            .Where(r => r.Total > 0)
+            .Select(r => new Slice(_perMachine ? $"{r.Service} / {r.Machine}" : r.Service, r.Total))
+            .ToList();
     }
 
     /// <summary>
@@ -557,6 +691,63 @@
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
     }
+
+    /// <summary>
+    /// Turn the per-source (retained, true) sampling accumulator into the display rows + overall
+    /// summary. The effective rate is count-based (records dropped, not bytes) since that's the
+    /// cleanest measure of the sampling decision; the Retained / Est. true figures follow the active
+    /// metric. <c>TrueCount &gt;= Count</c> always (each retained row weighs <c>ItemCount &gt;= 1</c>),
+    /// so a source is "sampled" exactly when its true-count exceeds its retained-count.
+    /// </summary>
+    private void BuildSampling(Dictionary<LogSource, (long Rc, long Tc, long Rb, long Tb)> samp)
+    {
+        _samplingRows = samp
+            .Select(kv =>
+            {
+                var (rc, tc, rb, tb) = kv.Value;
+                var retained = _metric == Metric.Volume ? rb : rc;
+                var estTrue = _metric == Metric.Volume ? tb : tc;
+                var ratePct = tc > 0 ? 100.0 * rc / tc : 100.0;
+                return new SamplingRow(kv.Key.ToString(), retained, estTrue, ratePct);
+            })
+            .OrderByDescending(r => r.EstTrue)
+            .ToList();
+
+        var totRc = samp.Values.Sum(v => v.Rc);
+        var totTc = samp.Values.Sum(v => v.Tc);
+        var totRb = samp.Values.Sum(v => v.Rb);
+        var totTb = samp.Values.Sum(v => v.Tb);
+        _samplingRetained = _metric == Metric.Volume ? totRb : totRc;
+        _samplingTrue = _metric == Metric.Volume ? totTb : totTc;
+        _effectiveRatePct = totTc > 0 ? 100.0 * totRc / totTc : 100.0;
+        _anySampling = totTc > totRc;
+    }
+
+    private string MetricNoun => _metric == Metric.Volume ? "volume" : "records";
+
+    // Count → "N0"; Volume → auto-scaled size from the megabyte value (Bytes are summed in the cube).
+    private string FormatMetric(long value)
+        => _metric == Metric.Volume ? FormatSize(value / 1048576.0) : value.ToString("N0");
+
+    private static string FormatSize(double mb)
+    {
+        if (mb >= 1024) return $"{mb / 1024.0:N2} GB";
+        if (mb >= 1) return $"{mb:N1} MB";
+        return $"{mb * 1024.0:N0} KB";
+    }
+
+    // Fold a raw service/role name to its logical app via the alias map (null/empty → "unknown").
+    private string Fold(string rawService)
+    {
+        var s = string.IsNullOrEmpty(rawService) ? "unknown" : rawService;
+        return _effectiveAliasMap is { Count: > 0 } map ? map.GetValueOrDefault(s, s) : s;
+    }
+
+    private sealed record Slice(string Label, double Value);
+
+    /// <summary>One source's sampling picture: retained vs sampling-corrected ("true") figure in the
+    /// active metric's unit, plus the count-based retained percentage (100 = nothing sampled out).</summary>
+    private sealed record SamplingRow(string Source, long Retained, long EstTrue, double RatePct);
 
     /// <summary>
     /// Row shape with one explicit property per severity so the grid can sort each amount column

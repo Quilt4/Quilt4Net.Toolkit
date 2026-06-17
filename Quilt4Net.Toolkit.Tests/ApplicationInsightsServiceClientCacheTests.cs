@@ -71,6 +71,7 @@ public class ApplicationInsightsServiceClientCacheTests
 
         return new ApplicationInsightsService(
             Mock.Of<ITimeToLiveCache>(),
+            new LogCubeDayCache(TimeSpan.FromMinutes(5), () => DateTimeOffset.UtcNow),
             options,
             NullLogger<ApplicationInsightsService>.Instance);
     }

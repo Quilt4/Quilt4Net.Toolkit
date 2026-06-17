@@ -58,9 +58,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
             _localCache.TryGetValue(cacheKey, out var cached);
             var needRefresh = cached == null || DateTime.UtcNow > cached.ValidTo;
 
+            // Per-resolution result lines are Debug — they fire on every content read (typically a
+            // 0ms cache hit) and flooded Information traces in production. Errors/warnings still log
+            // at their original levels. Matches RemoteConfigCallService.
             if (!needRefresh)
             {
-                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false.",
+                _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false.",
                     key, sw.ElapsedMilliseconds);
                 return (cached.Value ?? defaultValue, true);
             }
@@ -70,7 +73,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             if (cached != null && _contentOptions.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication);
-                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
+                _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
                     key, sw.ElapsedMilliseconds);
                 return (cached.Value ?? defaultValue, true);
             }
@@ -85,7 +88,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var staleValue = stale?.Value ?? defaultValue;
             _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
             CacheFailure(cacheKey, staleValue);
-            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
+            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
                 key, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default");
             return (staleValue, false);
         }
@@ -255,7 +258,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 _logger.LogError("Unable to get content for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
                     key, response.StatusCode, response.ReasonPhrase);
                 CacheFailure(cacheKey, defaultValue);
-                _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
+                _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
                     key, sw.ElapsedMilliseconds);
                 return (defaultValue, false);
             }
@@ -268,7 +271,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
             _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
 
-            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false.",
+            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false.",
                 key, sw.ElapsedMilliseconds);
             return (result.Value ?? defaultValue, true);
         }
@@ -277,7 +280,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             _logger.LogWarning("HTTP request timed out for content '{Key}' after {Timeout}ms. Using default value.",
                 key, _contentOptions.HttpTimeout.TotalMilliseconds);
             CacheFailure(cacheKey, defaultValue);
-            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
+            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
                 key, sw.ElapsedMilliseconds);
             return (defaultValue, false);
         }
@@ -285,7 +288,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         {
             _logger.LogError(e, "{Message} Using default for content key {Key}.", e.Message, key);
             CacheFailure(cacheKey, defaultValue);
-            _logger.LogInformation("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
+            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
                 key, sw.ElapsedMilliseconds);
             return (defaultValue, false);
         }
