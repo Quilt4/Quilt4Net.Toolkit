@@ -87,6 +87,7 @@ union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationNa
 | order by ApplicationName asc, Environment asc, Machine asc";
     private readonly ConcurrentDictionary<ClientKey, LogsQueryClient> _clientCache = new();
     private readonly ITimeToLiveCache _timeToLiveCache;
+    private readonly LogCubeDayCache _logCubeDayCache;
     private readonly ApplicationInsightsOptions _options;
     private readonly ILogger<ApplicationInsightsService> _logger;
 
@@ -94,10 +95,12 @@ union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationNa
 
     public ApplicationInsightsService(
         ITimeToLiveCache timeToLiveCache,
+        LogCubeDayCache logCubeDayCache,
         IOptions<ApplicationInsightsOptions> options,
         ILogger<ApplicationInsightsService> logger)
     {
         _timeToLiveCache = timeToLiveCache;
+        _logCubeDayCache = logCubeDayCache;
         _options = options.Value;
         _logger = logger;
     }
@@ -1682,26 +1685,18 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"clusterfs|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        // Cache key versioned so schema changes don't serve stale cells from the TtlCache after a
-        // hot reload (Machine column → v2; Bytes + extra severity-bearing sources → v3).
-        var cacheKey = $"logcount-v4|{context.ToKey()}|{timeSpan}";
-        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
-        {
-            var list = new List<LogCountByServiceCell>();
-            var client = GetClient(context);
-            var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
-
-            // Group by every dimension the admin UI may filter on (env + source) so the same
-            // result set powers every subsequent filter combination without another KQL run.
-            // Bytes = sum(_BilledSize) lets the view toggle count ↔ ingested volume locally.
-            // Unified severity:
-            //   - AppTraces: own SeverityLevel (Verbose..Critical = 0..4)
-            //   - AppExceptions: always Error (3) — no useful gradient on raw exceptions
-            //   - AppRequests / AppDependencies: Information (1) on success, Error (3) on failure
-            //   - AppEvents / AppPageViews: Information (1) — no severity/success on the row
-            var query = $@"
+    /// <summary>
+    /// The log-count cube query. Groups by every dimension the admin UI may filter on (service ×
+    /// severity × environment × source × machine) so one result set powers every subsequent filter
+    /// combination without another KQL run. <c>Bytes = sum(_BilledSize)</c> lets the view toggle
+    /// count ↔ ingested volume locally; <c>TrueCount/TrueBytes</c> (weighted by <c>ItemCount</c>)
+    /// carry the sampling-corrected figures. Unified severity:
+    ///   - AppTraces: own SeverityLevel (Verbose..Critical = 0..4)
+    ///   - AppExceptions: always Error (3) — no useful gradient on raw exceptions
+    ///   - AppRequests / AppDependencies: Information (1) on success, Error (3) on failure
+    ///   - AppEvents / AppPageViews: Information (1) — no severity/success on the row
+    /// </summary>
+    private static readonly string _logCubeQuery = $@"
 union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies, AppEvents, AppPageViews
 | extend _p = todynamic(Properties)
 | extend
@@ -1725,47 +1720,99 @@ union withsource=_Source AppTraces, AppExceptions, AppRequests, AppDependencies,
 | summarize Count = count(), Bytes = sum(_BilledSize), TrueCount = sum(_w), TrueBytes = sum(_BilledSize * _w) by Service, EffectiveSeverity, Environment, _Source, Machine
 | project Service, Severity = EffectiveSeverity, Environment, Source = _Source, Count, Bytes, Machine, TrueCount, TrueBytes";
 
-            var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
-            foreach (var table in response.Value.AllTables)
-            {
-                var serviceIdx = GetColumnIndex(table, "Service");
-                var sevIdx = GetColumnIndex(table, "Severity");
-                var envIdx = GetColumnIndex(table, "Environment");
-                var sourceIdx = GetColumnIndex(table, "Source");
-                var countIdx = GetColumnIndex(table, "Count");
-                var bytesIdx = GetColumnIndex(table, "Bytes");
-                var machineIdx = GetColumnIndex(table, "Machine");
-                var trueCountIdx = GetColumnIndex(table, "TrueCount");
-                var trueBytesIdx = GetColumnIndex(table, "TrueBytes");
-                foreach (var row in table.Rows)
-                {
-                    var service = row[serviceIdx]?.ToString() ?? "unknown";
-                    var severity = (SeverityLevel)GetInt(row, sevIdx);
-                    var environment = row[envIdx]?.ToString() ?? "";
-                    var source = (row[sourceIdx]?.ToString()) switch
-                    {
-                        "AppExceptions" => LogSource.Exception,
-                        "AppRequests" => LogSource.Request,
-                        "AppDependencies" => LogSource.Dependency,
-                        "AppEvents" => LogSource.Event,
-                        "AppPageViews" => LogSource.PageView,
-                        _ => LogSource.Trace,
-                    };
-                    var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
-                    var bytes = System.Convert.ToInt64(row[bytesIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
-                    var machine = row[machineIdx]?.ToString() ?? "";
-                    var trueCount = System.Convert.ToInt64(row[trueCountIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
-                    var trueBytes = System.Convert.ToInt64(row[trueBytesIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
-                    list.Add(new LogCountByServiceCell(service, severity, environment, source, count, bytes, machine, trueCount, trueBytes));
-                }
-            }
-            return list.ToArray();
-        });
+    public async IAsyncEnumerable<LogCountByServiceCell> GetLogCountByServiceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // Whole-day multi-day windows (7d, 30d, …) compose from per-day chunks — only the live "today"
+        // slice re-queries on refresh; finished days are served from the process-wide cache. Sub-day
+        // ranges (1h / 24h) can't be assembled from whole-day chunks, so they stay on the live path.
+        var days = (int)Math.Round(timeSpan.TotalDays);
+        var calendarMode = days >= 2 && Math.Abs(timeSpan.TotalDays - days) < 0.01;
+
+        var items = calendarMode
+            ? await GetLogCubeByDaysAsync(context, days)
+            : await GetLogCubeLiveAsync(context, timeSpan);
+
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
+    }
+
+    // Sub-day path: one query over the rolling window, cached by the TtlCache. Key versioned so schema
+    // changes don't serve stale cells after a hot reload (Machine → v2; Bytes + extra sources → v3;
+    // TrueCount/TrueBytes → v4).
+    private async Task<LogCountByServiceCell[]> GetLogCubeLiveAsync(IApplicationInsightsContext context, TimeSpan timeSpan)
+    {
+        var cacheKey = $"logcount-v4|{context.ToKey()}|{timeSpan}";
+        return await _timeToLiveCache.GetAsync(cacheKey, () => FetchLogCubeAsync(context, new LogsQueryTimeRange(timeSpan)));
+    }
+
+    // Multi-day path: compose the window from `days` whole UTC-day chunks ending today (calendar
+    // aligned), then fold same-key cells across days back into the flat cube shape.
+    private async Task<LogCountByServiceCell[]> GetLogCubeByDaysAsync(IApplicationInsightsContext context, int days)
+    {
+        var workspaceKey = context.ToKey();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var composed = new List<LogCountByServiceCell>();
+        for (var i = 0; i < days; i++)
+        {
+            var date = today.AddDays(-i);
+            var dayCells = await _logCubeDayCache.GetDayAsync(workspaceKey, date, d => FetchLogCubeAsync(context, DayRange(d)));
+            composed.AddRange(dayCells);
+        }
+        return LogCubeDayCache.Merge(composed);
+    }
+
+    // A full UTC calendar day [00:00, next-00:00). For today the end is in the future; Log Analytics
+    // simply returns up to "now", and the day-cache's short TTL keeps it fresh.
+    private static LogsQueryTimeRange DayRange(DateOnly dateUtc)
+    {
+        var start = new DateTimeOffset(dateUtc.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        return new LogsQueryTimeRange(start, start.AddDays(1));
+    }
+
+    private async Task<LogCountByServiceCell[]> FetchLogCubeAsync(IApplicationInsightsContext context, LogsQueryTimeRange range)
+    {
+        var list = new List<LogCountByServiceCell>();
+        var client = GetClient(context);
+        var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        var response = await client.QueryWorkspaceAsync(workspaceId, _logCubeQuery, range);
+        foreach (var table in response.Value.AllTables)
+        {
+            var serviceIdx = GetColumnIndex(table, "Service");
+            var sevIdx = GetColumnIndex(table, "Severity");
+            var envIdx = GetColumnIndex(table, "Environment");
+            var sourceIdx = GetColumnIndex(table, "Source");
+            var countIdx = GetColumnIndex(table, "Count");
+            var bytesIdx = GetColumnIndex(table, "Bytes");
+            var machineIdx = GetColumnIndex(table, "Machine");
+            var trueCountIdx = GetColumnIndex(table, "TrueCount");
+            var trueBytesIdx = GetColumnIndex(table, "TrueBytes");
+            foreach (var row in table.Rows)
+            {
+                var service = row[serviceIdx]?.ToString() ?? "unknown";
+                var severity = (SeverityLevel)GetInt(row, sevIdx);
+                var environment = row[envIdx]?.ToString() ?? "";
+                var source = (row[sourceIdx]?.ToString()) switch
+                {
+                    "AppExceptions" => LogSource.Exception,
+                    "AppRequests" => LogSource.Request,
+                    "AppDependencies" => LogSource.Dependency,
+                    "AppEvents" => LogSource.Event,
+                    "AppPageViews" => LogSource.PageView,
+                    _ => LogSource.Trace,
+                };
+                var count = System.Convert.ToInt64(row[countIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                var bytes = System.Convert.ToInt64(row[bytesIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                var machine = row[machineIdx]?.ToString() ?? "";
+                var trueCount = System.Convert.ToInt64(row[trueCountIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                var trueBytes = System.Convert.ToInt64(row[trueBytesIdx] ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                list.Add(new LogCountByServiceCell(service, severity, environment, source, count, bytes, machine, trueCount, trueBytes));
+            }
+        }
+        return list.ToArray();
     }
 
     /// <summary>

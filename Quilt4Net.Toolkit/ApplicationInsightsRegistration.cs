@@ -38,6 +38,10 @@ public static class ApplicationInsightsRegistration
         services.AddSingleton<IVersionMatrixService, VersionMatrixService>();
         services.AddTransient<IHealthClient, HealthClient>();
 
+        // Process-wide per-UTC-day cache for the log-count cube. Past days are immutable; the live
+        // "today" chunk refreshes on this short TTL. Multi-day views compose from these chunks.
+        services.AddSingleton(new LogCubeDayCache(TimeSpan.FromMinutes(5), () => DateTimeOffset.UtcNow));
+
         services.AddCache(s =>
         {
             // Environment list rarely changes — hold it for an hour.
@@ -159,6 +163,9 @@ public static class ApplicationInsightsRegistration
         services.AddTransient<IApplicationInsightsService, ApplicationInsightsService>();
         services.AddSingleton<IVersionMatrixService, VersionMatrixService>();
         services.AddTransient<IHealthClient, HealthClient>();
+
+        // Process-wide per-UTC-day cache for the log-count cube (see local-mode registration above).
+        services.AddSingleton(new LogCubeDayCache(TimeSpan.FromMinutes(5), () => DateTimeOffset.UtcNow));
 
         services.AddCache(s =>
         {
