@@ -38,7 +38,7 @@
             {
                 <RadzenLineSeries Data="@points" CategoryProperty="@nameof(MetricSample.Timestamp)" ValueProperty="@nameof(MetricSample.Value)" Title="@label" Smooth="true" />
             }
-            <RadzenCategoryAxis FormatString="{0:HH:mm}" />
+            <RadzenCategoryAxis FormatString="@_categoryFormat" />
             @if (LogScale)
             {
                 @* Values were transformed to log10 in OnParametersSet; the axis lives in log
@@ -97,6 +97,9 @@
     [Parameter] public double LogScaleEpsilon { get; set; } = 0.001;
 
     private IReadOnlyList<(string Label, MetricSample[] Points)> _series = [];
+    // Category-axis date/time format, chosen from the data's span: a 7-day window needs dates
+    // (HH:mm alone repeats every midnight and is unreadable), a single day needs the time.
+    private string _categoryFormat = "{0:HH:mm}";
     private IBrowserTimeZoneAccessor _browserTime; // optional — null when no host wires it up
     private string _chartKey = "linear-fullpct"; // recomputed in OnParametersSet; gates RadzenChart's @key
     private RadzenChart _chart; // captured via @ref so OnAfterRenderAsync can call Reload() on axis flips
@@ -126,6 +129,24 @@
         // transform values to log10 space — RadzenChart's value axis is linear, so we trade one
         // round-trip through the values (log10 here, 10^x in the axis Formatter) for log-scale
         // plotting without depending on the chart library to support it natively.
+        // Pick the axis label format from how much wall-clock the data covers: multi-day windows
+        // show a date (otherwise every midnight reads identically), a day or less shows the time.
+        var samples = Samples ?? [];
+        if (samples.Length > 0)
+        {
+            var min = samples[0].Timestamp;
+            var max = samples[0].Timestamp;
+            foreach (var s in samples)
+            {
+                if (s.Timestamp < min) min = s.Timestamp;
+                if (s.Timestamp > max) max = s.Timestamp;
+            }
+            var span = max - min;
+            _categoryFormat = span > System.TimeSpan.FromDays(3) ? "{0:MMM dd}"
+                : span > System.TimeSpan.FromDays(1) ? "{0:ddd HH:mm}"
+                : "{0:HH:mm}";
+        }
+
         var tz = _browserTime?.Current ?? System.TimeZoneInfo.Local;
         _series = (Samples ?? [])
             .GroupBy(s => s.Series ?? "")

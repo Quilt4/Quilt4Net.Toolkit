@@ -780,6 +780,19 @@ protected override async Task OnInitializedAsync()
 }
 ```
 
+### Cost & volume
+
+Two components turn the workspace into a cost picture using billing-grade data from the `Usage` table (no sampled-telemetry estimates), so figures reconcile with the Azure bill:
+
+```razor
+@using Quilt4Net.Toolkit.Blazor.Features.Log
+
+<LogVolumeView Range="TimeSpan.FromDays(7)" />   @* pie of billed volume by source table + size table; 1h/24h/7d selector *@
+<CapTimelineView Days="30" />                     @* billed GB/day vs the daily cap, first-hit times, est. uncapped; 14/30/90d selector *@
+```
+
+`LogCountByServiceView` also gains a **Show: Count / Volume** toggle (record count ↔ billed volume, a local recompute), two marginal pies (by severity / by service), and a **Sampling** section that reports retained vs sampling-corrected (`sum(ItemCount)`) figures and the effective sampling rate per source — stating plainly when sampling is not in effect. On Quilt4Net Server these surface as the **Logging volume** and **Daily cap** tabs on `/monitor/metrics` and `/developer/metrics`. Full reference: [Log views → Cost & volume](https://quilt4net.com/articles/log-views.html).
+
 ## Version matrix
 
 `VersionMatrixDisplay` shows the latest version of each application per environment, scanned from Application Insights. It uses the same Application Insights client (local or remote) as `LogView`.
@@ -800,6 +813,55 @@ protected override async Task OnInitializedAsync()
 When the team has more than one configured workspace (remote mode, or an explicit `Configs` list) it renders a built-in **multi-select radio bar**: toggle one or more workspaces and their version data is merged into a single matrix; selecting none shows all. (`LogView` uses a single-select dropdown for the same purpose.)
 
 Two column toggles — **Show Development** and **Show Unknown** — are off by default. Each hides its environment column (`Development` / `(unknown)`) and drops any application row left without values in the remaining columns, so dev-only / unknown-only apps stay out of the default view. Toggling is instant (no re-query).
+
+## Metrics view
+
+`MetricsView` charts host and Kubernetes-cluster resource metrics read back from Application
+Insights (the `AppMetrics` table). Quilt4Net **reads** these — it does not produce them; the
+series come from an OpenTelemetry Collector (`hostmetrics` for machines, `kubeletstats` for the
+cluster) exporting OTel `system.*` / `k8s.*` semantic-convention metrics into your workspace.
+
+```razor
+<MetricsView />
+```
+
+It uses the same Application Insights client and configuration selector as `LogView` (local or
+remote mode — see [Log viewer](#log-viewer)), and a circuit-scoped cache so navigating away and
+back is instant. A range selector (1h / 24h / 7d) and a Refresh button sit at the top, and the
+charts are split across two tabs: **Physical machines** and **Cluster** (the Cluster tab appears
+only when the workspace has Kubernetes node telemetry).
+
+**Physical machines** tab (per machine, from `system.*`, grouped by `host.name` — rows with no
+host identity are excluded so unattributed node hostmetrics don't merge into blank series):
+
+| Chart | Source |
+|-------|--------|
+| CPU % | `system.cpu.utilization` (idle → busy %) |
+| Memory % | `system.memory.utilization` |
+| Disk used (GB) | `system.filesystem.usage` (per host + volume, with capacity bars) |
+
+**Cluster** tab — one line per node (`k8s.node.name`):
+
+| Chart | Source | Unit |
+|-------|--------|------|
+| Node CPU % | `100 × k8s.node.cpu.usage / k8s.node.allocatable_cpu` | % |
+| Node memory % | `k8s.node.memory.usage / (usage + available)` | % |
+| Node filesystem % | `k8s.node.filesystem.usage / capacity` | % |
+
+**Whole-cluster total toggle** — a switch on the Cluster tab swaps the per-node lines for a
+single **capacity-weighted total** line per metric, aggregated across all nodes (a 12-core node
+contributes more than a 2-core one): CPU = `100 × Σ usage / Σ allocatable_cpu`, memory =
+`100 × Σ usage / Σ (usage + available)`, filesystem = `100 × Σ usage / Σ capacity`. Totals are
+fetched on demand when the toggle is on.
+
+**Node → pod drill-down** — in per-node mode, pick a node from the dropdown to load the pods
+scheduled on it (`k8s.pod.cpu.usage` in cores and `k8s.pod.memory.usage` in MB, labelled
+`{namespace}/{pod}`). Pod series are fetched on demand and are not cached.
+
+> Network throughput and swap/paging are intentionally not charted. Per-host load average
+> (`system.cpu.load_average.*`) is also omitted: the collector currently emits it without a host
+> resource attribute, so it can't be attributed to a machine — a producer-side fix is needed
+> before it can be shown here.
 
 ## Developer monitoring pages
 

@@ -4,5 +4,8 @@ public enum LogSource
 {
     Exception,
     Trace,
-    Request
+    Request,
+    Dependency,
+    Event,
+    PageView
 }
