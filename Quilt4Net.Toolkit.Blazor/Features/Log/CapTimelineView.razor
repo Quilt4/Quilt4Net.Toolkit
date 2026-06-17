@@ -52,14 +52,21 @@ else
             <RadzenColumnSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="IngestedGb" Title="Ingested" />
             @if (_capGb.HasValue)
             {
-                @* Constant value on every row → renders as a horizontal reference line at the cap. *@
-                <RadzenLineSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="CapLineGb" Title="Daily cap" LineType="LineType.Dashed" />
+                @* Constant value on every row → renders as a horizontal reference line at the cap.
+                   CapLine is a non-nullable double (the series only renders when a cap exists) so
+                   Radzen's tooltip lambda never dereferences a null. *@
+                <RadzenLineSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="CapLine" Title="Daily cap" LineType="LineType.Dashed" />
             }
-            @* Markers-only line: only hit days carry a value, so this shows as discrete points above
-               the cap line marking how much each capped day would have ingested unthrottled. *@
-            <RadzenLineSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="EstUncappedGb" Title="Est. uncapped" Smooth="false">
-                <RadzenMarkers MarkerType="MarkerType.Diamond" />
-            </RadzenLineSeries>
+            @if (_uncappedPoints.Length > 0)
+            {
+                @* Bound to a *filtered* set (hit days only) with a non-nullable value — feeding the
+                   full Model here would put nulls on non-hit days and Radzen's tooltip lambda would
+                   throw "Nullable object must have a value". Markers mark how much each capped day
+                   would have ingested unthrottled. *@
+                <RadzenLineSeries Data="@_uncappedPoints" CategoryProperty="DateLabel" ValueProperty="EstUncappedGb" Title="Est. uncapped" Smooth="false">
+                    <RadzenMarkers MarkerType="MarkerType.Diamond" />
+                </RadzenLineSeries>
+            }
             <RadzenCategoryAxis>
                 <RadzenAxisTitle Text="Day (UTC)" />
             </RadzenCategoryAxis>
@@ -99,6 +106,7 @@ else
 
 @code {
     private Row[] Model { get; set; }
+    private UncappedPoint[] _uncappedPoints = [];
     private double? _capGb;
     private int _hitDays;
     private double _estLostGb;
@@ -168,6 +176,7 @@ else
 
         _loading = true;
         Model = null;
+        _uncappedPoints = [];
         StateHasChanged();
 
         try
@@ -182,9 +191,16 @@ else
                     d.DateUtc,
                     d.DateUtc.ToString("MM-dd"),
                     d.IngestedGb,
-                    timeline.CapGb,
+                    timeline.CapGb ?? 0,
                     d.CapHitUtc,
                     d.EstimatedUncappedGb))
+                .ToArray();
+
+            // Filtered, non-nullable points for the est-uncapped marker series — keeps nulls out of
+            // the Radzen series (the chart tooltip lambda can't handle a null value).
+            _uncappedPoints = Model
+                .Where(r => r.EstUncappedGb.HasValue)
+                .Select(r => new UncappedPoint(r.DateLabel, r.EstUncappedGb.Value))
                 .ToArray();
 
             _hitDays = Model.Count(r => r.CapHitUtc.HasValue);
@@ -213,9 +229,16 @@ else
     }
 
     // HitSortKey lets the "Cap hit" column sort chronologically (DateTime.MaxValue floats no-hit days
-    // to the end) while the cell itself renders just the HH:mm badge.
-    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double? CapLineGb, DateTime? CapHitUtc, double? EstUncappedGb)
+    // to the end) while the cell itself renders just the HH:mm badge. CapLine is the (non-nullable)
+    // cap value repeated on every row so the reference-line series never sees a null; EstUncappedGb
+    // stays nullable for the grid ("—" on non-hit days) but is fed to the chart only via the filtered
+    // _uncappedPoints set.
+    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double CapLine, DateTime? CapHitUtc, double? EstUncappedGb)
     {
         public DateTime HitSortKey => CapHitUtc ?? DateTime.MaxValue;
     }
+
+    /// <summary>Hit-day-only point for the est-uncapped marker series — non-nullable value so the
+    /// Radzen chart tooltip never dereferences a null.</summary>
+    private sealed record UncappedPoint(string DateLabel, double EstUncappedGb);
 }
