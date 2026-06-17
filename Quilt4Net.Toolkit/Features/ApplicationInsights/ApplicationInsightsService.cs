@@ -1532,7 +1532,7 @@ AppMetrics
     // (e.g. cog-audry / vm-ygg-cp-1), a separate telemetry family from the host system.* metrics
     // above. Per-row "average value" uses the same sum(Sum)/sum(ItemCount) weighted average.
 
-    public IAsyncEnumerable<MetricSample> GetClusterNodeCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterNodeCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         // Node CPU used %, = 100 * k8s.node.cpu.usage / k8s.node.allocatable_cpu (cores / total
         // schedulable cores). Both averaged per (node, bin) first, then combined. Only bins where
@@ -1552,7 +1552,7 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"nodecpupct|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public IAsyncEnumerable<MetricSample> GetClusterNodeMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterNodeMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         // No node memory-capacity metric, but usage + available sum to total, so memory-used %
         // is 100 * usage / (usage + available). Both metrics are averaged per (node, bin) first,
@@ -1572,7 +1572,7 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"nodemem|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public IAsyncEnumerable<MetricSample> GetClusterPodCpuAsync(IApplicationInsightsContext context, string node, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterPodCpuAsync(IApplicationInsightsContext context, string node, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         // Drill-down for one node: pods scheduled on it, CPU in cores. Series = namespace/pod.
         var bin = MetricsBinSelector.PickBin(timeSpan);
@@ -1589,7 +1589,7 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"podcpu|{context.ToKey()}|{node}|{timeSpan}", cancellationToken);
     }
 
-    public IAsyncEnumerable<MetricSample> GetClusterPodMemoryAsync(IApplicationInsightsContext context, string node, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterPodMemoryAsync(IApplicationInsightsContext context, string node, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         // Drill-down for one node: pods scheduled on it, memory in MB (absolute — pods have no
         // consistent capacity to percentage against). Series = namespace/pod.
@@ -1607,7 +1607,7 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"podmem|{context.ToKey()}|{node}|{timeSpan}", cancellationToken);
     }
 
-    public IAsyncEnumerable<MetricSample> GetClusterNodeFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterNodeFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         // usage / capacity per node → filesystem-used %. Both averaged per (node, bin) then combined.
         var bin = MetricsBinSelector.PickBin(timeSpan);
@@ -1629,7 +1629,7 @@ AppMetrics
     // result is a real capacity-weighted total (a 12-core / large-RAM node contributes more than a
     // small one), not a mean of per-node ratios. One "Cluster" series.
 
-    public IAsyncEnumerable<MetricSample> GetClusterTotalCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterTotalCpuAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         // Whole-cluster CPU used %, capacity-weighted: 100 * Σ usage / Σ allocatable_cpu across all
         // nodes per bin (a 12-core node weighs 6× a 2-core one). Only bins with allocatable render.
@@ -1649,7 +1649,7 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"clustercpupct|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public IAsyncEnumerable<MetricSample> GetClusterTotalMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterTotalMemoryAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         var bin = MetricsBinSelector.PickBin(timeSpan);
         var query = $@"
@@ -1667,7 +1667,7 @@ AppMetrics
         return RunMetricQueryAsync(context, query, timeSpan, $"clustermem|{context.ToKey()}|{timeSpan}", cancellationToken);
     }
 
-    public IAsyncEnumerable<MetricSample> GetClusterTotalFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<MetricSample> GetClusterTotalFilesystemAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default)
     {
         var bin = MetricsBinSelector.PickBin(timeSpan);
         var query = $@"
