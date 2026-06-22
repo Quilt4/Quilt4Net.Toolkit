@@ -23,7 +23,7 @@ public class DependencyServiceTests
         var sut = new DependencyService(probe, OptionsWith(essential), new ManualTimeProvider());
 
         //Act
-        var result = await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync();
+        var result = await sut.GetStatusAsync(TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
 
         //Assert
         var component = result.Single();
@@ -42,7 +42,7 @@ public class DependencyServiceTests
         //Act
         for (var i = 0; i < 5; i++)
         {
-            _ = await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync();
+            _ = await sut.GetStatusAsync(TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
         }
 
         //Assert
@@ -60,9 +60,9 @@ public class DependencyServiceTests
         var sut = new DependencyService(probe, options, time);
 
         //Act
-        _ = await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync();
+        _ = await sut.GetStatusAsync(TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
         time.Advance(TimeSpan.FromSeconds(11));
-        _ = await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync();
+        _ = await sut.GetStatusAsync(TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
 
         //Assert
         probe.CallCount.Should().Be(2);
@@ -80,7 +80,7 @@ public class DependencyServiceTests
         //Act
         for (var i = 0; i < 3; i++)
         {
-            _ = await sut.GetStatusAsync(CancellationToken.None).ToArrayAsync();
+            _ = await sut.GetStatusAsync(TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
         }
 
         //Assert
@@ -97,9 +97,9 @@ public class DependencyServiceTests
 
         //Act
         var calls = Enumerable.Range(0, 10)
-            .Select(_ => sut.GetStatusAsync(CancellationToken.None).ToArrayAsync().AsTask())
+            .Select(_ => sut.GetStatusAsync(TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken).AsTask())
             .ToArray();
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
         gate.SetResult();
         await Task.WhenAll(calls);
 

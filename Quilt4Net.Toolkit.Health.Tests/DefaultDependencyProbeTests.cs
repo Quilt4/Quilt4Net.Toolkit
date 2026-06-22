@@ -24,7 +24,7 @@ public class DefaultDependencyProbeTests
         };
 
         //Act
-        var content = await probe.ProbeAsync(Dependency, CancellationToken.None);
+        var content = await probe.ProbeAsync(Dependency, TestContext.Current.CancellationToken);
 
         //Assert
         content.Status.Should().Be(HealthStatus.Unhealthy);
@@ -49,7 +49,7 @@ public class DefaultDependencyProbeTests
         };
 
         //Act
-        var content = await probe.ProbeAsync(Dependency, CancellationToken.None);
+        var content = await probe.ProbeAsync(Dependency, TestContext.Current.CancellationToken);
 
         //Assert
         content.Status.Should().Be(HealthStatus.Healthy);
@@ -68,7 +68,7 @@ public class DefaultDependencyProbeTests
         };
 
         //Act
-        var content = await probe.ProbeAsync(Dependency, CancellationToken.None);
+        var content = await probe.ProbeAsync(Dependency, TestContext.Current.CancellationToken);
 
         //Assert
         content.Status.Should().Be(HealthStatus.Unhealthy);
