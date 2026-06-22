@@ -292,6 +292,34 @@ builder.AddQuilt4NetHealth(o =>
 });
 ```
 
+### Behaviour on a failing dependency
+
+A dependency probe never throws. If a dependency returns a non-success status code (e.g. `429 Too Many Requests`), an error page, or is unreachable, it is reported as:
+
+- **`Unhealthy`** when the dependency is `Essential = true`
+- **`Degraded`** when the dependency is `Essential = false`
+
+The HTTP status code (or error message) is included in the component's `Details`, and a single `Warning` is logged — never an `Error`. A rate-limited or temporarily-unavailable non-essential dependency therefore degrades the report instead of crashing the health check or flooding telemetry with exceptions.
+
+### Throttling dependency probes
+
+By default each dependency is probed at most once per `DependencyProbeCacheTime` (10 seconds). Repeated `/api/Health` requests within that window reuse the cached probe result, and concurrent requests are coalesced into a single probe — so frequent health checks don't hammer (and get rate-limited by) the dependency.
+
+```csharp
+builder.AddQuilt4NetHealth(o =>
+{
+    // Cache each dependency probe for 30s (default is 10s).
+    o.DependencyProbeCacheTime = TimeSpan.FromSeconds(30);
+
+    // Or disable caching to probe on every request:
+    // o.DependencyProbeCacheTime = TimeSpan.Zero;
+});
+```
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `DependencyProbeCacheTime` | 10 seconds | How long a dependency probe result is cached before the dependency is re-probed. Concurrent requests are coalesced into one probe. Set to `TimeSpan.Zero` (or negative) to probe on every request. |
+
 ## Heartbeat
 
 The heartbeat feature sends periodic availability telemetry to Application Insights.
