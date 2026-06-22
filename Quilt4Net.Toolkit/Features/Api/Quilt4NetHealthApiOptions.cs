@@ -123,6 +123,16 @@ public record Quilt4NetHealthApiOptions
     /// </summary>
     public CertificateCheckOptions Certificate { get; set; } = new();
 
+    /// <summary>
+    /// How long a dependency health-probe result is cached before the dependency is probed again.
+    /// Repeated requests within this window reuse the cached result instead of re-probing on every
+    /// request, and concurrent requests are coalesced into a single probe. This protects dependencies
+    /// from being hammered (and rate-limited) by frequent health checks.
+    /// Set to <see cref="TimeSpan.Zero"/> (or a negative value) to disable caching and probe every time.
+    /// Default is 10 seconds.
+    /// </summary>
+    public TimeSpan DependencyProbeCacheTime { get; set; } = TimeSpan.FromSeconds(10);
+
     internal IEnumerable<Component> Components => _components.Values;
     internal IEnumerable<Type> ComponentServices => _componentServices.Keys;
     internal IEnumerable<Dependency> DependencyRegistrations => _dependencies.Values;

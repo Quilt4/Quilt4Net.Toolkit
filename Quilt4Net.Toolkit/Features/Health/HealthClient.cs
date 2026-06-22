@@ -21,6 +21,7 @@ internal class HealthClient : IHealthClient
         using var client = new HttpClient();
         client.BaseAddress = new Uri(_clientOptions.HealthAddress);
         using var result = await client.GetAsync("live", cancellationToken);
+        result.EnsureSuccessStatusCode();
         var content = await result.Content.ReadFromJsonAsync<LiveResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
         return content;
     }
@@ -32,6 +33,7 @@ internal class HealthClient : IHealthClient
         using var client = new HttpClient();
         client.BaseAddress = new Uri(_clientOptions.HealthAddress);
         using var result = await client.GetAsync("ready", cancellationToken);
+        result.EnsureSuccessStatusCode();
         var content = await result.Content.ReadFromJsonAsync<ReadyResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
         return content;
     }
@@ -43,6 +45,7 @@ internal class HealthClient : IHealthClient
         using var client = new HttpClient();
         client.BaseAddress = new Uri(_clientOptions.HealthAddress);
         using var result = await client.GetAsync("health", cancellationToken);
+        result.EnsureSuccessStatusCode();
         var content = await result.Content.ReadFromJsonAsync<HealthResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
         return content;
     }
@@ -54,6 +57,7 @@ internal class HealthClient : IHealthClient
         using var client = new HttpClient();
         client.BaseAddress = new Uri(_clientOptions.HealthAddress);
         using var result = await client.GetAsync("metrics", cancellationToken);
+        result.EnsureSuccessStatusCode();
         var content = await result.Content.ReadFromJsonAsync<MetricsResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
         return content;
     }
@@ -65,6 +69,7 @@ internal class HealthClient : IHealthClient
         using var client = new HttpClient();
         client.BaseAddress = new Uri(_clientOptions.HealthAddress);
         using var result = await client.GetAsync("version", cancellationToken);
+        result.EnsureSuccessStatusCode();
         var content = await result.Content.ReadFromJsonAsync<VersionResponse>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
         return content;
     }
