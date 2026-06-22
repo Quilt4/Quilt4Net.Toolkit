@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Api;
 using Quilt4Net.Toolkit.Features.Health;
@@ -61,10 +62,13 @@ public static class HealthRegistration
         services.AddSingleton<IActionDescriptorProvider, CustomRouteDescriptorProvider>();
         services.AddSingleton<IHostedServiceProbeRegistry, HostedServiceProbeRegistry>();
 
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddTransient<ILiveService, LiveService>();
         services.AddTransient<IReadyService, ReadyService>();
         services.AddTransient<IHealthService, HealthService>();
-        services.AddTransient<IDependencyService, DependencyService>();
+        services.AddSingleton<IDependencyProbe, DefaultDependencyProbe>();
+        services.AddSingleton<IDependencyService, DependencyService>();
         services.AddTransient<IVersionService, VersionService>();
         services.AddTransient<IMachineMetricsService, MachineMetricsService>();
         services.AddTransient<IMetricsService, MetricsService>();

@@ -141,6 +141,8 @@ var metrics = await _healthClient.GetMetricsAsync(cancellationToken);
 var version = await _healthClient.GetVersionAsync(cancellationToken);
 ```
 
+If the remote endpoint replies with a non-success status code, these methods throw `HttpRequestException` (carrying the status code) rather than a JSON parse error — wrap calls in try/catch when the remote service may be unavailable.
+
 ### HealthClientOptions
 
 | Property | Default | Description |

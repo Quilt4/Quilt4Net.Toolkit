@@ -1,92 +1,112 @@
-using System.Net.Http.Json;
-using System.Net.Security;
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using Quilt4Net.Toolkit.Features.Api;
-using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.Health.Dependency;
 
 internal class DependencyService : IDependencyService
 {
+    private readonly IDependencyProbe _probe;
     private readonly Quilt4NetHealthApiOptions _apiOptions;
+    private readonly TimeProvider _timeProvider;
+    private readonly ConcurrentDictionary<string, CacheSlot> _cache = new();
 
-    public DependencyService(Quilt4NetHealthApiOptions apiOptions)
+    public DependencyService(IDependencyProbe probe, Quilt4NetHealthApiOptions apiOptions, TimeProvider timeProvider)
     {
+        _probe = probe;
         _apiOptions = apiOptions;
+        _timeProvider = timeProvider;
     }
 
     public async IAsyncEnumerable<KeyValuePair<string, DependencyComponent>> GetStatusAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var tasks = _apiOptions.DependencyRegistrations.Select(x => Task.Run(async () =>
-        {
-            var handler = new HttpClientHandler();
+        var tasks = _apiOptions.DependencyRegistrations
+            .Select(x => GetComponentAsync(x, cancellationToken))
+            .ToList();
 
-            var certificateStatus = HealthStatus.Healthy;
-            string message = null;
-            handler.ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
-            {
-                if (errors != SslPolicyErrors.None)
-                {
-                    certificateStatus = HealthStatus.Degraded;
-                    message = $"{errors}";
-                }
-
-                return true;
-            };
-
-            using var httpClient = new HttpClient(handler);
-            var parameters = "Health?noDependencies=true&noCertSelfCheck=true";
-            if (!Uri.TryCreate(x.Uri, parameters, out var uri)) throw new InvalidOperationException($"Cannot build uri from '{x.Uri}' and '{parameters}'.");
-            using var response = await httpClient.GetAsync(uri, cancellationToken);
-            var content = await response.Content.ReadFromJsonAsync<HealthResponse>(cancellationToken);
-
-            content = await CheckCertificateAsync(x, certificateStatus, message, content);
-
-            return (x.Name, x.Essential, content.Components, x.Uri);
-        }, cancellationToken)).ToList();
-
-        while (tasks.Any())
+        while (tasks.Count > 0)
         {
             var task = await Task.WhenAny(tasks);
-
-            var dependencyComponent = new DependencyComponent
-            {
-                Status = BuildStatus(task),
-                Uri = task.Result.Uri,
-                DependencyComponents = task.Result.Components
-            };
-            yield return new KeyValuePair<string, DependencyComponent>(task.Result.Name, dependencyComponent);
             tasks.Remove(task);
+            yield return await task;
         }
     }
 
-    private async Task<HealthResponse> CheckCertificateAsync(Dependency x, HealthStatus certificateStatus, string message, HealthResponse content)
+    private async Task<KeyValuePair<string, DependencyComponent>> GetComponentAsync(Dependency dependency, CancellationToken cancellationToken)
     {
-        if (!(_apiOptions.Certificate?.DependencyCheckEnabled ?? false)) return content;
+        var content = await GetContentAsync(dependency, cancellationToken);
 
-        var certificateHealth = await Certificatehelper.GetCertificateHealthAsync(x.Uri, _apiOptions.Certificate, certificateStatus, message);
-
-        content = content with
+        var component = new DependencyComponent
         {
-            Status = EnumExtensions.MaxEnum<HealthStatus>(certificateStatus, content.Status),
-            Components = content.Components
-                .Concat(new Dictionary<string, HealthComponent> { { "Certificate", certificateHealth } })
-                .ToUniqueDictionary()
+            Status = BuildStatus(dependency.Essential, content.Components),
+            Uri = dependency.Uri,
+            DependencyComponents = content.Components
         };
 
-        content.Components.Remove("CertificateSelf");
-
-        return content;
+        return new KeyValuePair<string, DependencyComponent>(dependency.Name, component);
     }
 
-    private static HealthStatus BuildStatus(Task<(string Name, bool Essential, Dictionary<string, HealthComponent> Components, Uri _)> task)
+    private async Task<HealthResponse> GetContentAsync(Dependency dependency, CancellationToken cancellationToken)
     {
-        var status = task.Result.Components.Max(x => x.Value.Status);
-        if (!task.Result.Essential && status == HealthStatus.Unhealthy)
+        var cacheTime = _apiOptions.DependencyProbeCacheTime;
+        if (cacheTime <= TimeSpan.Zero)
+        {
+            return await _probe.ProbeAsync(dependency, cancellationToken);
+        }
+
+        var slot = _cache.GetOrAdd(dependency.Name, _ => new CacheSlot());
+
+        if (TryGetFresh(slot, cacheTime, out var cached))
+        {
+            return cached;
+        }
+
+        await slot.Gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (TryGetFresh(slot, cacheTime, out cached))
+            {
+                return cached;
+            }
+
+            var content = await _probe.ProbeAsync(dependency, cancellationToken);
+            slot.Content = content;
+            slot.FetchedAt = _timeProvider.GetUtcNow();
+            return content;
+        }
+        finally
+        {
+            slot.Gate.Release();
+        }
+    }
+
+    private bool TryGetFresh(CacheSlot slot, TimeSpan cacheTime, out HealthResponse content)
+    {
+        if (slot.Content != null && _timeProvider.GetUtcNow() - slot.FetchedAt < cacheTime)
+        {
+            content = slot.Content;
+            return true;
+        }
+
+        content = null;
+        return false;
+    }
+
+    private static HealthStatus BuildStatus(bool essential, Dictionary<string, HealthComponent> components)
+    {
+        var status = components.Count == 0 ? HealthStatus.Healthy : components.Max(x => x.Value.Status);
+        if (!essential && status == HealthStatus.Unhealthy)
         {
             status = HealthStatus.Degraded;
         }
 
         return status;
+    }
+
+    private sealed class CacheSlot
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public HealthResponse Content { get; set; }
+        public DateTimeOffset FetchedAt { get; set; }
     }
 }
