@@ -42,20 +42,20 @@ else
     else
     {
         <RadzenText TextStyle="TextStyle.H6" Text="@HeaderText" />
-        @if (_capGb.HasValue)
+        @if (EffectiveCapGb.HasValue || _hitDays > 0)
         {
             <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-1"
-                        Text="@($"Cap size: {_capGb.Value:N0} GB · resets at {ResetLabel} UTC")" />
+                        Text="@($"Cap size: {CapSizeLabel} · resets at {ResetLabel}")" />
         }
-        @if (_capGb.HasValue && _hitDays > 0)
+        @if (EffectiveCapGb.HasValue && _hitDays > 0)
         {
             <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2"
-                        Text="@($"Estimated volume lost to the cap over this range: {_estLostGb:N1} GB (sum of est. uncapped − ingested on hit days).")" />
+                        Text="@($"Estimated volume lost to the cap over this range: {_estLostGb:N1} GB (sum of est. uncapped − ingested on capped days).")" />
         }
 
         <RadzenChart>
             <RadzenColumnSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="IngestedGb" Title="Ingested" />
-            @if (_capGb.HasValue)
+            @if (EffectiveCapGb.HasValue)
             {
                 @* Constant value on every row → renders as a horizontal reference line at the cap.
                    CapLine is a non-nullable double (the series only renders when a cap exists) so
@@ -89,11 +89,11 @@ else
                 <RadzenDataGridColumn Title="Ingested" Property="@nameof(Row.IngestedGb)" TextAlign="TextAlign.Right">
                     <Template>@context.IngestedGb.ToString("N2") GB</Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn Title="Capped for" Property="@nameof(Row.HitSortKey)" TextAlign="TextAlign.Right">
+                <RadzenDataGridColumn Title="Capped for" Property="@nameof(Row.GapHours)" TextAlign="TextAlign.Right">
                     <Template>
                         @if (context.GapDuration.HasValue)
                         {
-                            <span title="@($"Cap hit at {context.CapHitUtc:HH:mm} UTC")">
+                            <span title="@(context.ResumeUtc.HasValue ? $"Data resumed at {context.ResumeUtc:HH:mm} UTC" : "Capped (no resume in range)")">
                                 <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="@FormatGap(context.GapDuration.Value)" />
                             </span>
                         }
@@ -115,6 +115,7 @@ else
     private Row[] Model { get; set; }
     private UncappedPoint[] _uncappedPoints = [];
     private double? _capGb;
+    private double? _derivedCapGb;
     private TimeSpan? _capResetUtc;
     private int _hitDays;
     private double _estLostGb;
@@ -134,11 +135,17 @@ else
 
     private IApplicationInsightsContext EffectiveContext => Context ?? _selector?.Selected;
 
-    private string HeaderText => _capGb.HasValue
-        ? $"Daily cap: {_capGb.Value:N0} GB · hit on {_hitDays} of {Model.Length} days"
-        : $"No daily cap configured · {Model.Length} days of billed volume";
+    private double? EffectiveCapGb => _derivedCapGb ?? _capGb;
 
-    private string ResetLabel => (_capResetUtc ?? TimeSpan.Zero).ToString(@"hh\:mm");
+    private string HeaderText => EffectiveCapGb.HasValue
+        ? $"Daily cap ≈ {EffectiveCapGb.Value:N0} GB · capped on {_hitDays} of {Model.Length} days"
+        : $"No cap detected · {Model.Length} days of billed volume";
+
+    private string CapSizeLabel => _derivedCapGb.HasValue
+        ? $"{_derivedCapGb.Value:N0} GB (measured)"
+        : _capGb.HasValue ? $"{_capGb.Value:N0} GB (configured)" : "unknown";
+
+    private string ResetLabel => _capResetUtc.HasValue ? _capResetUtc.Value.ToString(@"hh\:mm") + " UTC" : "not detected";
 
     private static string FormatGap(TimeSpan gap) => $"{(int)gap.TotalHours:D2}:{gap.Minutes:D2}";
 
@@ -197,6 +204,7 @@ else
             if (token.IsCancellationRequested) return;
 
             _capGb = timeline.CapGb;
+            _derivedCapGb = timeline.DerivedCapGb;
             _capResetUtc = timeline.CapResetUtc;
             Model = timeline.Days
                 .OrderBy(d => d.DateUtc)
@@ -204,8 +212,8 @@ else
                     d.DateUtc,
                     d.DateUtc.ToString("MM-dd"),
                     d.IngestedGb,
-                    timeline.CapGb ?? 0,
-                    d.CapHitUtc,
+                    (_derivedCapGb ?? timeline.CapGb) ?? 0,
+                    d.ResumeUtc,
                     d.GapDuration,
                     d.EstimatedUncappedGb))
                 .ToArray();
@@ -217,7 +225,7 @@ else
                 .Select(r => new UncappedPoint(r.DateLabel, r.EstUncappedGb.Value))
                 .ToArray();
 
-            _hitDays = Model.Count(r => r.CapHitUtc.HasValue);
+            _hitDays = Model.Count(r => r.GapDuration.HasValue);
             _estLostGb = Model
                 .Where(r => r.EstUncappedGb.HasValue)
                 .Sum(r => Math.Max(0, r.EstUncappedGb.Value - r.IngestedGb));
@@ -247,9 +255,9 @@ else
     // cap value repeated on every row so the reference-line series never sees a null; EstUncappedGb
     // stays nullable for the grid ("—" on non-hit days) but is fed to the chart only via the filtered
     // _uncappedPoints set.
-    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double CapLine, DateTime? CapHitUtc, TimeSpan? GapDuration, double? EstUncappedGb)
+    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double CapLine, DateTime? ResumeUtc, TimeSpan? GapDuration, double? EstUncappedGb)
     {
-        public DateTime HitSortKey => CapHitUtc ?? DateTime.MaxValue;
+        public double GapHours => GapDuration?.TotalHours ?? 0;
     }
 
     /// <summary>Hit-day-only point for the est-uncapped marker series — non-nullable value so the

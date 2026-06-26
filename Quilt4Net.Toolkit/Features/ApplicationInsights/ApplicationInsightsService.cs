@@ -267,62 +267,37 @@ Usage
 
                 var window = new LogsQueryTimeRange(TimeSpan.FromDays(days));
 
-                // First cap-hit per day, from the workspace "data collection stopped" operation events.
-                var hits = new Dictionary<DateTime, DateTime>();
-                var hitResp = await client.QueryWorkspaceAsync(workspaceId,
-                    "Operation | where OperationCategory == 'Data Collection Status' | where Detail has 'stopped due to daily limit' | summarize HitUtc = min(TimeGenerated) by Day = startofday(TimeGenerated)",
-                    window);
-                foreach (var table in hitResp.Value.AllTables)
-                {
-                    var dayIdx = GetColumnIndex(table, "Day");
-                    var hitIdx = GetColumnIndex(table, "HitUtc");
-                    foreach (var row in table.Rows) hits[GetDateTime(row, dayIdx)] = GetDateTime(row, hitIdx);
-                }
-
-                // Billed volume per day (GB).
-                var volume = new Dictionary<DateTime, double>();
+                // Hourly billable volume. A daily cap stops ingestion until the workspace's (variable)
+                // reset time, so capped periods show up as hours with no billable volume; CapTimelineBuilder
+                // detects the gaps, the resume (reset) time, the per-day capped duration and the cap size.
+                var hourly = new Dictionary<DateTime, double>();
                 var volResp = await client.QueryWorkspaceAsync(workspaceId,
-                    "Usage | where IsBillable == true | summarize Gb = sum(Quantity) / 1024.0 by Day = startofday(TimeGenerated)",
+                    "Usage | where IsBillable == true | summarize Mb = sum(Quantity) by Hour = bin(TimeGenerated, 1h) | order by Hour asc",
                     window);
                 foreach (var table in volResp.Value.AllTables)
                 {
-                    var dayIdx = GetColumnIndex(table, "Day");
-                    var gbIdx = GetColumnIndex(table, "Gb");
+                    var hourIdx = GetColumnIndex(table, "Hour");
+                    var mbIdx = GetColumnIndex(table, "Mb");
                     foreach (var row in table.Rows)
                     {
-                        var raw = row[gbIdx];
+                        var raw = row[mbIdx];
                         if (raw is null) continue;
-                        volume[GetDateTime(row, dayIdx)] = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
+                        hourly[GetDateTime(row, hourIdx)] = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
                     }
                 }
 
-                var capDays = volume.Keys.Union(hits.Keys)
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .Select(day =>
-                    {
-                        var gb = volume.GetValueOrDefault(day);
-                        DateTime? hit = hits.TryGetValue(day, out var h) ? h : null;
-                        double? est = null;
-                        TimeSpan? gap = null;
-                        if (hit.HasValue)
-                        {
-                            // Volume-at-hit ≈ the cap; extrapolate to a full day by the elapsed fraction.
-                            var hours = (hit.Value - day).TotalHours;
-                            var baseGb = capGb ?? gb;
-                            if (hours > 0) est = baseGb * 24.0 / hours;
+                // Fill a continuous hourly series from the first to the last hour that had data, so
+                // capped (zero-volume) hours between them are visible as gaps.
+                var hourSeries = new List<HourVolume>();
+                if (hourly.Count > 0)
+                {
+                    var start = hourly.Keys.Min();
+                    var end = hourly.Keys.Max();
+                    for (var h = start; h <= end; h = h.AddHours(1))
+                        hourSeries.Add(new HourVolume { HourUtc = h, Mb = hourly.GetValueOrDefault(h) });
+                }
 
-                            // Capped until the next daily reset. Azure's default reset is 00:00 UTC, i.e.
-                            // the start of the next day, so the gap is the time from the hit to next midnight.
-                            gap = day.AddDays(1) - hit.Value;
-                        }
-                        return new CapDay { DateUtc = day, IngestedGb = gb, CapHitUtc = hit, GapDuration = gap, EstimatedUncappedGb = est };
-                    })
-                    .ToArray();
-
-                // Reset time-of-day: the Azure daily-cap default is 00:00 UTC. Surfaced only when a cap is configured.
-                var resetUtc = capGb.HasValue ? (TimeSpan?)TimeSpan.Zero : null;
-                return new CapTimeline { CapGb = capGb, CapResetUtc = resetUtc, Days = capDays };
+                return CapTimelineBuilder.Build(hourSeries, capGb);
             }
             catch (Exception e)
             {

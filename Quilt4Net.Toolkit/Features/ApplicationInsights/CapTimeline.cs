@@ -1,46 +1,55 @@
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
 /// <summary>
-/// One day of the ingestion-cap timeline: how much was ingested, whether/when the daily cap was hit,
-/// and an estimate of what the day's volume would have been had the cap not stopped ingestion.
+/// One UTC day of the ingestion-cap timeline: how much was ingested, how long the workspace was capped
+/// (no billable data) that day, when data resumed, and an estimate of the uncapped volume.
 /// </summary>
 public record CapDay
 {
     /// <summary>The UTC day (midnight) this entry covers.</summary>
     public required DateTime DateUtc { get; init; }
 
-    /// <summary>Billed volume ingested that day (GB). On a capped day this is roughly the cap.</summary>
+    /// <summary>Billed volume ingested that day (GB).</summary>
     public required double IngestedGb { get; init; }
 
-    /// <summary>When the daily cap was hit (UTC), or <c>null</c> if it wasn't hit that day.</summary>
-    public DateTime? CapHitUtc { get; init; }
-
     /// <summary>
-    /// How long the workspace stayed capped that day — from <see cref="CapHitUtc"/> until the next daily
-    /// cap reset (when ingestion resumes). <c>null</c> when the cap wasn't hit.
+    /// Total time that day with no billable ingestion attributable to the cap (a bounded no-data gap).
+    /// Includes both a carry-over gap at the start of the day and a new cap later the same day.
+    /// <c>null</c>/zero when the day wasn't capped.
     /// </summary>
     public TimeSpan? GapDuration { get; init; }
 
+    /// <summary>When billable data first resumed that day after a cap (UTC) — i.e. the observed reset.
+    /// <c>null</c> when the day didn't start (or continue) under a cap.</summary>
+    public DateTime? ResumeUtc { get; init; }
+
     /// <summary>
-    /// Estimated full-day volume (GB) had the cap not stopped ingestion — extrapolated from the
-    /// pre-cap rate (cap ÷ fraction-of-day-elapsed-at-hit). <c>null</c> when the cap wasn't hit, in
-    /// which case <see cref="IngestedGb"/> is already the real full-day volume.
+    /// Estimated full-day volume (GB) had the cap not stopped ingestion — extrapolated from the volume
+    /// ingested over the uncapped hours of the day. <c>null</c> when the day wasn't capped.
     /// </summary>
     public double? EstimatedUncappedGb { get; init; }
 }
 
 /// <summary>
-/// Daily ingestion-cap timeline for a workspace: the configured daily cap plus a per-day breakdown of
-/// volume and cap-hit time. Backs the logging dashboard's cap graph.
+/// Daily ingestion-cap timeline for a workspace, derived from gaps in billable ingestion: the per-day
+/// volume + capped duration, the detected daily reset time, and the cap size measured from a full
+/// reset-to-cap cycle. Backs the logging dashboard's cap graph.
 /// </summary>
 public record CapTimeline
 {
-    /// <summary>Configured daily cap in GB, or <c>null</c> if it couldn't be determined.</summary>
+    /// <summary>Configured daily cap in GB from the workspace "Daily quota changed to N" event, or <c>null</c> if unknown.</summary>
     public double? CapGb { get; init; }
 
     /// <summary>
-    /// The daily cap reset time-of-day (UTC) — when ingestion resumes after a cap. Defaults to the Azure
-    /// daily-cap default of 00:00 UTC. <c>null</c> when no cap is configured.
+    /// Cap size measured from observed data — the billable volume in a complete reset→cap cycle (GB).
+    /// <c>null</c> when no complete capped cycle was observed in range. Prefer this over <see cref="CapGb"/>
+    /// for display when available, since it reflects what was actually ingested before the cap hit.
+    /// </summary>
+    public double? DerivedCapGb { get; init; }
+
+    /// <summary>
+    /// The detected daily cap reset time-of-day (UTC) — when ingestion resumes after a cap, taken from the
+    /// most common resume time across the range. <c>null</c> when no cap/reset was observed.
     /// </summary>
     public TimeSpan? CapResetUtc { get; init; }
 
