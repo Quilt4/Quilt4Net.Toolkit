@@ -1,4 +1,5 @@
 @using Microsoft.Extensions.DependencyInjection
+@using Blazored.LocalStorage
 @using Quilt4Net.Toolkit.Blazor.Features.ApplicationInsights
 @using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.ApplicationInsights
@@ -26,7 +27,7 @@
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                 <RadzenText TextStyle="TextStyle.Caption" Text="Configuration" />
                 <RadzenDropDown Data="@Configs" @bind-Value="_selectedConfig" TValue="ApplicationInsightsConfigurationResponse"
-                                TextProperty="Name" Change="@(_ => ReloadAsync(force: false))" />
+                                TextProperty="Name" Change="@(_ => OnConfigChangedAsync())" />
             </RadzenStack>
         }
         <RadzenStack Orientation="Orientation.Vertical" Gap="0">
@@ -186,6 +187,16 @@
     [Parameter]
     public IReadOnlyList<ApplicationInsightsConfigurationResponse> Configs { get; set; }
 
+    /// <summary>
+    /// Optional scope for remembering the selected configuration across sessions (e.g. the team key).
+    /// When set and a <see cref="Configs"/> dropdown is shown, the choice is persisted to local storage.
+    /// </summary>
+    [Parameter]
+    public string StorageScope { get; set; }
+
+    private ILocalStorageService _localStorage;
+    private string ConfigStorageKey => string.IsNullOrEmpty(StorageScope) ? null : $"Quilt4Net.Metrics.{StorageScope}.config";
+
     private IApplicationInsightsContext EffectiveContext
         => Context ?? _selectedConfig ?? _selector?.Selected;
 
@@ -196,6 +207,7 @@
         // still work, they just lose cross-page persistence.
         _scopedCache = ServiceProvider.GetService<MetricsSeriesCache>();
         _browserTime = ServiceProvider.GetService<IBrowserTimeZoneAccessor>();
+        _localStorage = ServiceProvider.GetService<ILocalStorageService>();
 
         // Explicit Context / Configs bypass the DI selector entirely.
         if (Context == null && Configs is not { Count: > 0 })
@@ -214,6 +226,7 @@
         if (Configs is { Count: > 0 } && _selectedConfig == null)
         {
             _selectedConfig = Configs[0];
+            await RestoreSelectedConfigAsync();
         }
 
         if (EffectiveContext == null)
@@ -228,6 +241,31 @@
     private async void OnSelectorChanged()
     {
         await InvokeAsync(() => ReloadAsync(force: false));
+    }
+
+    // Persist + reload when the user picks a configuration from the Configs dropdown.
+    private async Task OnConfigChangedAsync()
+    {
+        if (ConfigStorageKey != null && _localStorage != null && _selectedConfig != null)
+        {
+            try { await _localStorage.SetItemAsStringAsync(ConfigStorageKey, _selectedConfig.Name); }
+            catch { /* localStorage failures shouldn't break the view */ }
+        }
+        await ReloadAsync(force: false);
+    }
+
+    // Restore the previously-selected configuration (by name) from local storage, if any.
+    private async Task RestoreSelectedConfigAsync()
+    {
+        if (ConfigStorageKey == null || _localStorage == null || Configs is not { Count: > 0 }) return;
+        try
+        {
+            var savedName = await _localStorage.GetItemAsStringAsync(ConfigStorageKey);
+            if (string.IsNullOrEmpty(savedName)) return;
+            var match = Configs.FirstOrDefault(c => c.Name == savedName);
+            if (match != null) _selectedConfig = match;
+        }
+        catch { /* prerender (no JS interop) or corrupt entry — keep the default */ }
     }
 
     private async Task ReloadAsync(bool force)

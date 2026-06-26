@@ -36,6 +36,8 @@ public class LogEnvironmentSelectorIncidentTests : BunitContext
         public Task<bool> CanConnectAsync(IApplicationInsightsContext context) => Task.FromResult(false);
 
         public IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default) => Throw<VolumeBySource>();
+        public IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken cancellationToken = default) => Throw<VolumeBySource>();
+        public IAsyncEnumerable<VolumeTimelinePoint> GetVolumeTimelineAsync(IApplicationInsightsContext context, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken cancellationToken = default) => Throw<VolumeTimelinePoint>();
         public Task<CapTimeline> GetCapTimelineAsync(IApplicationInsightsContext context, int days, CancellationToken cancellationToken = default) => Task.FromException<CapTimeline>(_ex);
         public IAsyncEnumerable<EnvironmentOption> GetEnvironments(IApplicationInsightsContext context) => Throw<EnvironmentOption>();
         public IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose, CancellationToken cancellationToken = default) => Throw<LogItem>();

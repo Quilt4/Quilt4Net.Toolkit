@@ -42,6 +42,11 @@ else
     else
     {
         <RadzenText TextStyle="TextStyle.H6" Text="@HeaderText" />
+        @if (_capGb.HasValue)
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-1"
+                        Text="@($"Cap size: {_capGb.Value:N0} GB · resets at {ResetLabel} UTC")" />
+        }
         @if (_capGb.HasValue && _hitDays > 0)
         {
             <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2"
@@ -84,11 +89,13 @@ else
                 <RadzenDataGridColumn Title="Ingested" Property="@nameof(Row.IngestedGb)" TextAlign="TextAlign.Right">
                     <Template>@context.IngestedGb.ToString("N2") GB</Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn Title="Cap hit (UTC)" Property="@nameof(Row.HitSortKey)" TextAlign="TextAlign.Right">
+                <RadzenDataGridColumn Title="Capped for" Property="@nameof(Row.HitSortKey)" TextAlign="TextAlign.Right">
                     <Template>
-                        @if (context.CapHitUtc.HasValue)
+                        @if (context.GapDuration.HasValue)
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="@context.CapHitUtc.Value.ToString("HH:mm")" />
+                            <span title="@($"Cap hit at {context.CapHitUtc:HH:mm} UTC")">
+                                <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="@FormatGap(context.GapDuration.Value)" />
+                            </span>
                         }
                         else
                         {
@@ -108,6 +115,7 @@ else
     private Row[] Model { get; set; }
     private UncappedPoint[] _uncappedPoints = [];
     private double? _capGb;
+    private TimeSpan? _capResetUtc;
     private int _hitDays;
     private double _estLostGb;
     private string _configError;
@@ -129,6 +137,10 @@ else
     private string HeaderText => _capGb.HasValue
         ? $"Daily cap: {_capGb.Value:N0} GB · hit on {_hitDays} of {Model.Length} days"
         : $"No daily cap configured · {Model.Length} days of billed volume";
+
+    private string ResetLabel => (_capResetUtc ?? TimeSpan.Zero).ToString(@"hh\:mm");
+
+    private static string FormatGap(TimeSpan gap) => $"{(int)gap.TotalHours:D2}:{gap.Minutes:D2}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -185,6 +197,7 @@ else
             if (token.IsCancellationRequested) return;
 
             _capGb = timeline.CapGb;
+            _capResetUtc = timeline.CapResetUtc;
             Model = timeline.Days
                 .OrderBy(d => d.DateUtc)
                 .Select(d => new Row(
@@ -193,6 +206,7 @@ else
                     d.IngestedGb,
                     timeline.CapGb ?? 0,
                     d.CapHitUtc,
+                    d.GapDuration,
                     d.EstimatedUncappedGb))
                 .ToArray();
 
@@ -233,7 +247,7 @@ else
     // cap value repeated on every row so the reference-line series never sees a null; EstUncappedGb
     // stays nullable for the grid ("—" on non-hit days) but is fed to the chart only via the filtered
     // _uncappedPoints set.
-    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double CapLine, DateTime? CapHitUtc, double? EstUncappedGb)
+    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double CapLine, DateTime? CapHitUtc, TimeSpan? GapDuration, double? EstUncappedGb)
     {
         public DateTime HitSortKey => CapHitUtc ?? DateTime.MaxValue;
     }

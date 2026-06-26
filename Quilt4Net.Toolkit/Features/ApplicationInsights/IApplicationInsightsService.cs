@@ -13,6 +13,19 @@ public interface IApplicationInsightsService
     IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Billed ingestion volume (MB) per source table over an absolute UTC window — used for the
+    /// "Today" / "Yesterday" (UTC) ranges. Same <c>Usage</c>-table source and graceful-degrade behaviour
+    /// as the relative overload.
+    /// </summary>
+    IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Billed ingestion volume (MB) per source table per UTC day over an absolute window — backs the
+    /// multi-day logging-volume line chart. Same <c>Usage</c>-table source and graceful-degrade behaviour.
+    /// </summary>
+    IAsyncEnumerable<VolumeTimelinePoint> GetVolumeTimelineAsync(IApplicationInsightsContext context, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Daily ingestion-cap timeline over the last <paramref name="days"/> days: the configured daily
     /// cap (GB) plus, per day, the ingested volume, the cap-hit time (from the workspace
     /// "data collection stopped due to daily limit" operation events), and an estimate of the

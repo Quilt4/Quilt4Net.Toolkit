@@ -110,8 +110,31 @@ union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationNa
         TimeSpan timeSpan,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"volbysource|{context.ToKey()}|{timeSpan}";
-        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        var items = await FetchVolumeBySourceAsync(context, $"volbysource|{context.ToKey()}|{timeSpan}", new LogsQueryTimeRange(timeSpan));
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
+    public async IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(
+        IApplicationInsightsContext context,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var items = await FetchVolumeBySourceAsync(context, $"volbysource|{context.ToKey()}|{fromUtc:O}|{toUtc:O}", new LogsQueryTimeRange(fromUtc, toUtc));
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
+    private Task<VolumeBySource[]> FetchVolumeBySourceAsync(IApplicationInsightsContext context, string cacheKey, LogsQueryTimeRange range)
+    {
+        return _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             // Billing-grade volume straight from the Usage table — cheap, no telemetry scan.
             const string query = @"
@@ -124,7 +147,7 @@ Usage
             {
                 var client = GetClient(context);
                 var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
-                var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
+                var response = await client.QueryWorkspaceAsync(workspaceId, query, range);
 
                 var list = new List<VolumeBySource>();
                 foreach (var table in response.Value.AllTables)
@@ -152,6 +175,62 @@ Usage
                 // empty so the cost view shows "unavailable" rather than failing the whole page.
                 _logger.LogWarning(e, "Unable to read the Usage table for volume-by-source. Returning empty.");
                 return Array.Empty<VolumeBySource>();
+            }
+        });
+    }
+
+    public async IAsyncEnumerable<VolumeTimelinePoint> GetVolumeTimelineAsync(
+        IApplicationInsightsContext context,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"voltimeline|{context.ToKey()}|{fromUtc:O}|{toUtc:O}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            // Per-UTC-day billed volume by source, for the multi-day line chart.
+            const string query = @"
+Usage
+| where IsBillable == true
+| summarize Mb = sum(Quantity) by Day = bin(TimeGenerated, 1d), Source = DataType
+| where Mb > 0
+| order by Day asc";
+            try
+            {
+                var client = GetClient(context);
+                var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+                var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(fromUtc, toUtc));
+
+                var list = new List<VolumeTimelinePoint>();
+                foreach (var table in response.Value.AllTables)
+                {
+                    var dayIdx = GetColumnIndex(table, "Day");
+                    var sourceIdx = GetColumnIndex(table, "Source");
+                    var mbIdx = GetColumnIndex(table, "Mb");
+                    foreach (var row in table.Rows)
+                    {
+                        var source = row[sourceIdx]?.ToString();
+                        if (string.IsNullOrEmpty(source)) continue;
+                        var rawDay = row[dayIdx];
+                        var rawMb = row[mbIdx];
+                        if (rawDay is null || rawMb is null) continue;
+                        var dayUtc = rawDay is DateTimeOffset dto
+                            ? dto.UtcDateTime
+                            : System.Convert.ToDateTime(rawDay, System.Globalization.CultureInfo.InvariantCulture);
+                        list.Add(new VolumeTimelinePoint
+                        {
+                            DayUtc = dayUtc,
+                            Source = source,
+                            Mb = System.Convert.ToDouble(rawMb, System.Globalization.CultureInfo.InvariantCulture)
+                        });
+                    }
+                }
+                return list.ToArray();
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning(e, "Unable to read the Usage table for volume timeline. Returning empty.");
+                return Array.Empty<VolumeTimelinePoint>();
             }
         });
         foreach (var item in items)
@@ -225,18 +304,25 @@ Usage
                         var gb = volume.GetValueOrDefault(day);
                         DateTime? hit = hits.TryGetValue(day, out var h) ? h : null;
                         double? est = null;
+                        TimeSpan? gap = null;
                         if (hit.HasValue)
                         {
                             // Volume-at-hit ≈ the cap; extrapolate to a full day by the elapsed fraction.
                             var hours = (hit.Value - day).TotalHours;
                             var baseGb = capGb ?? gb;
                             if (hours > 0) est = baseGb * 24.0 / hours;
+
+                            // Capped until the next daily reset. Azure's default reset is 00:00 UTC, i.e.
+                            // the start of the next day, so the gap is the time from the hit to next midnight.
+                            gap = day.AddDays(1) - hit.Value;
                         }
-                        return new CapDay { DateUtc = day, IngestedGb = gb, CapHitUtc = hit, EstimatedUncappedGb = est };
+                        return new CapDay { DateUtc = day, IngestedGb = gb, CapHitUtc = hit, GapDuration = gap, EstimatedUncappedGb = est };
                     })
                     .ToArray();
 
-                return new CapTimeline { CapGb = capGb, Days = capDays };
+                // Reset time-of-day: the Azure daily-cap default is 00:00 UTC. Surfaced only when a cap is configured.
+                var resetUtc = capGb.HasValue ? (TimeSpan?)TimeSpan.Zero : null;
+                return new CapTimeline { CapGb = capGb, CapResetUtc = resetUtc, Days = capDays };
             }
             catch (Exception e)
             {
