@@ -108,6 +108,11 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
             });
+            // Per-day billed volume timeline (Usage table) for the 7d volume line chart.
+            s.RegisterType<VolumeTimelinePoint[], IMemory>(x =>
+            {
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(10);
+            });
             // Daily ingestion-cap timeline (Operation + Usage). Daily-grained; 10 minutes is plenty.
             s.RegisterType<CapTimeline, IMemory>(x =>
             {
@@ -180,6 +185,7 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<DiskCapacity[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<LogCountByServiceCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<VolumeBySource[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
+            s.RegisterType<VolumeTimelinePoint[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<CapTimeline, IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
         });
     }
