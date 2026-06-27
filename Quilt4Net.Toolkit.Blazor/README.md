@@ -787,11 +787,11 @@ Two components turn the workspace into a cost picture using billing-grade data f
 ```razor
 @using Quilt4Net.Toolkit.Blazor.Features.Log
 
-<LogVolumeView Range="TimeSpan.FromDays(7)" />   @* pie of billed volume by source table + size table; 1h/24h/7d selector *@
-<CapTimelineView Days="30" />                     @* billed GB/day vs the daily cap, first-hit times, est. uncapped; 14/30/90d selector *@
+<LogVolumeView Range="TimeSpan.FromDays(7)" />   @* billed volume by source: pie for 1h/24h/Today/Yesterday, per-source line for 7d *@
+<CapTimelineView Days="30" />                     @* billed GB vs the daily cap (Operation-event detection); Break by day or cap cycle; ingested + est-capped-away stacked bars; 14/30/90d *@
 ```
 
-`LogCountByServiceView` also gains a **Show: Count / Volume** toggle (record count ↔ billed volume, a local recompute), two marginal pies (by severity / by service), and a **Sampling** section that reports retained vs sampling-corrected (`sum(ItemCount)`) figures and the effective sampling rate per source — stating plainly when sampling is not in effect. On Quilt4Net Server these surface as the **Logging volume** and **Daily cap** tabs on `/monitor/metrics` and `/developer/metrics`. Full reference: [Log views → Cost & volume](https://quilt4net.com/articles/log-views.html).
+`LogCountByServiceView` also gains a **Show: Count / Volume** toggle (record count ↔ billed volume, a local recompute), two marginal pies (by severity / by service), and a **Sampling** section that reports retained vs sampling-corrected (`sum(ItemCount)`) figures and the effective sampling rate per source — stating plainly when sampling is not in effect. On Quilt4Net Server these surface as the **Volume** and **Daily cap** tabs of the **Log volume** page (`/monitor/volume`, `/developer/volume`). Full reference: [Log views → Cost & volume](https://quilt4net.com/articles/log-views.html).
 
 ## Version matrix
 

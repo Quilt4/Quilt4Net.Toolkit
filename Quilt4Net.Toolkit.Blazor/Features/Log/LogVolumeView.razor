@@ -11,11 +11,13 @@ else
 {
     <RadzenStack Orientation="Orientation.Vertical" Gap="0" class="rz-mb-2">
         <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
-        <RadzenSelectBar @bind-Value="_range" TValue="TimeSpan" Size="ButtonSize.Small" Change="@(_ => LoadAsync())">
+        <RadzenSelectBar @bind-Value="_range" TValue="VolumeRange" Size="ButtonSize.Small" Change="@(_ => LoadAsync())">
             <Items>
-                <RadzenSelectBarItem Text="1h" Value="@TimeSpan.FromHours(1)" />
-                <RadzenSelectBarItem Text="24h" Value="@TimeSpan.FromHours(24)" />
-                <RadzenSelectBarItem Text="7d" Value="@TimeSpan.FromDays(7)" />
+                <RadzenSelectBarItem Text="1h" Value="VolumeRange.Hour1" />
+                <RadzenSelectBarItem Text="24h" Value="VolumeRange.Hours24" />
+                <RadzenSelectBarItem Text="Today" Value="VolumeRange.Today" />
+                <RadzenSelectBarItem Text="Yesterday" Value="VolumeRange.Yesterday" />
+                <RadzenSelectBarItem Text="7d" Value="VolumeRange.Days7" />
             </Items>
         </RadzenSelectBar>
     </RadzenStack>
@@ -32,10 +34,31 @@ else
     }
     else
     {
-        <RadzenText TextStyle="TextStyle.H6" Text="@($"Total ingested: {FormatSize(_totalMb)} over the last {RangeLabel(_range)}")" />
-        <RadzenChart>
-            <RadzenPieSeries Data="@Model" CategoryProperty="Source" ValueProperty="Mb" Title="Size" />
-        </RadzenChart>
+        <RadzenText TextStyle="TextStyle.H6" Text="@($"Total ingested: {FormatSize(_totalMb)} over {RangeLabel(_range)}")" />
+        @if (_range == VolumeRange.Days7)
+        {
+            <RadzenChart>
+                @foreach (var series in _series)
+                {
+                    <RadzenLineSeries Data="@series.Points" CategoryProperty="DayLabel" ValueProperty="Mb" Title="@series.Source" Smooth="true">
+                        <RadzenMarkers MarkerType="MarkerType.Circle" />
+                    </RadzenLineSeries>
+                }
+                <RadzenCategoryAxis>
+                    <RadzenAxisTitle Text="Day (UTC)" />
+                </RadzenCategoryAxis>
+                <RadzenValueAxis FormatString="{0:0.#} MB" Min="0">
+                    <RadzenAxisTitle Text="Billed volume" />
+                </RadzenValueAxis>
+                <RadzenLegend Position="LegendPosition.Bottom" />
+            </RadzenChart>
+        }
+        else
+        {
+            <RadzenChart>
+                <RadzenPieSeries Data="@Model" CategoryProperty="Source" ValueProperty="Mb" Title="Size" />
+            </RadzenChart>
+        }
         <RadzenDataGrid Data="@Model" TItem="Row" AllowSorting="true" AllowPaging="true" PageSize="10">
             <Columns>
                 <RadzenDataGridColumn Title="Source" Property="@nameof(Row.Source)" />
@@ -48,6 +71,8 @@ else
                 </RadzenDataGridColumn>
             </Columns>
         </RadzenDataGrid>
+        <RadzenText TextStyle="TextStyle.Caption" Style="color: gray;"
+                    Text="Billing-grade (Usage table). Short ranges can lag behind real-time by Azure's billing-aggregation delay — Log count reads raw telemetry and may show more recent data." />
     }
 }
 
@@ -61,20 +86,25 @@ else
     private IApplicationInsightsConfigurationSelector _selector;
     private CancellationTokenSource _cts;
     private bool _loading;
-    private TimeSpan _range = TimeSpan.FromDays(7);
+    private VolumeRange _range = VolumeRange.Days7;
+    private List<Series> _series = [];
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
 
-    /// <summary>Initial range; the user can change it with the in-view 1h/24h/7d selector.</summary>
+    /// <summary>Initial range; the user can change it with the in-view selector. Days >= 7 starts on the 7d line chart.</summary>
     [Parameter]
     public TimeSpan Range { get; set; } = TimeSpan.FromDays(7);
 
     private IApplicationInsightsContext EffectiveContext => Context ?? _selector?.Selected;
 
+    public enum VolumeRange { Hour1, Hours24, Today, Yesterday, Days7 }
+
     protected override async Task OnInitializedAsync()
     {
-        _range = Range;
+        _range = Range >= TimeSpan.FromDays(7) ? VolumeRange.Days7
+            : Range >= TimeSpan.FromHours(24) ? VolumeRange.Hours24
+            : VolumeRange.Hour1;
 
         _ais = LogConfigurationGuard.TryResolve(ServiceProvider);
         if (_ais == null)
@@ -118,17 +148,46 @@ else
 
         _loading = true;
         Model = null;
+        _series = [];
         StateHasChanged();
 
         try
         {
-            var loaded = await _ais.GetVolumeBySourceAsync(ctx, _range, token).ToArrayAsync(token);
-            if (token.IsCancellationRequested) return;
+            if (_range == VolumeRange.Days7)
+            {
+                var todayUtc = DateTime.UtcNow.Date;
+                var fromUtc = new DateTimeOffset(todayUtc.AddDays(-6), TimeSpan.Zero);
+                var toUtc = DateTimeOffset.UtcNow;
 
-            _totalMb = loaded.Sum(x => x.Mb);
-            Model = loaded
-                .Select(x => new Row(x.Source, x.Mb, _totalMb > 0 ? x.Mb / _totalMb : 0))
-                .ToArray();
+                var points = await _ais.GetVolumeTimelineAsync(ctx, fromUtc, toUtc, token).ToArrayAsync(token);
+                if (token.IsCancellationRequested) return;
+
+                var days = points.Select(p => p.DayUtc.Date).Distinct().OrderBy(d => d).ToArray();
+                _series = points
+                    .GroupBy(p => p.Source)
+                    .OrderByDescending(g => g.Sum(x => x.Mb))
+                    .Select(g => new Series(g.Key, days
+                        .Select(d => new SeriesPoint(d.ToString("MM-dd"), g.Where(x => x.DayUtc.Date == d).Sum(x => x.Mb)))
+                        .ToArray()))
+                    .ToList();
+
+                _totalMb = points.Sum(p => p.Mb);
+                Model = points
+                    .GroupBy(p => p.Source)
+                    .Select(g => new Row(g.Key, g.Sum(x => x.Mb), _totalMb > 0 ? g.Sum(x => x.Mb) / _totalMb : 0))
+                    .OrderByDescending(r => r.Mb)
+                    .ToArray();
+            }
+            else
+            {
+                var loaded = await LoadBySourceAsync(ctx, token);
+                if (token.IsCancellationRequested) return;
+
+                _totalMb = loaded.Sum(x => x.Mb);
+                Model = loaded
+                    .Select(x => new Row(x.Source, x.Mb, _totalMb > 0 ? x.Mb / _totalMb : 0))
+                    .ToArray();
+            }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -143,6 +202,29 @@ else
         }
     }
 
+    private async Task<VolumeBySource[]> LoadBySourceAsync(IApplicationInsightsContext ctx, CancellationToken token)
+    {
+        switch (_range)
+        {
+            case VolumeRange.Hour1:
+                return await _ais.GetVolumeBySourceAsync(ctx, TimeSpan.FromHours(1), token).ToArrayAsync(token);
+            case VolumeRange.Hours24:
+                return await _ais.GetVolumeBySourceAsync(ctx, TimeSpan.FromHours(24), token).ToArrayAsync(token);
+            case VolumeRange.Today:
+            {
+                var from = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
+                return await _ais.GetVolumeBySourceAsync(ctx, from, DateTimeOffset.UtcNow, token).ToArrayAsync(token);
+            }
+            case VolumeRange.Yesterday:
+            {
+                var start = DateTime.UtcNow.Date.AddDays(-1);
+                return await _ais.GetVolumeBySourceAsync(ctx, new DateTimeOffset(start, TimeSpan.Zero), new DateTimeOffset(start.AddDays(1), TimeSpan.Zero), token).ToArrayAsync(token);
+            }
+            default:
+                return Array.Empty<VolumeBySource>();
+        }
+    }
+
     // Auto-scaled display from a megabyte value. Sorting uses the raw MB (always MB), so the unit
     // shown per row (GB/MB/KB) never affects ordering.
     private static string FormatSize(double mb)
@@ -152,10 +234,14 @@ else
         return $"{mb * 1024.0:N0} KB";
     }
 
-    private static string RangeLabel(TimeSpan range)
-        => range >= TimeSpan.FromDays(7) ? "7 days"
-            : range >= TimeSpan.FromHours(24) ? "24 hours"
-            : "1 hour";
+    private static string RangeLabel(VolumeRange range) => range switch
+    {
+        VolumeRange.Hour1 => "the last 1 hour",
+        VolumeRange.Hours24 => "the last 24 hours",
+        VolumeRange.Today => "today (UTC)",
+        VolumeRange.Yesterday => "yesterday (UTC)",
+        _ => "the last 7 days",
+    };
 
     public void Dispose()
     {
@@ -165,4 +251,6 @@ else
     }
 
     private sealed record Row(string Source, double Mb, double Share);
+    private sealed record Series(string Source, SeriesPoint[] Points);
+    private sealed record SeriesPoint(string DayLabel, double Mb);
 }

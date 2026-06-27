@@ -111,6 +111,8 @@ public class MetricsViewClusterTests : BunitContext
         // Everything else returns empty — the view only needs the metric methods to render.
         public Task<bool> CanConnectAsync(IApplicationInsightsContext context) => Task.FromResult(true);
         public IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, TimeSpan timeSpan, CancellationToken cancellationToken = default) => Empty<VolumeBySource>();
+        public IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(IApplicationInsightsContext context, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken cancellationToken = default) => Empty<VolumeBySource>();
+        public IAsyncEnumerable<VolumeTimelinePoint> GetVolumeTimelineAsync(IApplicationInsightsContext context, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken cancellationToken = default) => Empty<VolumeTimelinePoint>();
         public Task<CapTimeline> GetCapTimelineAsync(IApplicationInsightsContext context, int days, CancellationToken cancellationToken = default) => Task.FromResult(new CapTimeline { Days = [] });
         public IAsyncEnumerable<EnvironmentOption> GetEnvironments(IApplicationInsightsContext context) => Empty<EnvironmentOption>();
         public IAsyncEnumerable<LogItem> SearchAsync(IApplicationInsightsContext context, string environment, string text, TimeSpan timeSpan, SeverityLevel minSeverityLevel = SeverityLevel.Verbose, CancellationToken cancellationToken = default) => Empty<LogItem>();

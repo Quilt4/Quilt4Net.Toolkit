@@ -175,7 +175,7 @@ Two components turn the same workspace into a cost picture — what you ingest, 
 
 ### `LogVolumeView` — billed ingestion by source
 
-A pie of billed ingestion volume grouped by source table (`DataType`), a total for the window, and a sortable table (Source / Size / Share). Size auto-scales to GB/MB/KB; the column sorts on the raw value so ordering is correct regardless of the unit shown.
+Billed ingestion volume grouped by source table (`DataType`): a pie + sortable table (Source / Size / Share) for the **1h**, **24h**, **Today (UTC)** and **Yesterday (UTC)** ranges, and a **per-source line chart** for the **7d** range. A total for the window is shown above. Size auto-scales to GB/MB/KB; the column sorts on the raw value so ordering is correct regardless of the unit shown.
 
 ```razor
 @using Quilt4Net.Toolkit.Blazor.Features.Log
@@ -187,13 +187,18 @@ A pie of billed ingestion volume grouped by source table (`DataType`), a total f
 | Parameter | Type | Default | Notes |
 |---|---|---|---|
 | `Context` | `IApplicationInsightsContext` | `null` | Workspace to query. When null, resolved via the DI selector / configured options. |
-| `Range` | `TimeSpan` | `7 days` | Initial lookback; the in-view **1h / 24h / 7d** selector changes it. |
+| `Range` | `TimeSpan` | `7 days` | Initial range; the in-view **1h / 24h / Today / Yesterday / 7d** selector changes it. |
 
-When the `Usage` table can't be read (or is empty for the range) the view shows an informational alert instead of an empty chart.
+`Usage` is billing-grade but reported with a delay, so short ranges (1h/Today) can lag behind real-time — a caption notes this. When the `Usage` table can't be read (or is empty for the range) the view shows an informational alert instead of an empty chart.
 
 ### `CapTimelineView` — daily ingestion-cap graph
 
-A per-UTC-day view of billed volume against the configured daily cap: one column per day, a dashed reference line at the cap, and diamond markers for the **estimated uncapped** volume on days the cap was hit (`cap × 24 / hours-to-hit` — what the day would have ingested unthrottled). The grid below gives the precise first-hit time per day.
+Tracks billed volume against the daily cap, detected from the workspace's daily-cap `Operation` events. Two views via the **Break by** toggle:
+
+- **Calendar day** (default) — one column per UTC day. "Capped for" shows the total no-collection time that day (a gap spanning the reset splits across midnight); its tooltip lists the capped sub-intervals, e.g. `Capped 00:00–12:00, 22:24–24:00 UTC`.
+- **Cap cycle** — one row per quota cycle (reset → next reset), so a cap is a single clean span (hit → next reset) with no midnight split.
+
+Each bar stacks **Ingested** (bottom) + the **estimated capped-away** volume (top), so the full bar height is the estimated uncapped volume; a dashed reference line marks the cap. A summary shows the **measured cap size** and the **detected reset time**.
 
 ```razor
 @using Quilt4Net.Toolkit.Blazor.Features.Log
@@ -207,9 +212,9 @@ A per-UTC-day view of billed volume against the configured daily cap: one column
 | `Context` | `IApplicationInsightsContext` | `null` | Workspace to query. When null, resolved via the DI selector / configured options. |
 | `Days` | `int` | `30` | Initial range; the in-view **14 / 30 / 90 days** selector changes it. |
 
-The cap value comes from the latest `"Daily quota changed to N"` config event in the `Operation` table; first-hit times from the `"stopped due to daily limit"` events. With no cap configured the view drops the reference line and just charts daily volume; when neither table is readable it shows an informational alert. The daily cap is a *soft* limit — ingestion isn't hard-stopped at the cap, so days can finish above it, which is exactly why the est.-uncapped overlay is worth showing.
+**Detection** (the daily cap reset hour varies per workspace, so this is data-driven): cap hits come from the `"stopped due to daily limit"` events and the reset/resume time from the `"daily limit reset"` events — precise to the event, unlike the ~1h-lagged `Usage` table. The **cap size** is measured as the billed volume in a complete reset→cap cycle (floored to whole GB, since collection stops just *past* the cap), falling back to the `"Daily quota changed to N"` config event if present. With no caps observed the view just charts daily volume; when the tables aren't readable it shows an informational alert.
 
-Both components honour the same remote/local `Context` precedence as the other views — pass an explicit `Context`, or let the DI selector drive them. On Quilt4Net Server they appear as the **Logging volume** and **Daily cap** tabs on `/monitor/metrics` and `/developer/metrics`.
+Both components honour the same remote/local `Context` precedence as the other views — pass an explicit `Context`, or let the DI selector drive them. On Quilt4Net Server they appear as the **Volume** and **Daily cap** tabs on the **Log volume** page (`/monitor/volume`, `/developer/volume`).
 
 ## Where next
 

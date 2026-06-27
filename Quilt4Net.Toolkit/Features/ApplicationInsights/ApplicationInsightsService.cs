@@ -110,8 +110,31 @@ union startup_pick, (log_pick | join kind=leftanti startup_pick on ApplicationNa
         TimeSpan timeSpan,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"volbysource|{context.ToKey()}|{timeSpan}";
-        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        var items = await FetchVolumeBySourceAsync(context, $"volbysource|{context.ToKey()}|{timeSpan}", new LogsQueryTimeRange(timeSpan));
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
+    public async IAsyncEnumerable<VolumeBySource> GetVolumeBySourceAsync(
+        IApplicationInsightsContext context,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var items = await FetchVolumeBySourceAsync(context, $"volbysource|{context.ToKey()}|{fromUtc:O}|{toUtc:O}", new LogsQueryTimeRange(fromUtc, toUtc));
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+    }
+
+    private Task<VolumeBySource[]> FetchVolumeBySourceAsync(IApplicationInsightsContext context, string cacheKey, LogsQueryTimeRange range)
+    {
+        return _timeToLiveCache.GetAsync(cacheKey, async () =>
         {
             // Billing-grade volume straight from the Usage table — cheap, no telemetry scan.
             const string query = @"
@@ -124,7 +147,7 @@ Usage
             {
                 var client = GetClient(context);
                 var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
-                var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(timeSpan));
+                var response = await client.QueryWorkspaceAsync(workspaceId, query, range);
 
                 var list = new List<VolumeBySource>();
                 foreach (var table in response.Value.AllTables)
@@ -152,6 +175,62 @@ Usage
                 // empty so the cost view shows "unavailable" rather than failing the whole page.
                 _logger.LogWarning(e, "Unable to read the Usage table for volume-by-source. Returning empty.");
                 return Array.Empty<VolumeBySource>();
+            }
+        });
+    }
+
+    public async IAsyncEnumerable<VolumeTimelinePoint> GetVolumeTimelineAsync(
+        IApplicationInsightsContext context,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"voltimeline|{context.ToKey()}|{fromUtc:O}|{toUtc:O}";
+        var items = await _timeToLiveCache.GetAsync(cacheKey, async () =>
+        {
+            // Per-UTC-day billed volume by source, for the multi-day line chart.
+            const string query = @"
+Usage
+| where IsBillable == true
+| summarize Mb = sum(Quantity) by Day = bin(TimeGenerated, 1d), Source = DataType
+| where Mb > 0
+| order by Day asc";
+            try
+            {
+                var client = GetClient(context);
+                var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+                var response = await client.QueryWorkspaceAsync(workspaceId, query, new LogsQueryTimeRange(fromUtc, toUtc));
+
+                var list = new List<VolumeTimelinePoint>();
+                foreach (var table in response.Value.AllTables)
+                {
+                    var dayIdx = GetColumnIndex(table, "Day");
+                    var sourceIdx = GetColumnIndex(table, "Source");
+                    var mbIdx = GetColumnIndex(table, "Mb");
+                    foreach (var row in table.Rows)
+                    {
+                        var source = row[sourceIdx]?.ToString();
+                        if (string.IsNullOrEmpty(source)) continue;
+                        var rawDay = row[dayIdx];
+                        var rawMb = row[mbIdx];
+                        if (rawDay is null || rawMb is null) continue;
+                        var dayUtc = rawDay is DateTimeOffset dto
+                            ? dto.UtcDateTime
+                            : System.Convert.ToDateTime(rawDay, System.Globalization.CultureInfo.InvariantCulture);
+                        list.Add(new VolumeTimelinePoint
+                        {
+                            DayUtc = dayUtc,
+                            Source = source,
+                            Mb = System.Convert.ToDouble(rawMb, System.Globalization.CultureInfo.InvariantCulture)
+                        });
+                    }
+                }
+                return list.ToArray();
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning(e, "Unable to read the Usage table for volume timeline. Returning empty.");
+                return Array.Empty<VolumeTimelinePoint>();
             }
         });
         foreach (var item in items)
@@ -188,20 +267,18 @@ Usage
 
                 var window = new LogsQueryTimeRange(TimeSpan.FromDays(days));
 
-                // First cap-hit per day, from the workspace "data collection stopped" operation events.
-                var hits = new Dictionary<DateTime, DateTime>();
-                var hitResp = await client.QueryWorkspaceAsync(workspaceId,
-                    "Operation | where OperationCategory == 'Data Collection Status' | where Detail has 'stopped due to daily limit' | summarize HitUtc = min(TimeGenerated) by Day = startofday(TimeGenerated)",
+                // Authoritative cap timing from the workspace's daily-cap Operation events: when collection
+                // stopped (cap hit) and when it resumed (daily-limit reset). Far more precise than the
+                // ~1h-lagged Usage table.
+                var stops = await QueryEventTimesAsync(client, workspaceId,
+                    "Operation | where OperationCategory == 'Data Collection Status' | where Detail has 'stopped due to daily limit' | project TimeGenerated | order by TimeGenerated asc",
                     window);
-                foreach (var table in hitResp.Value.AllTables)
-                {
-                    var dayIdx = GetColumnIndex(table, "Day");
-                    var hitIdx = GetColumnIndex(table, "HitUtc");
-                    foreach (var row in table.Rows) hits[GetDateTime(row, dayIdx)] = GetDateTime(row, hitIdx);
-                }
+                var resets = await QueryEventTimesAsync(client, workspaceId,
+                    "Operation | where OperationCategory == 'Data Collection Status' | where Detail has 'daily limit reset' | project TimeGenerated | order by TimeGenerated asc",
+                    window);
 
-                // Billed volume per day (GB).
-                var volume = new Dictionary<DateTime, double>();
+                // Billed volume per UTC day (GB) for the bars.
+                var dailyGb = new Dictionary<DateTime, double>();
                 var volResp = await client.QueryWorkspaceAsync(workspaceId,
                     "Usage | where IsBillable == true | summarize Gb = sum(Quantity) / 1024.0 by Day = startofday(TimeGenerated)",
                     window);
@@ -213,30 +290,48 @@ Usage
                     {
                         var raw = row[gbIdx];
                         if (raw is null) continue;
-                        volume[GetDateTime(row, dayIdx)] = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
+                        dailyGb[GetDateTime(row, dayIdx)] = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
                     }
                 }
 
-                var capDays = volume.Keys.Union(hits.Keys)
-                    .Distinct()
-                    .OrderByDescending(d => d)
-                    .Select(day =>
+                // Per-reset-cycle billable volume → cap size (max cycle) + the per-cycle bars for the
+                // cap-cycle view. Cycles are aligned to the reset hour; the Usage table reports ~1h late,
+                // so shift the bin by (resetHour + 1h) and map the bin back to the reset boundary.
+                double? measuredCapGb = null;
+                var cycleGbByStart = new Dictionary<DateTime, double>();
+                if (resets.Count > 0)
+                {
+                    var resetHour = resets
+                        .GroupBy(r => (int)Math.Round(r.TimeOfDay.TotalHours) % 24)
+                        .OrderByDescending(g => g.Count()).First().Key;
+                    var offset = (resetHour + 1) % 24; // +1h for Usage reporting lag
+                    var cycleResp = await client.QueryWorkspaceAsync(workspaceId,
+                        $"Usage | where IsBillable == true | summarize Gb = sum(Quantity) / 1024.0 by Cycle = bin(TimeGenerated - {offset}h, 1d)",
+                        window);
+                    var maxCycleGb = 0.0;
+                    foreach (var table in cycleResp.Value.AllTables)
                     {
-                        var gb = volume.GetValueOrDefault(day);
-                        DateTime? hit = hits.TryGetValue(day, out var h) ? h : null;
-                        double? est = null;
-                        if (hit.HasValue)
+                        var cycleIdx = GetColumnIndex(table, "Cycle");
+                        var gbIdx = GetColumnIndex(table, "Gb");
+                        foreach (var row in table.Rows)
                         {
-                            // Volume-at-hit ≈ the cap; extrapolate to a full day by the elapsed fraction.
-                            var hours = (hit.Value - day).TotalHours;
-                            var baseGb = capGb ?? gb;
-                            if (hours > 0) est = baseGb * 24.0 / hours;
+                            var raw = row[gbIdx];
+                            if (raw is null) continue;
+                            var gb = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
+                            maxCycleGb = Math.Max(maxCycleGb, gb);
+                            // Bin start (shifted) → actual reset boundary = binStart + resetHour.
+                            var cycleStart = GetDateTime(row, cycleIdx).AddHours(resetHour);
+                            cycleGbByStart[cycleStart] = gb;
                         }
-                        return new CapDay { DateUtc = day, IngestedGb = gb, CapHitUtc = hit, EstimatedUncappedGb = est };
-                    })
-                    .ToArray();
+                    }
+                    // Floor, not round: Azure stops collection once you *exceed* the cap, so the measured
+                    // cycle volume slightly overshoots (e.g. ~10.5 GB for a 10 GB cap). Flooring recovers
+                    // the configured whole-GB cap.
+                    if (maxCycleGb > 0) measuredCapGb = Math.Floor(maxCycleGb);
+                }
 
-                return new CapTimeline { CapGb = capGb, Days = capDays };
+                return CapTimelineBuilder.Build(stops, resets, dailyGb, measuredCapGb, capGb,
+                    DateTime.UtcNow - TimeSpan.FromDays(days), DateTime.UtcNow, cycleGbByStart);
             }
             catch (Exception e)
             {
@@ -244,6 +339,20 @@ Usage
                 return new CapTimeline { CapGb = null, Days = [] };
             }
         });
+    }
+
+    private static async Task<List<DateTime>> QueryEventTimesAsync(LogsQueryClient client, string workspaceId, string query, LogsQueryTimeRange range)
+    {
+        var list = new List<DateTime>();
+        var resp = await client.QueryWorkspaceAsync(workspaceId, query, range);
+        foreach (var table in resp.Value.AllTables)
+        {
+            var idx = GetColumnIndex(table, "TimeGenerated");
+            if (idx < 0) continue;
+            foreach (var row in table.Rows)
+                list.Add(GetDateTime(row, idx));
+        }
+        return list;
     }
 
     public async Task<bool> CanConnectAsync(IApplicationInsightsContext context)
