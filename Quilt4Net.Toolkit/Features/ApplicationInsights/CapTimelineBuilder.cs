@@ -11,7 +11,7 @@ namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 /// is the overlap of those intervals with the day, and the reset time is taken from the reset events
 /// (precise, unlike the ~1h-lagged Usage table). Pure and deterministic — unit-testable without Azure.
 /// </summary>
-public static class CapTimelineBuilder
+internal static class CapTimelineBuilder
 {
     /// <param name="stops">Cap-hit event times (UTC).</param>
     /// <param name="resets">Daily-reset event times (UTC) — when collection resumed.</param>

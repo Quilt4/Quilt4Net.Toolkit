@@ -1,6 +1,6 @@
 # Metrics
 
-Three Blazor components in `Quilt4Net.Toolkit.Blazor.Features.Metrics` plot machine-level telemetry (CPU, memory, disk, network) sourced from the AI workspace via `IApplicationInsightsService`. The composite `MetricsView` is the drop-in surface that powers Quilt4Net Server's `/developer/metrics`; `MetricChart` and `MetricLatestChart` are the two primitives it renders and are exported so custom dashboards can compose their own charts off the same `MetricSample[]` stream.
+Three Blazor components in `Quilt4Net.Toolkit.Blazor.Features.Metrics` plot machine-level telemetry (CPU, memory, disk, network) sourced from the AI workspace via `IApplicationInsightsService`. The composite `MetricsView` is the drop-in surface that powers Quilt4Net Server's **Infrastructure** page (`/monitor/infrastructure`, `/developer/infrastructure`); `MetricChart` and `MetricLatestChart` are the two primitives it renders and are exported so custom dashboards can compose their own charts off the same `MetricSample[]` stream.
 
 ## Minimum
 
@@ -116,6 +116,7 @@ Both primitives accept a `MetricSample[]` you fetch yourself, so a host that alr
 |---|---|---|---|
 | `Context` | `IApplicationInsightsContext` | `null` | Explicit single workspace. Bypasses the selector / `Configs` dropdown. |
 | `Configs` | `IReadOnlyList<ApplicationInsightsConfigurationResponse>` | `null` | Explicit set; rendered as a dropdown when count > 1. Takes precedence over the DI selector; ignored when `Context` is set. |
+| `StorageScope` | `string` | `null` | When set (and a `Configs` dropdown is shown), the selected configuration is remembered across sessions in browser `localStorage` under `Quilt4Net.Metrics.{scope}.config`. Hosts pass e.g. the team key. |
 
 ## Where next
 

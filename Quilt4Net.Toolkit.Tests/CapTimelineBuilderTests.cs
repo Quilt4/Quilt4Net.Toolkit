@@ -5,7 +5,7 @@ using FluentAssertions;
 using Quilt4Net.Toolkit.Features.ApplicationInsights;
 using Xunit;
 
-namespace Quilt4Net.Toolkit.Blazor.Tests;
+namespace Quilt4Net.Toolkit.Tests;
 
 public class CapTimelineBuilderTests
 {
