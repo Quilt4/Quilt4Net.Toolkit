@@ -112,13 +112,19 @@ public static class CapTimelineBuilder
         IReadOnlyDictionary<DateTime, double> cycleGbByStart,
         DateTime windowEndUtc)
     {
-        var starts = new SortedSet<DateTime>();
-        if (cycleGbByStart != null)
-            foreach (var k in cycleGbByStart.Keys) starts.Add(k);
-        foreach (var r in sortedResets) starts.Add(r);
-        if (starts.Count == 0) return [];
-
-        var startList = starts.ToList();
+        // Per-cycle volume keys are already one-per-day at the reset hour; prefer them. Fall back to reset
+        // events only when there's no volume data. Dedupe to one start per calendar day — reset events can
+        // fire at slightly different hours (e.g. 11:00 vs 12:00), which would otherwise create two cycles
+        // for the same day and collide as duplicate chart categories.
+        IEnumerable<DateTime> candidates = cycleGbByStart is { Count: > 0 }
+            ? cycleGbByStart.Keys
+            : sortedResets;
+        var startList = candidates
+            .GroupBy(s => s.Date)
+            .Select(g => g.Min())
+            .OrderBy(s => s)
+            .ToList();
+        if (startList.Count == 0) return [];
         var cycles = new List<CapCycle>();
         for (var i = 0; i < startList.Count; i++)
         {
