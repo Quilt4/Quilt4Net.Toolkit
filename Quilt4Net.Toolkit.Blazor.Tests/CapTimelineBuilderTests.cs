@@ -38,6 +38,43 @@ public class CapTimelineBuilderTests
     }
 
     [Fact]
+    public void Build_Cycles_OneRowPerResetCycle_WithCleanCappedSpan()
+    {
+        var stops = new List<DateTime> { Day1.AddHours(22), Day1.AddDays(1).AddHours(20) };
+        var resets = new List<DateTime> { Day1.AddHours(12), Day1.AddDays(1).AddHours(12), Day1.AddDays(2).AddHours(12) };
+        var cycleGb = new Dictionary<DateTime, double> { [Day1.AddHours(12)] = 10.5, [Day1.AddDays(1).AddHours(12)] = 10.4 };
+
+        var timeline = CapTimelineBuilder.Build([.. stops], [.. resets], new Dictionary<DateTime, double>(),
+            measuredCapGb: 10, configuredCapGb: null, windowStartUtc: Day1, windowEndUtc: Day1.AddDays(2).AddHours(12),
+            cycleGbByStart: cycleGb);
+
+        timeline.Cycles.Should().HaveCount(2);
+
+        var firstCycle = timeline.Cycles.Single(c => c.StartUtc == Day1.AddHours(12));
+        firstCycle.CapHitUtc.Should().Be(Day1.AddHours(22));
+        firstCycle.CappedDuration.Should().Be(TimeSpan.FromHours(14));   // 22:00 → next reset 12:00
+        firstCycle.IngestedGb.Should().Be(10.5);                          // looked up from cycleGbByStart
+        firstCycle.EndUtc.Should().Be(Day1.AddDays(1).AddHours(12));
+    }
+
+    [Fact]
+    public void Build_RecapAfterReset_DayHasTwoCappedIntervals()
+    {
+        // Carry-over cap until 12:00, then a fresh cap at 22:00 the same day.
+        var stops = new List<DateTime> { Day1.AddDays(-1).AddHours(20), Day1.AddHours(22) };
+        var resets = new List<DateTime> { Day1.AddHours(12), Day1.AddDays(1).AddHours(12) };
+
+        var timeline = CapTimelineBuilder.Build([.. stops], [.. resets],
+            new Dictionary<DateTime, double> { [Day1.Date] = 9 },
+            measuredCapGb: 10, configuredCapGb: null, windowStartUtc: Day1.AddDays(-1), windowEndUtc: Day1.AddDays(2));
+
+        var day = timeline.Days.Single(d => d.DateUtc == Day1.Date);
+        day.CappedIntervals.Should().HaveCount(2);                        // 00:00–12:00 and 22:00–24:00
+        day.CappedIntervals[0].EndUtc.Should().Be(Day1.AddHours(12));     // resumed at 12:00
+        day.CappedIntervals[1].StartUtc.Should().Be(Day1.AddHours(22));   // re-capped at 22:00
+    }
+
+    [Fact]
     public void Build_OpenTrailingCap_ClosesAtWindowEnd()
     {
         // A stop with no following reset is still capped until the window end.

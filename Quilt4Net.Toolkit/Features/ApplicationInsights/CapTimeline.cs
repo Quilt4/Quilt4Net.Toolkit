@@ -28,6 +28,42 @@ public record CapDay
     /// ingested over the uncapped hours of the day. <c>null</c> when the day wasn't capped.
     /// </summary>
     public double? EstimatedUncappedGb { get; init; }
+
+    /// <summary>The capped sub-intervals within this UTC day (clipped to the day) — a day can have a
+    /// carry-over gap at the start and a fresh cap later, so there may be more than one.</summary>
+    public IReadOnlyList<CappedInterval> CappedIntervals { get; init; } = [];
+}
+
+/// <summary>A capped (no-collection) interval, in UTC.</summary>
+public record CappedInterval
+{
+    public required DateTime StartUtc { get; init; }
+    public required DateTime EndUtc { get; init; }
+}
+
+/// <summary>
+/// One cap cycle — the quota period from a reset to the next reset. Unlike a calendar day this aligns
+/// to the cap, so a cycle has at most one cap hit and a single clean capped span (hit → next reset).
+/// </summary>
+public record CapCycle
+{
+    /// <summary>When the quota reset and collection resumed (UTC) — the start of the cycle.</summary>
+    public required DateTime StartUtc { get; init; }
+
+    /// <summary>The next reset (UTC) — the end of the cycle.</summary>
+    public required DateTime EndUtc { get; init; }
+
+    /// <summary>Billed volume ingested during the cycle (GB).</summary>
+    public required double IngestedGb { get; init; }
+
+    /// <summary>When the cap was hit in this cycle (UTC), or <c>null</c> if it wasn't.</summary>
+    public DateTime? CapHitUtc { get; init; }
+
+    /// <summary>How long the cycle was capped (hit → next reset). <c>null</c> when not hit.</summary>
+    public TimeSpan? CappedDuration { get; init; }
+
+    /// <summary>Estimated uncapped volume (GB) for the cycle, extrapolated from the uncapped portion.</summary>
+    public double? EstimatedUncappedGb { get; init; }
 }
 
 /// <summary>
@@ -53,6 +89,9 @@ public record CapTimeline
     /// </summary>
     public TimeSpan? CapResetUtc { get; init; }
 
-    /// <summary>Per-day entries, newest first.</summary>
+    /// <summary>Per-calendar-UTC-day entries, newest first.</summary>
     public required IReadOnlyList<CapDay> Days { get; init; }
+
+    /// <summary>Per-cap-cycle entries (reset → next reset), newest first. Empty when no resets were observed.</summary>
+    public IReadOnlyList<CapCycle> Cycles { get; init; } = [];
 }

@@ -27,17 +27,19 @@ public static class CapTimelineBuilder
         double? measuredCapGb,
         double? configuredCapGb,
         DateTime windowStartUtc,
-        DateTime windowEndUtc)
+        DateTime windowEndUtc,
+        IReadOnlyDictionary<DateTime, double> cycleGbByStart = null)
     {
         stops ??= [];
         resets ??= [];
         dailyGb ??= new Dictionary<DateTime, double>();
 
+        var sortedStops = stops.OrderBy(s => s).ToList();
         var sortedResets = resets.OrderBy(r => r).ToList();
 
         // Capped intervals: collection is off from each stop until the next reset (or the window end).
         var intervals = new List<(DateTime Start, DateTime End)>();
-        foreach (var stop in stops.OrderBy(s => s))
+        foreach (var stop in sortedStops)
         {
             var nextReset = sortedResets.FirstOrDefault(r => r > stop);
             var end = nextReset != default ? nextReset : windowEndUtc;
@@ -61,12 +63,15 @@ public static class CapTimelineBuilder
             var dayStart = day;
             var dayEnd = day.AddDays(1);
 
-            var cappedSpan = intervals.Aggregate(TimeSpan.Zero, (acc, iv) =>
+            // Clip each capped interval to the day; a day can hold a carry-over gap and a fresh cap.
+            var clipped = new List<CappedInterval>();
+            foreach (var iv in intervals)
             {
                 var os = iv.Start > dayStart ? iv.Start : dayStart;
                 var oe = iv.End < dayEnd ? iv.End : dayEnd;
-                return oe > os ? acc + (oe - os) : acc;
-            });
+                if (oe > os) clipped.Add(new CappedInterval { StartUtc = os, EndUtc = oe });
+            }
+            var cappedSpan = clipped.Aggregate(TimeSpan.Zero, (acc, c) => acc + (c.EndUtc - c.StartUtc));
 
             var ingested = dailyGb.GetValueOrDefault(day);
             DateTime? resume = sortedResets.Where(r => r >= dayStart && r < dayEnd).Select(r => (DateTime?)r).FirstOrDefault();
@@ -83,6 +88,7 @@ public static class CapTimelineBuilder
                 GapDuration = cappedSpan > TimeSpan.Zero ? cappedSpan : null,
                 ResumeUtc = resume,
                 EstimatedUncappedGb = est,
+                CappedIntervals = clipped,
             };
         }).ToArray();
 
@@ -92,6 +98,60 @@ public static class CapTimelineBuilder
             DerivedCapGb = measuredCapGb,
             CapResetUtc = resetUtc,
             Days = capDays,
+            Cycles = BuildCycles(sortedStops, sortedResets, cycleGbByStart, windowEndUtc),
         };
+    }
+
+    // One row per quota cycle (reset → next reset): at most one cap hit, a single clean capped span.
+    private static IReadOnlyList<CapCycle> BuildCycles(
+        List<DateTime> sortedStops,
+        List<DateTime> sortedResets,
+        IReadOnlyDictionary<DateTime, double> cycleGbByStart,
+        DateTime windowEndUtc)
+    {
+        var cycles = new List<CapCycle>();
+        for (var i = 0; i < sortedResets.Count; i++)
+        {
+            var start = sortedResets[i];
+            var end = i + 1 < sortedResets.Count ? sortedResets[i + 1] : windowEndUtc;
+            if (end <= start) continue;
+
+            var hit = sortedStops.Where(s => s >= start && s < end).Select(s => (DateTime?)s).FirstOrDefault();
+            var ingested = LookupCycleGb(cycleGbByStart, start);
+
+            TimeSpan? cappedDuration = hit.HasValue ? end - hit.Value : null;
+            double? est = null;
+            if (hit.HasValue)
+            {
+                var cycleHours = (end - start).TotalHours;
+                var cappedHours = cappedDuration.Value.TotalHours;
+                if (cycleHours > 0 && cappedHours < cycleHours)
+                    est = ingested * cycleHours / (cycleHours - cappedHours);
+            }
+
+            cycles.Add(new CapCycle
+            {
+                StartUtc = start,
+                EndUtc = end,
+                IngestedGb = ingested,
+                CapHitUtc = hit,
+                CappedDuration = cappedDuration,
+                EstimatedUncappedGb = est,
+            });
+        }
+        return cycles.OrderByDescending(c => c.StartUtc).ToArray();
+    }
+
+    private static double LookupCycleGb(IReadOnlyDictionary<DateTime, double> cycleGbByStart, DateTime start)
+    {
+        if (cycleGbByStart == null || cycleGbByStart.Count == 0) return 0;
+        if (cycleGbByStart.TryGetValue(start, out var exact)) return exact;
+        // Nearest cycle-start within 6h (the binned start may differ from the reset event by minutes/lag).
+        var best = cycleGbByStart
+            .Where(kvp => Math.Abs((kvp.Key - start).TotalHours) <= 6)
+            .OrderBy(kvp => Math.Abs((kvp.Key - start).TotalHours))
+            .Select(kvp => (double?)kvp.Value)
+            .FirstOrDefault();
+        return best ?? 0;
     }
 }

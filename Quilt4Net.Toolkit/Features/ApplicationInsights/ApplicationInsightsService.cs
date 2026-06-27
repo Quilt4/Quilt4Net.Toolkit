@@ -294,10 +294,11 @@ Usage
                     }
                 }
 
-                // Cap size = largest billable volume in a single reset cycle (the quota the cap allows).
-                // Cycles are aligned to the reset hour; the Usage table reports ~1h late, so shift the bin
-                // by (resetHour + 1h). Rounded to the nearest GB to read as the configured cap.
+                // Per-reset-cycle billable volume → cap size (max cycle) + the per-cycle bars for the
+                // cap-cycle view. Cycles are aligned to the reset hour; the Usage table reports ~1h late,
+                // so shift the bin by (resetHour + 1h) and map the bin back to the reset boundary.
                 double? measuredCapGb = null;
+                var cycleGbByStart = new Dictionary<DateTime, double>();
                 if (resets.Count > 0)
                 {
                     var resetHour = resets
@@ -310,12 +311,17 @@ Usage
                     var maxCycleGb = 0.0;
                     foreach (var table in cycleResp.Value.AllTables)
                     {
+                        var cycleIdx = GetColumnIndex(table, "Cycle");
                         var gbIdx = GetColumnIndex(table, "Gb");
                         foreach (var row in table.Rows)
                         {
                             var raw = row[gbIdx];
                             if (raw is null) continue;
-                            maxCycleGb = Math.Max(maxCycleGb, System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture));
+                            var gb = System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture);
+                            maxCycleGb = Math.Max(maxCycleGb, gb);
+                            // Bin start (shifted) → actual reset boundary = binStart + resetHour.
+                            var cycleStart = GetDateTime(row, cycleIdx).AddHours(resetHour);
+                            cycleGbByStart[cycleStart] = gb;
                         }
                     }
                     // Floor, not round: Azure stops collection once you *exceed* the cap, so the measured
@@ -325,7 +331,7 @@ Usage
                 }
 
                 return CapTimelineBuilder.Build(stops, resets, dailyGb, measuredCapGb, capGb,
-                    DateTime.UtcNow - TimeSpan.FromDays(days), DateTime.UtcNow);
+                    DateTime.UtcNow - TimeSpan.FromDays(days), DateTime.UtcNow, cycleGbByStart);
             }
             catch (Exception e)
             {

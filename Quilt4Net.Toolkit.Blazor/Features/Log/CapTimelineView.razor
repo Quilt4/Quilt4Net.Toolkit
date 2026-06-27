@@ -17,15 +17,27 @@
 }
 else
 {
-    <RadzenStack Orientation="Orientation.Vertical" Gap="0" class="rz-mb-2">
-        <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
-        <RadzenSelectBar @bind-Value="_days" TValue="int" Size="ButtonSize.Small" Change="@(_ => LoadAsync())">
-            <Items>
-                <RadzenSelectBarItem Text="14 days" Value="14" />
-                <RadzenSelectBarItem Text="30 days" Value="30" />
-                <RadzenSelectBarItem Text="90 days" Value="90" />
-            </Items>
-        </RadzenSelectBar>
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Wrap="FlexWrap.Wrap" class="rz-mb-2">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Range" />
+            <RadzenSelectBar @bind-Value="_days" TValue="int" Size="ButtonSize.Small" Change="@(_ => LoadAsync())">
+                <Items>
+                    <RadzenSelectBarItem Text="14 days" Value="14" />
+                    <RadzenSelectBarItem Text="30 days" Value="30" />
+                    <RadzenSelectBarItem Text="90 days" Value="90" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+        @* Break the timeline by calendar UTC day (default) or by quota cycle (reset → next reset). *@
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenText TextStyle="TextStyle.Caption" Text="Break by" />
+            <RadzenSelectBar @bind-Value="_grouping" TValue="Grouping" Size="ButtonSize.Small" Change="@(_ => Rebuild())">
+                <Items>
+                    <RadzenSelectBarItem Text="Calendar day" Value="Grouping.Day" />
+                    <RadzenSelectBarItem Text="Cap cycle" Value="Grouping.Cycle" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
     </RadzenStack>
 
     @if (_loading || Model == null)
@@ -54,26 +66,21 @@ else
         }
 
         <RadzenChart>
-            <RadzenColumnSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="IngestedGb" Title="Ingested" />
+            <RadzenColumnSeries Data="@Model" CategoryProperty="Label" ValueProperty="IngestedGb" Title="Ingested" />
             @if (EffectiveCapGb.HasValue)
             {
-                @* Constant value on every row → renders as a horizontal reference line at the cap.
-                   CapLine is a non-nullable double (the series only renders when a cap exists) so
-                   Radzen's tooltip lambda never dereferences a null. *@
-                <RadzenLineSeries Data="@Model" CategoryProperty="DateLabel" ValueProperty="CapLine" Title="Daily cap" LineType="LineType.Dashed" />
+                @* Constant value on every row → renders as a horizontal reference line at the cap. *@
+                <RadzenLineSeries Data="@Model" CategoryProperty="Label" ValueProperty="CapLine" Title="Daily cap" LineType="LineType.Dashed" />
             }
             @if (_uncappedPoints.Length > 0)
             {
-                @* Bound to a *filtered* set (hit days only) with a non-nullable value — feeding the
-                   full Model here would put nulls on non-hit days and Radzen's tooltip lambda would
-                   throw "Nullable object must have a value". Markers mark how much each capped day
-                   would have ingested unthrottled. *@
-                <RadzenLineSeries Data="@_uncappedPoints" CategoryProperty="DateLabel" ValueProperty="EstUncappedGb" Title="Est. uncapped" Smooth="false">
+                @* Filtered to capped rows with a non-nullable value so the chart tooltip never sees a null. *@
+                <RadzenLineSeries Data="@_uncappedPoints" CategoryProperty="Label" ValueProperty="EstUncappedGb" Title="Est. uncapped" Smooth="false">
                     <RadzenMarkers MarkerType="MarkerType.Diamond" />
                 </RadzenLineSeries>
             }
             <RadzenCategoryAxis>
-                <RadzenAxisTitle Text="Day (UTC)" />
+                <RadzenAxisTitle Text="@PeriodTitle" />
             </RadzenCategoryAxis>
             <RadzenValueAxis FormatString="{0:0.#} GB">
                 <RadzenAxisTitle Text="Billed volume" />
@@ -83,8 +90,8 @@ else
 
         <RadzenDataGrid Data="@Model" TItem="Row" AllowSorting="true" AllowPaging="true" PageSize="15" class="rz-mt-2">
             <Columns>
-                <RadzenDataGridColumn Title="Day (UTC)" Property="@nameof(Row.DateUtc)" SortOrder="SortOrder.Descending">
-                    <Template>@context.DateUtc.ToString("yyyy-MM-dd")</Template>
+                <RadzenDataGridColumn Title="@PeriodTitle" Property="@nameof(Row.SortKey)" SortOrder="SortOrder.Descending">
+                    <Template>@context.Period</Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn Title="Ingested" Property="@nameof(Row.IngestedGb)" TextAlign="TextAlign.Right">
                     <Template>@context.IngestedGb.ToString("N2") GB</Template>
@@ -93,7 +100,7 @@ else
                     <Template>
                         @if (context.GapDuration.HasValue)
                         {
-                            <span title="@(context.ResumeUtc.HasValue ? $"Data resumed at {context.ResumeUtc:HH:mm} UTC" : "Capped (no resume in range)")">
+                            <span title="@context.GapTooltip">
                                 <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="@FormatGap(context.GapDuration.Value)" />
                             </span>
                         }
@@ -125,6 +132,10 @@ else
     private CancellationTokenSource _cts;
     private bool _loading;
     private int _days = 30;
+    private CapTimeline _timeline;
+    private Grouping _grouping = Grouping.Day;
+
+    public enum Grouping { Day, Cycle }
 
     [Parameter]
     public IApplicationInsightsContext Context { get; set; }
@@ -146,6 +157,8 @@ else
         : _capGb.HasValue ? $"{_capGb.Value:N0} GB (configured)" : "unknown";
 
     private string ResetLabel => _capResetUtc.HasValue ? _capResetUtc.Value.ToString(@"hh\:mm") + " UTC" : "not detected";
+
+    private string PeriodTitle => _grouping == Grouping.Cycle ? "Cap cycle (UTC)" : "Day (UTC)";
 
     private static string FormatGap(TimeSpan gap) => $"{(int)gap.TotalHours:D2}:{gap.Minutes:D2}";
 
@@ -200,35 +213,13 @@ else
 
         try
         {
-            var timeline = await _ais.GetCapTimelineAsync(ctx, _days, token);
+            _timeline = await _ais.GetCapTimelineAsync(ctx, _days, token);
             if (token.IsCancellationRequested) return;
 
-            _capGb = timeline.CapGb;
-            _derivedCapGb = timeline.DerivedCapGb;
-            _capResetUtc = timeline.CapResetUtc;
-            Model = timeline.Days
-                .OrderBy(d => d.DateUtc)
-                .Select(d => new Row(
-                    d.DateUtc,
-                    d.DateUtc.ToString("MM-dd"),
-                    d.IngestedGb,
-                    (_derivedCapGb ?? timeline.CapGb) ?? 0,
-                    d.ResumeUtc,
-                    d.GapDuration,
-                    d.EstimatedUncappedGb))
-                .ToArray();
-
-            // Filtered, non-nullable points for the est-uncapped marker series — keeps nulls out of
-            // the Radzen series (the chart tooltip lambda can't handle a null value).
-            _uncappedPoints = Model
-                .Where(r => r.EstUncappedGb.HasValue)
-                .Select(r => new UncappedPoint(r.DateLabel, r.EstUncappedGb.Value))
-                .ToArray();
-
-            _hitDays = Model.Count(r => r.GapDuration.HasValue);
-            _estLostGb = Model
-                .Where(r => r.EstUncappedGb.HasValue)
-                .Sum(r => Math.Max(0, r.EstUncappedGb.Value - r.IngestedGb));
+            _capGb = _timeline.CapGb;
+            _derivedCapGb = _timeline.DerivedCapGb;
+            _capResetUtc = _timeline.CapResetUtc;
+            Rebuild();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -243,6 +234,63 @@ else
         }
     }
 
+    // Map the cached timeline into chart/grid rows for the selected grouping — no re-query needed when
+    // the user toggles "Break by".
+    private void Rebuild()
+    {
+        if (_timeline == null) { Model = []; _uncappedPoints = []; return; }
+
+        var capLine = (_derivedCapGb ?? _capGb) ?? 0;
+
+        Model = _grouping == Grouping.Cycle
+            ? _timeline.Cycles
+                .OrderBy(c => c.StartUtc)
+                .Select(c => new Row(
+                    c.StartUtc.ToString("MM-dd"),
+                    c.StartUtc.ToString("yyyy-MM-dd HH:mm"),
+                    c.StartUtc,
+                    c.IngestedGb,
+                    capLine,
+                    c.CappedDuration,
+                    c.EstimatedUncappedGb,
+                    c.CapHitUtc.HasValue ? $"Cap hit at {c.CapHitUtc:HH:mm} UTC; quota resets {c.EndUtc:HH:mm} ({c.EndUtc:MM-dd})" : null))
+                .ToArray()
+            : _timeline.Days
+                .OrderBy(d => d.DateUtc)
+                .Select(d => new Row(
+                    d.DateUtc.ToString("MM-dd"),
+                    d.DateUtc.ToString("yyyy-MM-dd"),
+                    d.DateUtc,
+                    d.IngestedGb,
+                    capLine,
+                    d.GapDuration,
+                    d.EstimatedUncappedGb,
+                    DayGapTooltip(d)))
+                .ToArray();
+
+        _uncappedPoints = Model
+            .Where(r => r.EstUncappedGb.HasValue)
+            .Select(r => new UncappedPoint(r.Label, r.EstUncappedGb.Value))
+            .ToArray();
+
+        _hitDays = Model.Count(r => r.GapDuration.HasValue);
+        _estLostGb = Model
+            .Where(r => r.EstUncappedGb.HasValue)
+            .Sum(r => Math.Max(0, r.EstUncappedGb.Value - r.IngestedGb));
+
+        StateHasChanged();
+    }
+
+    // "Capped 00:00–12:00, 22:24–24:00 UTC" — shows the resume (end of a carry-over gap) and any re-cap.
+    private static string DayGapTooltip(CapDay d)
+    {
+        if (d.CappedIntervals.Count == 0) return null;
+        var dayEnd = d.DateUtc.AddDays(1);
+        var parts = d.CappedIntervals.Select(iv =>
+            $"{iv.StartUtc:HH:mm}–{(iv.EndUtc >= dayEnd ? "24:00" : iv.EndUtc.ToString("HH:mm"))}");
+        return "Capped " + string.Join(", ", parts) + " UTC";
+    }
+
     public void Dispose()
     {
         if (_selector != null) _selector.OnChanged -= OnSelectorChanged;
@@ -250,17 +298,14 @@ else
         _cts?.Dispose();
     }
 
-    // HitSortKey lets the "Cap hit" column sort chronologically (DateTime.MaxValue floats no-hit days
-    // to the end) while the cell itself renders just the HH:mm badge. CapLine is the (non-nullable)
-    // cap value repeated on every row so the reference-line series never sees a null; EstUncappedGb
-    // stays nullable for the grid ("—" on non-hit days) but is fed to the chart only via the filtered
-    // _uncappedPoints set.
-    private sealed record Row(DateTime DateUtc, string DateLabel, double IngestedGb, double CapLine, DateTime? ResumeUtc, TimeSpan? GapDuration, double? EstUncappedGb)
+    // Label = short chart x-label; Period = full grid display; SortKey = chronological sort. CapLine is the
+    // (non-nullable) cap value repeated on every row so the reference-line series never sees a null.
+    private sealed record Row(string Label, string Period, DateTime SortKey, double IngestedGb, double CapLine, TimeSpan? GapDuration, double? EstUncappedGb, string GapTooltip)
     {
         public double GapHours => GapDuration?.TotalHours ?? 0;
     }
 
-    /// <summary>Hit-day-only point for the est-uncapped marker series — non-nullable value so the
+    /// <summary>Capped-row-only point for the est-uncapped marker series — non-nullable value so the
     /// Radzen chart tooltip never dereferences a null.</summary>
-    private sealed record UncappedPoint(string DateLabel, double EstUncappedGb);
+    private sealed record UncappedPoint(string Label, double EstUncappedGb);
 }
