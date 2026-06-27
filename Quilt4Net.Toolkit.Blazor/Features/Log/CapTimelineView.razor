@@ -65,19 +65,15 @@ else
                         Text="@($"Estimated volume lost to the cap over this range: {_estLostGb:N1} GB (sum of est. uncapped − ingested on capped days).")" />
         }
 
+        @* Ingested (bottom) + the estimated capped-away volume (top) stacked, so the full bar height is
+           the estimated uncapped volume. The capped-away segment is 0 (invisible) on uncapped rows. *@
         <RadzenChart>
-            <RadzenColumnSeries Data="@Model" CategoryProperty="Label" ValueProperty="IngestedGb" Title="Ingested" />
+            <RadzenStackedColumnSeries Data="@Model" CategoryProperty="Label" ValueProperty="IngestedGb" Title="Ingested" />
+            <RadzenStackedColumnSeries Data="@Model" CategoryProperty="Label" ValueProperty="ExtraGb" Title="Capped away (est.)" />
             @if (EffectiveCapGb.HasValue)
             {
                 @* Constant value on every row → renders as a horizontal reference line at the cap. *@
                 <RadzenLineSeries Data="@Model" CategoryProperty="Label" ValueProperty="CapLine" Title="Daily cap" LineType="LineType.Dashed" />
-            }
-            @if (_uncappedPoints.Length > 0)
-            {
-                @* Filtered to capped rows with a non-nullable value so the chart tooltip never sees a null. *@
-                <RadzenLineSeries Data="@_uncappedPoints" CategoryProperty="Label" ValueProperty="EstUncappedGb" Title="Est. uncapped" Smooth="false">
-                    <RadzenMarkers MarkerType="MarkerType.Diamond" />
-                </RadzenLineSeries>
             }
             <RadzenCategoryAxis>
                 <RadzenAxisTitle Text="@PeriodTitle" />
@@ -120,7 +116,6 @@ else
 
 @code {
     private Row[] Model { get; set; }
-    private UncappedPoint[] _uncappedPoints = [];
     private double? _capGb;
     private double? _derivedCapGb;
     private TimeSpan? _capResetUtc;
@@ -208,7 +203,6 @@ else
 
         _loading = true;
         Model = null;
-        _uncappedPoints = [];
         StateHasChanged();
 
         try
@@ -238,7 +232,7 @@ else
     // the user toggles "Break by".
     private void Rebuild()
     {
-        if (_timeline == null) { Model = []; _uncappedPoints = []; return; }
+        if (_timeline == null) { Model = []; return; }
 
         var capLine = (_derivedCapGb ?? _capGb) ?? 0;
 
@@ -268,11 +262,6 @@ else
                     DayGapTooltip(d)))
                 .ToArray();
 
-        _uncappedPoints = Model
-            .Where(r => r.EstUncappedGb.HasValue)
-            .Select(r => new UncappedPoint(r.Label, r.EstUncappedGb.Value))
-            .ToArray();
-
         _hitDays = Model.Count(r => r.GapDuration.HasValue);
         _estLostGb = Model
             .Where(r => r.EstUncappedGb.HasValue)
@@ -300,12 +289,11 @@ else
 
     // Label = short chart x-label; Period = full grid display; SortKey = chronological sort. CapLine is the
     // (non-nullable) cap value repeated on every row so the reference-line series never sees a null.
+    // ExtraGb is the est. capped-away volume (uncapped − ingested), stacked on top of the Ingested bar;
+    // 0 on uncapped rows so its column segment is invisible.
     private sealed record Row(string Label, string Period, DateTime SortKey, double IngestedGb, double CapLine, TimeSpan? GapDuration, double? EstUncappedGb, string GapTooltip)
     {
         public double GapHours => GapDuration?.TotalHours ?? 0;
+        public double ExtraGb => EstUncappedGb.HasValue ? Math.Max(0, EstUncappedGb.Value - IngestedGb) : 0;
     }
-
-    /// <summary>Capped-row-only point for the est-uncapped marker series — non-nullable value so the
-    /// Radzen chart tooltip never dereferences a null.</summary>
-    private sealed record UncappedPoint(string Label, double EstUncappedGb);
 }
