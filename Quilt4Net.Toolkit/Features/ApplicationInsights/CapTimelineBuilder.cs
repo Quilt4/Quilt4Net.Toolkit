@@ -102,19 +102,32 @@ public static class CapTimelineBuilder
         };
     }
 
-    // One row per quota cycle (reset → next reset): at most one cap hit, a single clean capped span.
+    // One row per quota cycle (reset → next reset) for *every* day with data — not just capped days.
+    // The "daily limit reset" event only fires after a cap, so we anchor cycles to every cycle-start
+    // that has billable volume (plus any reset boundary), giving a continuous timeline. A cycle has at
+    // most one cap hit and a single clean capped span (hit → next reset).
     private static IReadOnlyList<CapCycle> BuildCycles(
         List<DateTime> sortedStops,
         List<DateTime> sortedResets,
         IReadOnlyDictionary<DateTime, double> cycleGbByStart,
         DateTime windowEndUtc)
     {
+        var starts = new SortedSet<DateTime>();
+        if (cycleGbByStart != null)
+            foreach (var k in cycleGbByStart.Keys) starts.Add(k);
+        foreach (var r in sortedResets) starts.Add(r);
+        if (starts.Count == 0) return [];
+
+        var startList = starts.ToList();
         var cycles = new List<CapCycle>();
-        for (var i = 0; i < sortedResets.Count; i++)
+        for (var i = 0; i < startList.Count; i++)
         {
-            var start = sortedResets[i];
-            var end = i + 1 < sortedResets.Count ? sortedResets[i + 1] : windowEndUtc;
-            if (end <= start) continue;
+            var start = startList[i];
+            // Cycle ends at the next cycle start, or one day on (clamped to the window) for the last.
+            var end = i + 1 < startList.Count
+                ? startList[i + 1]
+                : (start.AddDays(1) < windowEndUtc ? start.AddDays(1) : windowEndUtc);
+            if (end <= start) end = start.AddDays(1);
 
             var hit = sortedStops.Where(s => s >= start && s < end).Select(s => (DateTime?)s).FirstOrDefault();
             var ingested = LookupCycleGb(cycleGbByStart, start);

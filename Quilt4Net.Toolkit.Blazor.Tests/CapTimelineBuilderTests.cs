@@ -38,23 +38,32 @@ public class CapTimelineBuilderTests
     }
 
     [Fact]
-    public void Build_Cycles_OneRowPerResetCycle_WithCleanCappedSpan()
+    public void Build_Cycles_OneRowPerDay_IncludingUncappedDays()
     {
-        var stops = new List<DateTime> { Day1.AddHours(22), Day1.AddDays(1).AddHours(20) };
-        var resets = new List<DateTime> { Day1.AddHours(12), Day1.AddDays(1).AddHours(12), Day1.AddDays(2).AddHours(12) };
-        var cycleGb = new Dictionary<DateTime, double> { [Day1.AddHours(12)] = 10.5, [Day1.AddDays(1).AddHours(12)] = 10.4 };
+        // Cap hit only on day1. Resets fire only after a cap (day1 + day2), but every day has volume.
+        var stops = new List<DateTime> { Day1.AddHours(22) };
+        var resets = new List<DateTime> { Day1.AddHours(12), Day1.AddDays(1).AddHours(12) };
+        var cycleGb = new Dictionary<DateTime, double>
+        {
+            [Day1.AddHours(12)] = 10.5, [Day1.AddDays(1).AddHours(12)] = 10.4, [Day1.AddDays(2).AddHours(12)] = 3,
+        };
 
         var timeline = CapTimelineBuilder.Build([.. stops], [.. resets], new Dictionary<DateTime, double>(),
-            measuredCapGb: 10, configuredCapGb: null, windowStartUtc: Day1, windowEndUtc: Day1.AddDays(2).AddHours(12),
+            measuredCapGb: 10, configuredCapGb: null, windowStartUtc: Day1, windowEndUtc: Day1.AddDays(3).AddHours(12),
             cycleGbByStart: cycleGb);
 
-        timeline.Cycles.Should().HaveCount(2);
+        // Every day with volume gets a cycle, capped or not.
+        timeline.Cycles.Should().HaveCount(3);
 
-        var firstCycle = timeline.Cycles.Single(c => c.StartUtc == Day1.AddHours(12));
-        firstCycle.CapHitUtc.Should().Be(Day1.AddHours(22));
-        firstCycle.CappedDuration.Should().Be(TimeSpan.FromHours(14));   // 22:00 → next reset 12:00
-        firstCycle.IngestedGb.Should().Be(10.5);                          // looked up from cycleGbByStart
-        firstCycle.EndUtc.Should().Be(Day1.AddDays(1).AddHours(12));
+        var capped = timeline.Cycles.Single(c => c.StartUtc == Day1.AddHours(12));
+        capped.CapHitUtc.Should().Be(Day1.AddHours(22));
+        capped.CappedDuration.Should().Be(TimeSpan.FromHours(14));        // 22:00 → next reset 12:00
+        capped.IngestedGb.Should().Be(10.5);
+
+        var uncapped = timeline.Cycles.Single(c => c.StartUtc == Day1.AddDays(2).AddHours(12));
+        uncapped.CapHitUtc.Should().BeNull();
+        uncapped.CappedDuration.Should().BeNull();
+        uncapped.IngestedGb.Should().Be(3);
     }
 
     [Fact]
