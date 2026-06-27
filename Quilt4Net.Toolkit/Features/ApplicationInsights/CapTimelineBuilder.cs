@@ -4,113 +4,94 @@ using System.Linq;
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
-/// <summary>One hour of billable ingestion volume (MB). Input to <see cref="CapTimelineBuilder"/>.</summary>
-public record HourVolume
-{
-    public required DateTime HourUtc { get; init; }
-    public required double Mb { get; init; }
-}
-
 /// <summary>
-/// Builds a <see cref="CapTimeline"/> from an hourly billable-volume series by detecting gaps (capped
-/// periods) in ingestion. A daily cap stops data until the workspace's (variable) reset time, so a cap
-/// shows up as a run of hours with no billable volume; the hour data resumes is the reset time. Pure and
-/// deterministic — unit-testable without Azure.
+/// Builds a <see cref="CapTimeline"/> from the workspace's authoritative daily-cap Operation events:
+/// "data collection stopped due to daily limit" (cap hit) and "data collection started … daily limit
+/// reset" (reset/resume). Collection is off between a stop and the next reset; per-UTC-day capped time
+/// is the overlap of those intervals with the day, and the reset time is taken from the reset events
+/// (precise, unlike the ~1h-lagged Usage table). Pure and deterministic — unit-testable without Azure.
 /// </summary>
 public static class CapTimelineBuilder
 {
-    /// <param name="hours">Hourly billable volume (MB), ascending and continuous (missing hours filled with 0).</param>
+    /// <param name="stops">Cap-hit event times (UTC).</param>
+    /// <param name="resets">Daily-reset event times (UTC) — when collection resumed.</param>
+    /// <param name="dailyGb">Billed volume per UTC day (GB).</param>
+    /// <param name="measuredCapGb">Cap size measured from a full reset cycle (GB), already rounded; or null.</param>
     /// <param name="configuredCapGb">Configured daily cap (GB) from the quota event, if known.</param>
-    public static CapTimeline Build(IReadOnlyList<HourVolume> hours, double? configuredCapGb)
+    /// <param name="windowStartUtc">Start of the analysed window (used to close an open trailing cap).</param>
+    /// <param name="windowEndUtc">End of the analysed window (used to close an open trailing cap).</param>
+    public static CapTimeline Build(
+        IReadOnlyList<DateTime> stops,
+        IReadOnlyList<DateTime> resets,
+        IReadOnlyDictionary<DateTime, double> dailyGb,
+        double? measuredCapGb,
+        double? configuredCapGb,
+        DateTime windowStartUtc,
+        DateTime windowEndUtc)
     {
-        var n = hours?.Count ?? 0;
-        var capped = new bool[n];
+        stops ??= [];
+        resets ??= [];
+        dailyGb ??= new Dictionary<DateTime, double>();
 
-        if (n == 0)
-            return new CapTimeline { CapGb = configuredCapGb, Days = [] };
+        var sortedResets = resets.OrderBy(r => r).ToList();
 
-        // Only count *bounded* no-data runs (data before and after) as caps — that excludes the
-        // leading edge before the workspace had any data and the trailing edge (billing lag / an
-        // in-progress cap we can't yet measure because data hasn't resumed).
-        var firstData = -1;
-        var lastData = -1;
-        for (var i = 0; i < n; i++)
+        // Capped intervals: collection is off from each stop until the next reset (or the window end).
+        var intervals = new List<(DateTime Start, DateTime End)>();
+        foreach (var stop in stops.OrderBy(s => s))
         {
-            if (hours[i].Mb > 0)
-            {
-                if (firstData < 0) firstData = i;
-                lastData = i;
-            }
+            var nextReset = sortedResets.FirstOrDefault(r => r > stop);
+            var end = nextReset != default ? nextReset : windowEndUtc;
+            if (end > stop) intervals.Add((stop, end));
         }
 
-        if (firstData >= 0)
-            for (var i = firstData; i <= lastData; i++)
-                if (hours[i].Mb <= 0)
-                    capped[i] = true;
-
-        // Resume times = the hour data restarts right after a capped run.
-        var resumeTimes = new List<DateTime>();
-        for (var i = 1; i < n; i++)
-            if (capped[i - 1] && !capped[i])
-                resumeTimes.Add(hours[i].HourUtc);
-
-        // Detected reset = the most common resume time-of-day across the range.
-        TimeSpan? resetUtc = resumeTimes.Count > 0
-            ? resumeTimes.GroupBy(t => t.TimeOfDay).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key
+        // Reset time-of-day = the most common reset-event hour.
+        TimeSpan? resetUtc = resets.Count > 0
+            ? resets.GroupBy(r => TimeSpan.FromHours(Math.Round(r.TimeOfDay.TotalHours)))
+                    .OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key
             : null;
 
-        // Derived cap size = the largest billable volume across complete reset→next-cap cycles (the quota
-        // the cap permits before it stops ingestion).
-        double? derivedCapGb = null;
-        for (var i = 1; i < n; i++)
+        // Days to render: union of days with volume and days touched by a capped interval.
+        var days = new HashSet<DateTime>(dailyGb.Keys.Select(d => d.Date));
+        foreach (var (s, e) in intervals)
+            for (var d = s.Date; d <= e.Date; d = d.AddDays(1))
+                days.Add(d);
+
+        var capDays = days.OrderByDescending(d => d).Select(day =>
         {
-            if (!(capped[i - 1] && !capped[i])) continue; // resume at i
-            double mb = 0;
-            var j = i;
-            while (j < n && !capped[j]) { mb += hours[j].Mb; j++; }
-            if (j < n && capped[j]) // a complete cycle, ended by a new cap
+            var dayStart = day;
+            var dayEnd = day.AddDays(1);
+
+            var cappedSpan = intervals.Aggregate(TimeSpan.Zero, (acc, iv) =>
             {
-                var gb = mb / 1024.0;
-                derivedCapGb = derivedCapGb.HasValue ? Math.Max(derivedCapGb.Value, gb) : gb;
-            }
-        }
+                var os = iv.Start > dayStart ? iv.Start : dayStart;
+                var oe = iv.End < dayEnd ? iv.End : dayEnd;
+                return oe > os ? acc + (oe - os) : acc;
+            });
 
-        // Per-UTC-day aggregation.
-        var days = hours
-            .Select((h, i) => (h, i))
-            .GroupBy(x => x.h.HourUtc.Date)
-            .OrderByDescending(g => g.Key)
-            .Select(g =>
+            var ingested = dailyGb.GetValueOrDefault(day);
+            DateTime? resume = sortedResets.Where(r => r >= dayStart && r < dayEnd).Select(r => (DateTime?)r).FirstOrDefault();
+
+            double? est = null;
+            var cappedHours = cappedSpan.TotalHours;
+            if (cappedHours > 0 && cappedHours < 24)
+                est = ingested * 24.0 / (24 - cappedHours);
+
+            return new CapDay
             {
-                var idxs = g.Select(x => x.i).ToArray();
-                var ingestedGb = idxs.Sum(i => hours[i].Mb) / 1024.0;
-                var cappedHours = idxs.Count(i => capped[i]);
-
-                DateTime? resume = null;
-                foreach (var i in idxs)
-                    if (i > 0 && capped[i - 1] && !capped[i]) { resume = hours[i].HourUtc; break; }
-
-                double? est = cappedHours is > 0 and < 24
-                    ? ingestedGb * 24.0 / (24 - cappedHours)
-                    : null;
-
-                return new CapDay
-                {
-                    DateUtc = g.Key,
-                    IngestedGb = ingestedGb,
-                    GapDuration = cappedHours > 0 ? TimeSpan.FromHours(cappedHours) : null,
-                    ResumeUtc = resume,
-                    EstimatedUncappedGb = est,
-                };
-            })
-            .ToArray();
+                DateUtc = day,
+                IngestedGb = ingested,
+                GapDuration = cappedSpan > TimeSpan.Zero ? cappedSpan : null,
+                ResumeUtc = resume,
+                EstimatedUncappedGb = est,
+            };
+        }).ToArray();
 
         return new CapTimeline
         {
             CapGb = configuredCapGb,
-            DerivedCapGb = derivedCapGb,
+            DerivedCapGb = measuredCapGb,
             CapResetUtc = resetUtc,
-            Days = days,
+            Days = capDays,
         };
     }
 }
