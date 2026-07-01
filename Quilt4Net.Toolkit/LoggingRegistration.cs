@@ -101,6 +101,14 @@ public static class LoggingRegistration
                 // OpenTelemetry path: copy Exception.Data onto exception log records so an attached
                 // correlation id reaches customDimensions and becomes queryable.
                 if (o.EnrichExceptionData) b.AddProcessor(new Features.Logging.ExceptionDataLogProcessor());
+
+                // Copy ILogger scope values (e.g. the correlation id CorrelationIdMiddleware pushes)
+                // onto each record so they land in customDimensions. Requires scope capture, enabled
+                // via the options delegate below.
+                if (o.IncludeScopes) b.AddProcessor(new Features.Logging.ScopeAttributesLogProcessor());
+            }, otelLoggerOptions =>
+            {
+                if (o.IncludeScopes) otelLoggerOptions.IncludeScopes = true;
             })
             .WithTracing(b => b.AddProcessor(new Features.Logging.TelemetryIdentityActivityProcessor(identity)));
 

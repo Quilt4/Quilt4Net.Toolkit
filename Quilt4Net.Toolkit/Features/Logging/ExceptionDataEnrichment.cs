@@ -19,8 +19,35 @@ internal static class ExceptionDataEnricher
         foreach (var entry in exception.GetData())
         {
             if (string.IsNullOrEmpty(entry.Key) || entry.Value is null) continue;
-            yield return new KeyValuePair<string, string>(entry.Key, Convert.ToString(entry.Value, CultureInfo.InvariantCulture));
+            yield return new KeyValuePair<string, string>(entry.Key, ToInvariantString(entry.Value));
         }
+    }
+
+    public static string ToInvariantString(object value) => Convert.ToString(value, CultureInfo.InvariantCulture);
+}
+
+/// <summary>
+/// Appends string key/value pairs onto a <see cref="LogRecord"/> without overwriting attributes
+/// that are already present (identity attributes, exception data, or earlier scopes).
+/// </summary>
+internal static class LogRecordAttributes
+{
+    public static void AppendNew(LogRecord data, IEnumerable<KeyValuePair<string, string>> additions)
+    {
+        var existing = data.Attributes;
+        var list = new List<KeyValuePair<string, object>>(existing ?? []);
+        var keys = new HashSet<string>(list.Count);
+        foreach (var attribute in list) keys.Add(attribute.Key);
+
+        var appended = false;
+        foreach (var addition in additions)
+        {
+            if (!keys.Add(addition.Key)) continue;
+            list.Add(new KeyValuePair<string, object>(addition.Key, addition.Value));
+            appended = true;
+        }
+
+        if (appended) data.Attributes = list;
     }
 }
 
@@ -34,18 +61,35 @@ internal sealed class ExceptionDataLogProcessor : BaseProcessor<LogRecord>
     public override void OnEnd(LogRecord data)
     {
         if (data.Exception is null) return;
+        LogRecordAttributes.AppendNew(data, ExceptionDataEnricher.GetStringData(data.Exception));
+    }
+}
 
-        var existing = data.Attributes;
-        var list = new List<KeyValuePair<string, object>>(existing ?? []);
-        var keys = new HashSet<string>(list.Count);
-        foreach (var attribute in list) keys.Add(attribute.Key);
+/// <summary>
+/// Copies <see cref="Microsoft.Extensions.Logging.ILogger"/> scope values (captured when
+/// <see cref="Quilt4NetLoggingOptions.IncludeScopes"/> is enabled) onto the <see cref="LogRecord"/>
+/// attributes so scoped context — notably the <c>CorrelationId</c> pushed by
+/// <c>CorrelationIdMiddleware</c> — reaches <c>customDimensions</c>. The message template's
+/// <c>{OriginalFormat}</c> entry is skipped; existing attributes are never overwritten.
+/// </summary>
+internal sealed class ScopeAttributesLogProcessor : BaseProcessor<LogRecord>
+{
+    private const string OriginalFormatKey = "{OriginalFormat}";
 
-        foreach (var entry in ExceptionDataEnricher.GetStringData(data.Exception))
+    public override void OnEnd(LogRecord data)
+    {
+        var scopeValues = new List<KeyValuePair<string, string>>();
+
+        data.ForEachScope(static (scope, state) =>
         {
-            if (!keys.Add(entry.Key)) continue;
-            list.Add(new KeyValuePair<string, object>(entry.Key, entry.Value));
-        }
+            foreach (var pair in scope)
+            {
+                if (string.IsNullOrEmpty(pair.Key) || pair.Key == OriginalFormatKey || pair.Value is null) continue;
+                state.Add(new KeyValuePair<string, string>(pair.Key, ExceptionDataEnricher.ToInvariantString(pair.Value)));
+            }
+        }, scopeValues);
 
-        data.Attributes = list;
+        if (scopeValues.Count == 0) return;
+        LogRecordAttributes.AppendNew(data, scopeValues);
     }
 }

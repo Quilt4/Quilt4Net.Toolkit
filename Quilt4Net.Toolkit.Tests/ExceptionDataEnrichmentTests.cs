@@ -108,6 +108,84 @@ public class ExceptionDataEnrichmentTests
         attributes.Should().NotContain(kv => kv.Key == "CorrelationId");
     }
 
+    [Fact]
+    public void IncludeScopes_defaults_to_off()
+    {
+        new Quilt4NetLoggingOptions().IncludeScopes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ScopeProcessor_copies_dictionary_scope_values_onto_record_attributes()
+    {
+        var attributes = EnrichScopes(
+            logger => logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = "scope-guid" }),
+            log: logger => logger.LogInformation("hi"));
+
+        attributes.Should().Contain(kv => kv.Key == "CorrelationId" && kv.Value!.Equals("scope-guid"));
+    }
+
+    [Fact]
+    public void ScopeProcessor_captures_named_values_from_a_message_template_scope()
+    {
+        var attributes = EnrichScopes(
+            logger => logger.BeginScope("Order {OrderId}", 7),
+            log: logger => logger.LogInformation("hi"));
+
+        attributes.Should().Contain(kv => kv.Key == "OrderId" && kv.Value!.Equals("7"));
+    }
+
+    [Fact]
+    public void AddQuilt4NetLogging_wires_scope_capture_when_IncludeScopes_is_true()
+    {
+        var attributes = ScopesViaRegistration(includeScopes: true);
+
+        attributes.Should().Contain(kv => kv.Key == "CorrelationId" && kv.Value!.Equals("wired-scope"));
+    }
+
+    [Fact]
+    public void AddQuilt4NetLogging_does_not_wire_scope_capture_by_default()
+    {
+        var attributes = ScopesViaRegistration(includeScopes: null);
+
+        attributes.Should().NotContain(kv => kv.Key == "CorrelationId");
+    }
+
+    private static List<KeyValuePair<string, object>> EnrichScopes(System.Func<ILogger, System.IDisposable> beginScope, System.Action<ILogger> log)
+    {
+        List<KeyValuePair<string, object>> captured = null;
+        using var loggerFactory = LoggerFactory.Create(b => b.AddOpenTelemetry(o =>
+        {
+            o.IncludeScopes = true;
+            o.AddProcessor(new ScopeAttributesLogProcessor());
+            o.AddProcessor(new CaptureProcessor(r => captured = r.Attributes?.ToList() ?? new List<KeyValuePair<string, object>>()));
+        }));
+
+        var logger = loggerFactory.CreateLogger("test");
+        using (beginScope(logger)) log(logger);
+        return captured;
+    }
+
+    private static List<KeyValuePair<string, object>> ScopesViaRegistration(bool? includeScopes)
+    {
+        List<KeyValuePair<string, object>> captured = null;
+        var services = new ServiceCollection();
+        services.AddQuilt4NetLogging(options: o =>
+        {
+            o.ApplicationName = "test-app";
+            if (includeScopes.HasValue) o.IncludeScopes = includeScopes.Value;
+        });
+        services.AddOpenTelemetry().WithLogging(b =>
+            b.AddProcessor(new CaptureProcessor(r => captured = r.Attributes?.ToList() ?? new List<KeyValuePair<string, object>>())));
+
+        using var provider = services.BuildServiceProvider();
+        var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("test");
+        using (logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = "wired-scope" }))
+        {
+            logger.LogInformation("hi");
+        }
+        return captured;
+    }
+
     private static List<KeyValuePair<string, object>> Enrich(System.Exception exception, IList<KeyValuePair<string, object>> seedAttributes = null)
     {
         List<KeyValuePair<string, object>> captured = null;

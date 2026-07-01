@@ -28,10 +28,11 @@ public class CorrelationIdMiddleware
         context.Items[CorrelationConstants.ItemKey] = correlationId;
 
         // Push CorrelationId into a logging scope so every ILogger call made during this
-        // request inherits it as a structured property. The Azure Monitor exporter then
-        // writes customDimensions["CorrelationId"] on every AppTrace / AppException for
-        // the duration of the request — letting the same correlation id span the inbound
-        // request, any work it triggers, and the outgoing response.
+        // request inherits it as a structured property. Scope values only reach
+        // customDimensions when scope capture is enabled, so this id lands on every
+        // AppTrace / AppException for the request when the app opts in via
+        // AddQuilt4NetLogging(o => o.IncludeScopes = true) — letting the same correlation id
+        // span the inbound request, any work it triggers, and the outgoing response.
         using (_logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
         {
             await _next(context);

@@ -67,4 +67,15 @@ public record Quilt4NetLoggingOptions
     /// <c>ExceptionTelemetry</c>). Set to <c>false</c> to opt out.
     /// </summary>
     public bool EnrichExceptionData { get; set; } = true;
+
+    /// <summary>
+    /// When <c>true</c>, values from <see cref="Microsoft.Extensions.Logging.ILogger"/> scopes
+    /// (e.g. <c>logger.BeginScope(...)</c>) are captured and copied onto each log record so they
+    /// surface under <c>customDimensions</c> in Application Insights. This is what makes the
+    /// <c>CorrelationId</c> that <c>CorrelationIdMiddleware</c> pushes as a scope actually
+    /// queryable on every <c>AppTrace</c> / <c>AppException</c> raised during the request.
+    /// Default is <c>false</c> (opt-in) because scope capture increases telemetry volume; enable it
+    /// deliberately with <c>AddQuilt4NetLogging(o =&gt; o.IncludeScopes = true)</c>.
+    /// </summary>
+    public bool IncludeScopes { get; set; }
 }
