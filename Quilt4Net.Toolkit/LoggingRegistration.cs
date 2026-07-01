@@ -94,7 +94,14 @@ public static class LoggingRegistration
             // exporter (only the well-known service.* mappings → cloud_RoleName / AppVersion /
             // cloud_RoleInstance columns). The processors below copy the identity onto each
             // log record and span as per-record attributes so they land in customDimensions.
-            .WithLogging(b => b.AddProcessor(new Features.Logging.TelemetryIdentityLogProcessor(identity)))
+            .WithLogging(b =>
+            {
+                b.AddProcessor(new Features.Logging.TelemetryIdentityLogProcessor(identity));
+
+                // OpenTelemetry path: copy Exception.Data onto exception log records so an attached
+                // correlation id reaches customDimensions and becomes queryable.
+                if (o.EnrichExceptionData) b.AddProcessor(new Features.Logging.ExceptionDataLogProcessor());
+            })
             .WithTracing(b => b.AddProcessor(new Features.Logging.TelemetryIdentityActivityProcessor(identity)));
 
         return new Quilt4NetLoggingBuilder(services, o);

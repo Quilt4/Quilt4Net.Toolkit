@@ -55,4 +55,16 @@ public record Quilt4NetLoggingOptions
     /// </list>
     /// </summary>
     public string ServiceInstanceId { get; set; }
+
+    /// <summary>
+    /// When <c>true</c> (the default), a logged exception's <see cref="System.Exception.Data"/>
+    /// entries are copied onto the exception telemetry so they surface under
+    /// <c>customDimensions</c> in Application Insights. This makes an id attached to the exception
+    /// — e.g. <c>e.AddData("CorrelationId", guid)</c> — queryable, for example:
+    /// <code>AppExceptions | where tostring(customDimensions.CorrelationId) == "&lt;guid&gt;"</code>
+    /// Enrichment is applied to both the OpenTelemetry pipeline (via a log processor) and the
+    /// classic Application Insights SDK (via an <c>ITelemetryInitializer</c> on
+    /// <c>ExceptionTelemetry</c>). Set to <c>false</c> to opt out.
+    /// </summary>
+    public bool EnrichExceptionData { get; set; } = true;
 }
