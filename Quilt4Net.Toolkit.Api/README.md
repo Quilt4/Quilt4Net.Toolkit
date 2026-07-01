@@ -32,7 +32,16 @@ app.Run();
 
 1. Stored in `HttpContext.Items["CorrelationId"]` for inspection by downstream code.
 2. Returned in the response's `X-Correlation-ID` header — clients can chain the same id to subsequent requests for distributed tracing.
-3. **Pushed into a logging scope** (`Logger.BeginScope({ ["CorrelationId"] = id })`) for the duration of the request, so every `ILogger` call made while handling the request inherits the id as a structured property. The Azure Monitor exporter writes it to `customDimensions["CorrelationId"]` on every resulting `AppTrace` / `AppException` / `AppRequest` row.
+3. **Pushed into a logging scope** (`Logger.BeginScope({ ["CorrelationId"] = id })`) for the duration of the request, so every `ILogger` call made while handling the request inherits the id as a structured property.
+
+For the scoped id to reach `customDimensions["CorrelationId"]` on the resulting `AppTrace` / `AppException` / `AppRequest` rows, enable scope capture — scope values are not exported by default:
+
+```csharp
+builder.AddQuilt4NetLogging(o => o.IncludeScopes = true)
+    .AddHttpRequestLogging();
+```
+
+(See the base `Quilt4Net.Toolkit` README → "Exception data and log scopes".)
 
 KQL pattern for "show me everything from one call chain":
 
