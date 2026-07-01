@@ -1,9 +1,10 @@
 # Telemetry identity & correlation
 
-`AddQuilt4NetLogging()` does two things:
+`AddQuilt4NetLogging()`:
 
 1. Configures **OpenTelemetry resource attributes** so the Azure Monitor exporter populates the AI columns `cloud_RoleName`, `application_Version`, and `cloud_RoleInstance`.
-2. Registers **two `BaseProcessor`s** — one for `LogRecord`, one for `Activity` — that copy a five-attribute identity onto every per-record `Properties` bag at export time. The Azure Monitor exporter does *not* forward arbitrary OTel resource attributes to per-row Properties for log records, so without this step `customDimensions["deployment.environment"]` would always be empty.
+2. Registers `BaseProcessor`s — one for `LogRecord`, one for `Activity` — that copy a five-attribute identity onto every per-record `Properties` bag at export time. The Azure Monitor exporter does *not* forward arbitrary OTel resource attributes to per-row Properties for log records, so without this step `customDimensions["deployment.environment"]` would always be empty.
+3. Optionally enriches records with **exception data** and **log scopes** (see below) so a correlation id reaches `customDimensions`.
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -66,7 +67,14 @@ app.UseQuilt4NetLogging();
 2. Echoes it back as a response header.
 3. Pushes it into a logging scope (`Logger.BeginScope({ ["CorrelationId"] = id })`) for the duration of the request.
 
-Every `ILogger` call made while handling the request inherits the id as a structured property. The Azure Monitor exporter writes it to `customDimensions["CorrelationId"]` on every resulting `AppTrace` / `AppException` / `AppRequest`. KQL pattern:
+Every `ILogger` call made while handling the request inherits the id as a structured property. For that scoped id to reach `customDimensions["CorrelationId"]`, enable scope capture (scope values are not exported by default):
+
+```csharp
+builder.AddQuilt4NetLogging(o => o.IncludeScopes = true)
+    .AddHttpRequestLogging();
+```
+
+Then, on every resulting `AppTrace` / `AppException` / `AppRequest`:
 
 ```kql
 union AppTraces, AppExceptions, AppRequests
@@ -74,7 +82,27 @@ union AppTraces, AppExceptions, AppRequests
 | order by TimeGenerated asc
 ```
 
-A client that wants to chain calls just sends the same header to every server. Server code that wants to start a new chain can read `HttpContext.Items["CorrelationId"]` and forward it to outbound `HttpClient` calls.
+A client that wants to chain calls just sends the same header to every server. Server code that wants to start a new chain can read `HttpContext.Items["CorrelationId"]` and forward it to outbound `HttpClient` calls (see the Api README → `AddQuilt4NetCorrelationId`).
+
+## Exception data → customDimensions
+
+`EnrichExceptionData` (**on by default**) copies a logged exception's `Exception.Data` entries onto the exception telemetry, so an id attached to the exception is findable in AI:
+
+```csharp
+catch (Exception e)
+{
+    e.AddData("CorrelationId", correlationId);   // Quilt4Net.Toolkit.Features.Measure
+    logger.LogError(e, e.Message);
+}
+```
+
+```kql
+AppExceptions | where tostring(customDimensions.CorrelationId) == "<guid>"
+```
+
+Both enrichers run on the OpenTelemetry logging pipeline. Apps ingesting via the classic Application Insights SDK on AI 3.x must export logs through `Azure.Monitor.OpenTelemetry` to benefit — AI 3.x does not ingest `ILogger` telemetry through the classic pipeline.
+
+> This cross-hop `CorrelationId` is distinct from the user-facing 6-character `IncidentId` rendered in Log-view error messages.
 
 ## Demo endpoint
 

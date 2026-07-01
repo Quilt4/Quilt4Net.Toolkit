@@ -338,7 +338,42 @@ builder.AddQuilt4NetLogging()
     .AddHttpRequestLogging();
 ```
 
-When `Quilt4Net.Toolkit.Api`'s `CorrelationIdMiddleware` is active, every `ILogger` call inside a request also picks up `customDimensions["CorrelationId"]` automatically — see the Api package README.
+When `Quilt4Net.Toolkit.Api`'s `CorrelationIdMiddleware` is active, every `ILogger` call inside a request is scoped with the correlation id. That id reaches `customDimensions["CorrelationId"]` only when scope capture is enabled — set `IncludeScopes` (see below). See the Api package README.
+
+### Exception data and log scopes
+
+Two opt-in enrichers copy extra context onto the per-record `customDimensions`:
+
+| Option | Default | Effect |
+|---|---|---|
+| `EnrichExceptionData` | **on** | Copies a logged exception's `Exception.Data` entries onto the exception telemetry. An id attached with `e.AddData("CorrelationId", guid)` becomes queryable in AI. |
+| `IncludeScopes` | **off** | Captures `ILogger` scope values (e.g. the `CorrelationId` scope `CorrelationIdMiddleware` pushes) and copies them onto every record so they land in `customDimensions`. Opt-in because scope capture adds telemetry volume. |
+
+```csharp
+builder.AddQuilt4NetLogging(o =>
+{
+    o.IncludeScopes = true;      // scope values (incl. CorrelationId) → customDimensions
+    // o.EnrichExceptionData = false;  // to opt out of Exception.Data enrichment
+});
+```
+
+With `EnrichExceptionData` on, an exception carrying a correlation id is findable directly:
+
+```csharp
+catch (Exception e)
+{
+    e.AddData("CorrelationId", correlationId);   // Quilt4Net.Toolkit.Features.Measure
+    logger.LogError(e, e.Message);
+}
+```
+
+```kql
+AppExceptions | where tostring(customDimensions.CorrelationId) == "<guid>"
+```
+
+> This `CorrelationId` (an id that flows across service hops and into `customDimensions`) is distinct from the user-facing 6-character `IncidentId` shown in Log-view error messages.
+
+> Enrichment runs on the OpenTelemetry pipeline. Apps ingesting via the classic Application Insights SDK on AI 3.x must export logs through `Azure.Monitor.OpenTelemetry` to benefit — AI 3.x does not ingest `ILogger` telemetry through the classic pipeline.
 
 ### Distinguishing multiple deployments of the same binary
 

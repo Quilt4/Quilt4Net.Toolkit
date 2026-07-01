@@ -33,7 +33,9 @@ builder.AddQuilt4NetRemoteConfiguration();
 // Register the per-record telemetry-identity processors (env / app / version / host /
 // quilt4net.monitor) and the request middleware that mints / honors X-Correlation-ID.
 // AddHttpRequestLogging is the opt-in that enables the middleware via UseQuilt4NetLogging.
-builder.AddQuilt4NetLogging()
+// IncludeScopes is what carries the middleware's CorrelationId scope into customDimensions
+// (see the /api/correlation-demo endpoint below).
+builder.AddQuilt4NetLogging(o => o.IncludeScopes = true)
     .AddHttpRequestLogging();
 
 var app = builder.Build();
