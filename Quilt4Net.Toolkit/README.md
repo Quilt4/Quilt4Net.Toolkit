@@ -424,6 +424,10 @@ builder.Services.AddApplicationInsightsTelemetry(o => { o.ConnectionString = "..
 // 3. Then any custom ILoggerFactory wrapping.
 ```
 
+### Host and runtime metrics
+
+`AddQuilt4NetLogging()` covers telemetry identity, logs, and traces — it does **not** emit host or process **metrics**. Host metrics (CPU, memory, disk space, network) belong to an OpenTelemetry Collector; .NET runtime/process metrics are available via standard OpenTelemetry instrumentation you can wire up yourself. See the docs article [Host and runtime metrics](../docs/articles/telemetry-identity.md#host-and-runtime-metrics) for how.
+
 ## Measure extensions
 
 Extension methods on `ILogger` to measure and log execution time.

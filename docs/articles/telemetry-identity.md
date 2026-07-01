@@ -114,6 +114,25 @@ curl -i -H "X-Correlation-ID: my-test-1" https://localhost:7187/api/correlation-
 
 → three `AppTrace` rows in AI, all sharing `customDimensions["CorrelationId"] == "my-test-1"`.
 
+## Host and runtime metrics
+
+`AddQuilt4NetLogging()` sets up telemetry **identity, logs, and traces** — it deliberately does **not** emit host or process **metrics**. Two reasons:
+
+- **Host metrics** (CPU, memory, disk space, disk/network I/O, load average) belong to an **OpenTelemetry Collector** (`hostmetrics` receiver) or your platform's node monitoring — not an application library. An app reporting node-level disk space is both duplicative and misleading on a multi-tenant host.
+- **.NET runtime / process metrics** are already provided by **standard OpenTelemetry instrumentation** — no custom code in the toolkit is needed.
+
+If you want your app's runtime/process metrics in Application Insights, add the standard instrumentation to the metrics pipeline yourself:
+
+```csharp
+builder.Services.AddOpenTelemetry().WithMetrics(m => m
+    .AddRuntimeInstrumentation()      // GC, heap, thread-pool, JIT  (OpenTelemetry.Instrumentation.Runtime)
+    .AddProcessInstrumentation());    // process CPU + memory        (OpenTelemetry.Instrumentation.Process)
+```
+
+These land in the `AppMetrics` table (`customMetrics`). This **requires** exporting metrics via `Azure.Monitor.OpenTelemetry` — the classic Application Insights SDK on AI 3.x does not ingest them.
+
+For **host-level** metrics, run the OpenTelemetry Collector (`hostmetrics` + `kubeletstats`) into the same workspace. Its `system.*` metrics and the toolkit's identity attributes coexist in AI under the standard OpenTelemetry names, so a single query spans both.
+
 ## Where next
 
 - **[Log views](log-views.md)** — render and query the resulting telemetry.
