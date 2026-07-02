@@ -32,23 +32,22 @@ internal class ApplicationInsightsService : IApplicationInsightsService
 
     /// <summary>
     /// Canonical summarize clause for the <c>GetSummaries</c> queries. Buckets by
-    /// <c>Fingerprint</c> only and takes representative samples for the descriptive columns,
-    /// matching the post-fetch C# dedupe (one row per fingerprint, last-seen wins).
+    /// <c>(Fingerprint, Application)</c> so each application that produced a fingerprint gets its own
+    /// row with an application-scoped <c>Count</c>. The drill-down (<c>GetSummary</c>) is scoped the
+    /// same way, so the instance list matches the row's count instead of spanning every application.
     ///
-    /// Previously the summarize key was <c>(Fingerprint, Message, Environment, Application, SeverityLevel)</c>,
-    /// which split a single fingerprint into N rows whenever the message text varied (always, for
-    /// formatted trace logs) and could exceed Kusto's 64MB result-set limit. Aligning the server-side
-    /// grouping with what the UI actually shows shrinks the result set by orders of magnitude and
-    /// matches what <c>GetSummaries</c>'s C# layer was already enforcing post-fetch.
+    /// <c>Message</c> is intentionally kept OUT of the key: it varies per formatted trace line, so
+    /// including it split one fingerprint into N rows and could exceed Kusto's 64MB result-set limit.
+    /// <c>Application</c> is low-cardinality, so grouping by it is safe. <c>Environment</c> is already
+    /// filtered upstream to the selected value, so it stays a representative sample.
     /// </summary>
     internal const string SummarizeByFingerprint = @"| summarize
     Count = count(),
     LastTimeGenerated = max(TimeGenerated),
     Message = take_any(Message),
     Environment = take_any(Environment),
-    Application = take_any(Application),
     SeverityLevel = max(SeverityLevel)
-    by Fingerprint
+    by Fingerprint, Application
 | order by LastTimeGenerated desc";
 
     private static readonly LogsQueryOptions _probeOptions = new() { ServerTimeout = TimeSpan.FromSeconds(5) };
@@ -1051,18 +1050,28 @@ AppRequests
         };
     }
 
-    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems = 100)
+    public async Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems = 100, string application = null)
     {
         if (maxItems <= 0) throw new ArgumentOutOfRangeException(nameof(maxItems), "maxItems must be positive.");
 
-        var cacheKey = $"summary|{context.ToKey()}|{fingerprint}|{source}|{environment}|{timeSpan}|{maxItems}";
-        return await _timeToLiveCache.GetAsync(cacheKey, () => GetSummaryInternalAsync(context, fingerprint, source, environment, timeSpan, maxItems));
+        var cacheKey = $"summary|{context.ToKey()}|{fingerprint}|{source}|{environment}|{application}|{timeSpan}|{maxItems}";
+        return await _timeToLiveCache.GetAsync(cacheKey, () => GetSummaryInternalAsync(context, fingerprint, source, environment, timeSpan, maxItems, application));
     }
 
-    private async Task<SummaryData> GetSummaryInternalAsync(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems)
+    private async Task<SummaryData> GetSummaryInternalAsync(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems, string application)
     {
         var client = GetClient(context);
         var workspaceId = context?.WorkspaceId ?? _options.WorkspaceId;
+
+        // Scope the drill-down to the same (environment, application) the summary row was grouped by,
+        // so the instance list matches the row's count instead of spanning every app/environment that
+        // shares the fingerprint. Both optional: null/empty means "no filter".
+        static string EscapeKql(string v) => v.Replace("'", "''").Replace("\r", " ").Replace("\n", " ");
+        var scopeFilter = string.Empty;
+        if (!string.IsNullOrWhiteSpace(environment))
+            scopeFilter += $"\n| where isempty(Environment) or Environment =~ '{EscapeKql(environment.Trim())}'";
+        if (!string.IsNullOrWhiteSpace(application))
+            scopeFilter += $"\n| where Application =~ '{EscapeKql(application.Trim())}'";
 
         // Each branch builds a `_matched` set, computes _total = count() before take, then projects
         // the top maxItems with TotalCount attached as a column on every row. This lets the UI
@@ -1078,7 +1087,7 @@ let _matched = AppExceptions
     Environment = {EnvironmentProjection},
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     Id = _ItemId
-| where Fingerprint == ""{fingerprint}""
+| where Fingerprint == ""{fingerprint}""{scopeFilter}
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel;
 let _total = toscalar(_matched | count);
 _matched
@@ -1099,7 +1108,7 @@ let _matched = AppTraces
     FingerprintSource = iif(isempty(OriginalFormat), tostring(Message), OriginalFormat)
 | extend
     Fingerprint = base64_encode_tostring(tostring(hash(FingerprintSource)))
-| where Fingerprint == ""{fingerprint}""
+| where Fingerprint == ""{fingerprint}""{scopeFilter}
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel;
 let _total = toscalar(_matched | count);
 _matched
@@ -1117,7 +1126,7 @@ let _matched = AppRequests
     Application = coalesce(tostring(_p[""ApplicationName""]), tostring(AppRoleName)),
     SeverityLevel = iif(tobool(Success), 1, 3),
     Id = _ItemId
-| where Fingerprint == ""{fingerprint}""
+| where Fingerprint == ""{fingerprint}""{scopeFilter}
 | project Id, TimeGenerated, Message, Environment, Application, SeverityLevel;
 let _total = toscalar(_matched | count);
 _matched

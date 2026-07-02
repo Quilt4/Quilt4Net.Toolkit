@@ -42,8 +42,10 @@ public interface IApplicationInsightsService
     /// (default 100) — a fingerprint can match 100k+ rows over the lookback window, and
     /// returning all of them is what made detail/summary navigation hang. Items are ordered
     /// newest-first; only the top <paramref name="maxItems"/> are returned.
+    /// <paramref name="application"/> scopes the instances to a single application (matching the
+    /// summary row); null/empty means no application filter.
     /// </summary>
-    Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems = 100);
+    Task<SummaryData> GetSummary(IApplicationInsightsContext context, string fingerprint, LogSource source, string environment, TimeSpan timeSpan, int maxItems = 100, string application = null);
     IAsyncEnumerable<SummarySubset> GetSummaries(IApplicationInsightsContext context, string environment, TimeSpan timeSpan, CancellationToken cancellationToken = default);
 
     /// <summary>
