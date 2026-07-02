@@ -96,6 +96,9 @@ else
     public string Environment { get; set; }
 
     [Parameter]
+    public string Application { get; set; }
+
+    [Parameter]
     public TimeSpan? Range { get; set; }
 
     [Parameter]
@@ -117,7 +120,7 @@ else
 
         if (!Source.HasValue || !Range.HasValue) return;
 
-        Model = await _ais.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value);
+        Model = await _ais.GetSummary(Context, Fingerprint, Source.Value, Environment, Range.Value, application: Application);
 
         await base.OnParametersSetAsync();
     }

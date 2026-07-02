@@ -55,9 +55,8 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromSeconds(30);
             });
-            // Aggregation queries (measure, count, summary-list, single-fingerprint drilldown)
-            // — 1 minute is a reasonable fresh-reload cadence that still avoids re-running the
-            // same KQL on every page navigation.
+            // Aggregation queries (measure, count) — 1 minute is a reasonable fresh-reload cadence
+            // that still avoids re-running the same KQL on every page navigation.
             s.RegisterType<MeasureData[], IMemory>(x =>
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
@@ -66,13 +65,16 @@ public static class ApplicationInsightsRegistration
             {
                 x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
             });
+            // Summary list + single-fingerprint drilldown — 5 minutes: the underlying data changes
+            // slowly relative to how often operators navigate in/out of a summary, so a longer span
+            // cuts repeated KQL without feeling stale.
             s.RegisterType<SummaryData, IMemory>(x =>
             {
-                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(5);
             });
             s.RegisterType<SummarySubset[], IMemory>(x =>
             {
-                x.DefaultFreshSpan = TimeSpan.FromMinutes(1);
+                x.DefaultFreshSpan = TimeSpan.FromMinutes(5);
             });
             // Version matrix scans for the latest version per (app, env). Versions change rarely
             // (one deploy per environment per day at most) and the underlying KQL is expensive;
@@ -178,8 +180,8 @@ public static class ApplicationInsightsRegistration
             s.RegisterType<LogItem[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromSeconds(30); });
             s.RegisterType<MeasureData[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
             s.RegisterType<CountData[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
-            s.RegisterType<SummaryData, IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
-            s.RegisterType<SummarySubset[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(1); });
+            s.RegisterType<SummaryData, IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(5); });
+            s.RegisterType<SummarySubset[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(5); });
             s.RegisterType<VersionMatrixCell[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromHours(1); });
             s.RegisterType<MetricSample[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
             s.RegisterType<DiskCapacity[], IMemory>(x => { x.DefaultFreshSpan = TimeSpan.FromMinutes(10); });
