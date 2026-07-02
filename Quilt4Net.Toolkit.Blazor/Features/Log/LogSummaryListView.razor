@@ -24,7 +24,7 @@ else
             <RadzenDataGridColumn Title="Fingerprint" Width="60px" Sortable="false">
                 <Template>
                     <RadzenButton Icon="arrow_forward_ios" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                  Click="@(() => OpenSummaryAsync(context.Fingerprint, context.Source))" />
+                                  Click="@(() => OpenSummaryAsync(context.Fingerprint, context.Source, context.Application))" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="Last Time" Property="@nameof(SummarySubset.LastTimeGenerated)">
@@ -185,9 +185,9 @@ else
         return _aliasMap is { Count: > 0 } map ? map.GetValueOrDefault(raw, raw) : raw;
     }
 
-    private async Task OpenSummaryAsync(string fingerprint, LogSource source)
+    private async Task OpenSummaryAsync(string fingerprint, LogSource source, string application)
     {
-        var p = LogNavParams.From(Environment, Range, source, Context, "Detail");
+        var p = LogNavParams.From(Environment, Range, source, Context, "Detail", application: application);
         if (NavOptions?.SummaryPath != null)
         {
             NavigationManager.NavigateTo($"{NavOptions.SummaryPath}/{fingerprint}?p={p.Encode()}");
@@ -198,6 +198,7 @@ else
             {
                 { nameof(LogSummaryContent.Fingerprint), fingerprint },
                 { nameof(LogSummaryContent.Environment), Environment },
+                { nameof(LogSummaryContent.Application), application },
                 { nameof(LogSummaryContent.Range), (TimeSpan?)Range },
                 { nameof(LogSummaryContent.Source), (LogSource?)source },
                 { nameof(LogSummaryContent.Context), Context }
