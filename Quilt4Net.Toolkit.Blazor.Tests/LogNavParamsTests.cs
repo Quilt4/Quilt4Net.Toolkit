@@ -148,4 +148,16 @@ public class LogNavParamsTests
         // Assert
         decoded.Environment.Should().Be(original.Environment);
     }
+
+    [Fact]
+    public void Application_RoundTrips_Through_From_And_Encode_Decode()
+    {
+        // #126: the selected application must survive the navigation round-trip so the summary
+        // route scopes the drill-down to the same application the row represented.
+        var p = LogNavParams.From("Production", TimeSpan.FromDays(1), LogSource.Trace, null, "Detail", application: "Eplicta.Aggregator");
+        p.Application.Should().Be("Eplicta.Aggregator");
+
+        var decoded = LogNavParams.Decode(p.Encode());
+        decoded.Application.Should().Be("Eplicta.Aggregator");
+    }
 }
