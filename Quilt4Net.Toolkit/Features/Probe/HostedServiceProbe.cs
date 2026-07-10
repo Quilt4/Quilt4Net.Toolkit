@@ -10,9 +10,9 @@ internal class HostedServiceProbe<TComponent> : HostedServiceProbe, IHostedServi
     {
     }
 
-    public IHostedServiceProbe Register(TimeSpan? plannedInterval = null, bool autoMaxInterval = true)
+    public IHostedServiceProbe Register(TimeSpan? plannedInterval = null, bool autoMaxInterval = true, int pulseWindowSize = 100)
     {
-        return Register(Name, plannedInterval, autoMaxInterval);
+        return Register(Name, plannedInterval, autoMaxInterval, pulseWindowSize);
     }
 
     public override string Name => typeof(TComponent).Name;
@@ -20,8 +20,14 @@ internal class HostedServiceProbe<TComponent> : HostedServiceProbe, IHostedServi
 
 internal class HostedServiceProbe : IHostedServiceProbe
 {
-    private readonly List<long> _pulseTimes = new();
+    // Rolling window of the most recent pulse timestamps (ms since the stopwatch started).
+    // Bounded to _pulseWindowSize so memory and per-health-call cost stay constant regardless
+    // of process uptime or pulse frequency. See issue #130 (unbounded growth -> OutOfMemoryException).
+    private readonly Queue<long> _pulseTimes = new();
     private readonly Stopwatch _stopwatch = new();
+    private readonly object _gate = new();
+    private long _pulseCount;
+    private int _pulseWindowSize = 100;
     private bool _isFirstPulse = true;
     private string _name = "Unknown";
     private Exception _exception;
@@ -39,50 +45,95 @@ internal class HostedServiceProbe : IHostedServiceProbe
 
     public void Pulse()
     {
-        // Starta mätningen vid första anropet
-        if (_isFirstPulse)
+        lock (_gate)
         {
-            _stopwatch.Reset();
-            _stopwatch.Start();
-            _isFirstPulse = false;
+            // Start the measurement at the first pulse.
+            if (_isFirstPulse)
+            {
+                _stopwatch.Reset();
+                _stopwatch.Start();
+                _isFirstPulse = false;
+            }
+
+            // Record when this pulse happened and trim to the rolling window.
+            _pulseTimes.Enqueue(_stopwatch.ElapsedMilliseconds);
+            while (_pulseTimes.Count > _pulseWindowSize)
+            {
+                _pulseTimes.Dequeue();
+            }
+
+            // Total count is tracked separately so pulseCount stays meaningful without retaining data.
+            _pulseCount++;
+
+            //NOTE: Reset end/exception if restarted.
+            _ended = false;
+            _exception = null;
         }
-
-        // Logga tidpunkten för detta anrop
-        _pulseTimes.Add(_stopwatch.ElapsedMilliseconds);
-
-        //NOTE: Reset end/exception if restarted.
-        _ended = false;
-        _exception = null;
     }
 
-    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = null, bool autoMaxInterval = true)
+    public IHostedServiceProbe Register(string name, TimeSpan? plannedInterval = null, bool autoMaxInterval = true, int pulseWindowSize = 100)
     {
         _name = name;
         _plannedInterval = plannedInterval;
         _autoMaxInterval = autoMaxInterval;
+        lock (_gate)
+        {
+            // Need at least two timestamps to form an interval.
+            _pulseWindowSize = Math.Max(2, pulseWindowSize);
+            while (_pulseTimes.Count > _pulseWindowSize)
+            {
+                _pulseTimes.Dequeue();
+            }
+        }
         return this;
     }
 
     public void EndService(bool success)
     {
-        if (!success) _exception = new Exception("Unknown");
-        _ended = true;
+        lock (_gate)
+        {
+            if (!success) _exception = new Exception("Unknown");
+            _ended = true;
+        }
     }
 
     public void EndService(Exception exception)
     {
-        _exception = exception;
-        _ended = true;
+        lock (_gate)
+        {
+            _exception = exception;
+            _ended = true;
+        }
     }
 
     public HealthComponent GetHealth()
     {
-        if (_ended)
+        // Take a consistent snapshot under the lock, then compute outside it. The snapshot is
+        // bounded by _pulseWindowSize, so this allocates and enumerates a constant amount of work.
+        bool ended;
+        Exception exception;
+        long[] pulseTimes;
+        long totalPulseCount;
+        long nowElapsed;
+        TimeSpan? plannedInterval;
+        bool autoMaxInterval;
+        lock (_gate)
         {
-            var message = _exception == null ? "Ended successfully." : $"Ended with exception. {_exception.Message}";
+            ended = _ended;
+            exception = _exception;
+            pulseTimes = _pulseTimes.ToArray();
+            totalPulseCount = _pulseCount;
+            nowElapsed = _stopwatch.ElapsedMilliseconds;
+            plannedInterval = _plannedInterval;
+            autoMaxInterval = _autoMaxInterval;
+        }
+
+        if (ended)
+        {
+            var message = exception == null ? "Ended successfully." : $"Ended with exception. {exception.Message}";
             return new HealthComponent
             {
-                Status = _exception == null ? HealthStatus.Healthy : HealthStatus.Unhealthy,
+                Status = exception == null ? HealthStatus.Healthy : HealthStatus.Unhealthy,
                 Details = new Dictionary<string, string>
                 {
                     { "message", message }
@@ -90,78 +141,17 @@ internal class HostedServiceProbe : IHostedServiceProbe
             };
         }
 
-        if (_pulseTimes.Count < 2)
+        if (pulseTimes.Length < 2)
         {
-            return BuildPreHealthComponent();
+            var elapsed = nowElapsed - (pulseTimes.Length > 0 ? pulseTimes[^1] : 0);
+            return BuildPreHealthComponent(elapsed, plannedInterval);
         }
 
-        //// Beräkna tidsintervall mellan pulser
-        //List<long> intervals = new();
-        //for (var i = 1; i < _pulseTimes.Count; i++)
-        //{
-        //    intervals.Add(_pulseTimes[i] - _pulseTimes[i - 1]);
-        //}
-
-        //// Genomsnittligt intervall
-        //var averageInterval = intervals.Average();
-        //var averageFrequency = 1000 / averageInterval;
-        //var averagePulseInterval = TimeSpan.FromMilliseconds(averageInterval);
-
-        //// Stabilitetsfaktor (standardavvikelse)
-        //var variance = intervals.Select(interval => Math.Pow(interval - averageInterval, 2)).Average();
-        //var standardDeviation = Math.Sqrt(variance);
-
-        //// Analysera senaste data
-        //var lastInterval = intervals.Last();
-
-        //// Tid sedan senaste puls
-        //var elapsedSinceLastPulse = _stopwatch.ElapsedMilliseconds - _pulseTimes.Last();
-        //var lastPulse = TimeSpan.FromMilliseconds(elapsedSinceLastPulse);
-
-        //// Nästa förväntade puls
-        //var nextExpectedPuse = TimeSpan.FromMilliseconds(averageInterval - elapsedSinceLastPulse);
-
-        //// Bestäm status baserat på standardavvikelse och senaste intervallet
-        //HealthStatus state;
-        //string reason;
-
-        //if (lastInterval <= averageInterval + 2 * standardDeviation)
-        //{
-        //    state = HealthStatus.Healthy;
-        //    reason = "Pulse is occurring at expected intervals.";
-        //}
-        //else if (lastInterval <= averageInterval + 4 * standardDeviation)
-        //{
-        //    state = HealthStatus.Degraded;
-        //    reason = "Pulse frequency has slowed or become irregular.";
-        //}
-        //else
-        //{
-        //    state = HealthStatus.Unhealthy;
-        //    reason = "Pulse appears to have stopped.";
-        //}
-
-        //// Returnera status
-        //return new HealthComponent
-        //{
-        //    Status = state,
-        //    Details = new Dictionary<string, string>
-        //    {
-        //        { "message", reason },
-        //        { "averageFrequency", $"{averageFrequency}" },
-        //        { "averageInterval", $"{averagePulseInterval}" },
-        //        { "standardDeviation", $"{standardDeviation}" },
-        //        { "lastPulse", $"{lastPulse}" },
-        //        { "nextExpectedPuse", $"{nextExpectedPuse}" },
-        //        { "pulseCount", $"{_pulseTimes.Count}" },
-        //    }
-        //};
-
-        // Calculate intervals between pulses
-        List<long> intervals = new();
-        for (var i = 1; i < _pulseTimes.Count; i++)
+        // Calculate intervals between pulses (over the bounded window).
+        var intervals = new long[pulseTimes.Length - 1];
+        for (var i = 1; i < pulseTimes.Length; i++)
         {
-            intervals.Add(_pulseTimes[i] - _pulseTimes[i - 1]);
+            intervals[i - 1] = pulseTimes[i] - pulseTimes[i - 1];
         }
 
         var averageInterval = intervals.Average();
@@ -169,29 +159,27 @@ internal class HostedServiceProbe : IHostedServiceProbe
         var standardDeviation = Math.Sqrt(variance);
 
         // Time since last pulse
-        var elapsedSinceLastPulse = _stopwatch.ElapsedMilliseconds - _pulseTimes.Last();
-        var timeSinceLastPulse = TimeSpan.FromMilliseconds(elapsedSinceLastPulse);
+        var elapsedSinceLastPulse = nowElapsed - pulseTimes[^1];
 
         //Extra
         var averageFrequency = 1000 / averageInterval;
         var averagePulseInterval = TimeSpan.FromMilliseconds(averageInterval);
-        var maxPulseInterval = TimeSpan.FromMilliseconds(intervals.Any() ? intervals.Max() : 0);
+        var maxPulseInterval = TimeSpan.FromMilliseconds(intervals.Max());
         var lastPulse = TimeSpan.FromMilliseconds(elapsedSinceLastPulse);
         var nextExpectedPuse = TimeSpan.FromMilliseconds(averageInterval - elapsedSinceLastPulse);
 
         // Determine state
         HealthStatus state;
         string reason;
-        var nextExpectedPulse = DateTime.UtcNow.AddMilliseconds(averageInterval);
 
         // Logic for determining status
-        if (_plannedInterval.HasValue && elapsedSinceLastPulse < _plannedInterval.Value.TotalMilliseconds)
+        if (plannedInterval.HasValue && elapsedSinceLastPulse < plannedInterval.Value.TotalMilliseconds)
         {
             //Never report issue if the planned interval has not been reached.
             state = HealthStatus.Healthy;
             reason = "Pulse have not reached planned interval.";
         }
-        else if (_autoMaxInterval && elapsedSinceLastPulse < maxPulseInterval.TotalMilliseconds)
+        else if (autoMaxInterval && elapsedSinceLastPulse < maxPulseInterval.TotalMilliseconds)
         {
             //Never report issue if the maximum interval has not been reached.
             state = HealthStatus.Healthy;
@@ -229,16 +217,14 @@ internal class HostedServiceProbe : IHostedServiceProbe
                 { "standardDeviation", $"{standardDeviation}" },
                 { "lastPulse", $"{lastPulse}" },
                 { "nextExpectedPuse", $"{nextExpectedPuse}" },
-                { "pulseCount", $"{_pulseTimes.Count}" },
+                { "pulseCount", $"{totalPulseCount}" },
             }
         };
     }
 
-    private HealthComponent BuildPreHealthComponent()
+    private HealthComponent BuildPreHealthComponent(long elapsedSinceLastPulse, TimeSpan? plannedInterval)
     {
-        var elapsedSinceLastPulse = _stopwatch.ElapsedMilliseconds - (_pulseTimes.LastOrDefault());
-
-        if (_plannedInterval == null)
+        if (plannedInterval == null)
         {
             return new HealthComponent
             {
@@ -250,7 +236,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
             };
         }
 
-        if (elapsedSinceLastPulse <= _plannedInterval.Value.TotalMilliseconds * 1.2)
+        if (elapsedSinceLastPulse <= plannedInterval.Value.TotalMilliseconds * 1.2)
         {
             return new HealthComponent
             {
@@ -262,7 +248,7 @@ internal class HostedServiceProbe : IHostedServiceProbe
             };
         }
 
-        if (elapsedSinceLastPulse <= _plannedInterval.Value.TotalMilliseconds * 1.8)
+        if (elapsedSinceLastPulse <= plannedInterval.Value.TotalMilliseconds * 1.8)
         {
             return new HealthComponent
             {
