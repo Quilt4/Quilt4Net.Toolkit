@@ -28,4 +28,34 @@ public record Component
     /// Method that performs the check for the component.
     /// </summary>
     public required Func<IServiceProvider, Task<CheckResult>> CheckAsync { get; init; }
+
+    /// <summary>
+    /// Optional. Cancellation-aware check. When set it is used <b>instead of</b> <see cref="CheckAsync"/>
+    /// and receives a token that is cancelled when <see cref="Timeout"/> elapses (or the request is
+    /// aborted). Prefer this over <see cref="CheckAsync"/> when the check does cancellable I/O: on
+    /// timeout the check can actually abort and free its resources (e.g. an HTTP connection), rather
+    /// than being left running while only the wait is abandoned.
+    /// Default is null (use <see cref="CheckAsync"/>).
+    /// </summary>
+    public Func<IServiceProvider, CancellationToken, Task<CheckResult>> CheckWithCancellationAsync { get; init; }
+
+    /// <summary>
+    /// Optional. How long a successful-or-failed <see cref="CheckResult"/> is cached (keyed by
+    /// <see cref="Name"/>) before the check is run again. Repeated polls within this window reuse the
+    /// cached result and concurrent runs are coalesced into a single check — so sustained polling of a
+    /// deep endpoint runs each check at most once per window instead of on every request.
+    /// Set to null (default) or <see cref="TimeSpan.Zero"/> to disable caching and run every time.
+    /// Relies on <see cref="Name"/> being unique.
+    /// </summary>
+    public TimeSpan? CacheDuration { get; init; }
+
+    /// <summary>
+    /// Optional. Bounds how long the check may run. On timeout the component is reported as a failed
+    /// <see cref="CheckResult"/> (mapped to Degraded/Unhealthy per <see cref="Essential"/>) with a
+    /// clear message, instead of hanging and holding resources. With
+    /// <see cref="CheckWithCancellationAsync"/> the check is actually cancelled; with a plain
+    /// <see cref="CheckAsync"/> the wait is bounded (the check itself cannot be aborted).
+    /// Set to null (default) or <see cref="TimeSpan.Zero"/> for no timeout.
+    /// </summary>
+    public TimeSpan? Timeout { get; init; }
 }

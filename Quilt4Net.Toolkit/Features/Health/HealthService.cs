@@ -14,14 +14,19 @@ internal class HealthService : IHealthService
     private readonly IHostedServiceProbeRegistry _hostedServiceProbeRegistry;
     private readonly Quilt4NetHealthApiOptions _apiOption;
     private readonly ILogger<HealthService> _logger;
+    private readonly ComponentCheckCache _componentCheckCache;
 
-    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, IHostedServiceProbeRegistry hostedServiceProbeRegistry, Quilt4NetHealthApiOptions apiOption, ILogger<HealthService> logger = null)
+    public HealthService(IHostEnvironment hostEnvironment, IServiceProvider serviceProvider, IHostedServiceProbeRegistry hostedServiceProbeRegistry, Quilt4NetHealthApiOptions apiOption, ILogger<HealthService> logger = null, ComponentCheckCache componentCheckCache = null)
     {
         _hostEnvironment = hostEnvironment;
         _serviceProvider = serviceProvider;
         _hostedServiceProbeRegistry = hostedServiceProbeRegistry;
         _apiOption = apiOption;
         _logger = logger;
+        // In DI the singleton is injected; the fallback keeps direct construction (e.g. tests) working.
+        // Per-component result caching only takes effect when this instance outlives a request, which
+        // it does via the registered singleton.
+        _componentCheckCache = componentCheckCache ?? new ComponentCheckCache(TimeProvider.System);
     }
 
     public async IAsyncEnumerable<KeyValuePair<string, HealthComponent>> GetStatusAsync(Func<Component, bool> filter, bool includeProbes, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -36,8 +41,8 @@ internal class HealthService : IHealthService
 
         var tasksFromServices = _apiOption.ComponentServices.SelectMany(x => ((IComponentService)_serviceProvider.GetService(x))?.GetComponents())
             .Where(filter ?? (_ => true))
-            .Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
-        var tasksFromAdd = _apiOption.Components.Select(x => RunTaskAsync(x.Name, x.Essential, x.CheckAsync));
+            .Select(x => RunTaskAsync(x, cancellationToken));
+        var tasksFromAdd = _apiOption.Components.Select(x => RunTaskAsync(x, cancellationToken));
         var taskList = tasksFromServices.Union(tasksFromAdd).ToList();
 
         while (taskList.Count > 0)
@@ -114,22 +119,45 @@ internal class HealthService : IHealthService
         return HealthStatus.Unhealthy;
     }
 
-    private async Task<RunTaskResult> RunTaskAsync(string name, bool essential, Func<IServiceProvider, Task<CheckResult>> check)
+    private Task<RunTaskResult> RunTaskAsync(Component component, CancellationToken cancellationToken)
+    {
+        var name = string.IsNullOrEmpty(component.Name) ? "Component" : component.Name;
+
+        // Reuse a fresh cached result within CacheDuration (and coalesce concurrent runs); when
+        // caching is off this runs the check directly.
+        return _componentCheckCache.GetOrRunAsync(name, component.CacheDuration, () => RunCheckAsync(component, name, cancellationToken));
+    }
+
+    private async Task<RunTaskResult> RunCheckAsync(Component component, string name, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-
-        if (string.IsNullOrEmpty(name)) name = "Component";
 
         try
         {
             _logger?.LogTrace("Starting check for {name} component.", name);
-            var status = await check.Invoke(_serviceProvider);
+            var status = await InvokeCheckAsync(component, cancellationToken);
             stopwatch.Stop();
             _logger?.LogTrace("Complete check for {name} component after {elapsed}.", name, stopwatch.Elapsed);
-            return new RunTaskResult { Name = name, Essential = essential, Result = status, Elapsed = stopwatch.Elapsed };
+            return new RunTaskResult { Name = name, Essential = component.Essential, Result = status, Elapsed = stopwatch.Elapsed };
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or TimeoutException)
+        {
+            // Timed out (or the request was aborted). Report a failed result — mapped to
+            // Degraded/Unhealthy per Essential by BuildStatus — instead of hanging. No exception
+            // detail: a timeout is an expected, self-describing outcome, not a crash.
+            stopwatch.Stop();
+            _logger?.LogWarning("Timed out check for {name} component after {elapsed}.", name, stopwatch.Elapsed);
+            return new RunTaskResult
+            {
+                Name = name,
+                Essential = component.Essential,
+                Result = new CheckResult { Success = false, Message = $"Check timed out after {stopwatch.Elapsed}." },
+                Elapsed = stopwatch.Elapsed
+            };
         }
         catch (Exception exception)
         {
+            stopwatch.Stop();
             Guid? correlationId = null;
             if (_logger != null)
             {
@@ -137,21 +165,55 @@ internal class HealthService : IHealthService
                 _logger.LogError("Failed check for {name} component after {elapsed}. {message} [CorrelationId: {correlationId}]", name, stopwatch.Elapsed, exception.Message, correlationId);
             }
 
-            return new RunTaskResult { Name = name, Essential = essential, Result = new CheckResult { Success = false }, Elapsed = stopwatch.Elapsed, Exception = exception, CorrelationId = correlationId };
-        }
-        finally
-        {
-            stopwatch.Stop();
+            return new RunTaskResult { Name = name, Essential = component.Essential, Result = new CheckResult { Success = false }, Elapsed = stopwatch.Elapsed, Exception = exception, CorrelationId = correlationId };
         }
     }
 
-    private record RunTaskResult
+    private async Task<CheckResult> InvokeCheckAsync(Component component, CancellationToken cancellationToken)
     {
-        public required string Name { get; init; }
-        public required bool Essential { get; init; }
-        public required CheckResult Result { get; init; }
-        public required TimeSpan Elapsed { get; init; }
-        public Exception Exception { get; init; }
-        public Guid? CorrelationId { get; init; }
+        var hasTimeout = component.Timeout is { } timeout && timeout > TimeSpan.Zero;
+
+        // Fast path — no timeout and no cancellation-aware check: exactly the original behaviour.
+        if (!hasTimeout && component.CheckWithCancellationAsync == null)
+        {
+            return await component.CheckAsync(_serviceProvider);
+        }
+
+        using var timeoutCts = hasTimeout ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
+        var token = cancellationToken;
+        if (timeoutCts != null)
+        {
+            timeoutCts.CancelAfter(component.Timeout.Value);
+            token = timeoutCts.Token;
+        }
+
+        // Cancellation-aware check: on timeout (or request abort) the token cancels and the check can
+        // actually abort and free its resources.
+        if (component.CheckWithCancellationAsync != null)
+        {
+            return await component.CheckWithCancellationAsync(_serviceProvider, token);
+        }
+
+        // Plain check + timeout: it has no token so it can't be aborted, but we bound the wait by
+        // racing it against the timeout token — a hung check can't block the health fan-out. If it
+        // times out we observe its eventual fault out-of-band so it isn't an unobserved exception.
+        var checkTask = component.CheckAsync(_serviceProvider);
+        var completed = await Task.WhenAny(checkTask, Task.Delay(System.Threading.Timeout.Infinite, token));
+        if (completed == checkTask)
+        {
+            return await checkTask;
+        }
+
+        ObserveFault(checkTask);
+        throw new TimeoutException($"Health check '{component.Name}' did not complete within {component.Timeout.Value}.");
+    }
+
+    private static void ObserveFault(Task task)
+    {
+        _ = task.ContinueWith(
+            static t => { _ = t.Exception; },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }
