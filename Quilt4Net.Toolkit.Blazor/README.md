@@ -58,10 +58,18 @@ Renders plain text using a Radzen `TextStyle`.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `Key` | — | Content key. |
-| `Default` | — | Fallback text when no content exists. |
+| `Default` | — | Fallback text when no content exists (treated as the English/default-language default). |
+| `Defaults` | `null` | Optional authoritative default text per language, keyed by two-letter ISO code (e.g. `["en"]`, `["sv"]`). When set, the default shown before/without a stored translation is chosen by: active-UI-culture code default → English (`"en"` here or `Default`) → key. Use for domain-critical vocabulary (e.g. legal/archival terms) that must render correct wording out-of-the-box. |
 | `TextStyle` | `Body1` | Radzen `TextStyle` (H1, H2, Body1, etc.). |
 | `Visible` | `true` | Show or hide the component. |
 | `Style` | `null` | Custom CSS styles. |
+
+```razor
+@* Authoritative Swedish wording for a domain-critical key, before any translation exists: *@
+<Quilt4Text Key="case.subject"
+            Default="Case subject"
+            Defaults="@(new Dictionary<string,string> { ["en"] = "Case subject", ["sv"] = "Ärendemening" })" />
+```
 
 #### Quilt4Content
 

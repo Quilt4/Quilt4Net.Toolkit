@@ -24,10 +24,19 @@ Plain text inside a Radzen `<RadzenText>` with a `TextStyle`.
 | Parameter | Default | Description |
 |---|---|---|
 | `Key` | — | Content key. |
-| `Default` | — | Fallback text. |
+| `Default` | — | Fallback text (treated as the English/default-language default). |
+| `Defaults` | `null` | Optional authoritative default text per language, keyed by two-letter ISO code (`"en"`, `"sv"`, …). Resolution chain: active-UI-culture code default → English (`"en"` or `Default`) → key. For domain-critical vocabulary whose wording must be correct before any translation exists. |
 | `TextStyle` | `Body1` | Radzen text style. |
 | `Visible` | `true` | Show or hide. |
 | `Style` | `null` | Inline CSS. |
+
+```razor
+<Quilt4Text Key="case.subject"
+            Default="Case subject"
+            Defaults="@(new Dictionary<string,string> { ["en"] = "Case subject", ["sv"] = "Ärendemening" })" />
+```
+
+Also available on the service: `IQuilt4ContentService.GetAsync(key, IReadOnlyDictionary<string,string> defaultsByLanguage, application)`.
 
 ### `<Quilt4Content>`
 

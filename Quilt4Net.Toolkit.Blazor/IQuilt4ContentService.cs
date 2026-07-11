@@ -19,4 +19,19 @@ public interface IQuilt4ContentService
     /// </list>
     /// </param>
     Task<string> GetAsync(string key, string defaultValue, string application = null);
+
+    /// <summary>
+    /// Get content by key using the currently selected language, with an authoritative default text
+    /// declared per language (issue #135) — for domain-critical vocabulary whose wording must be
+    /// correct before or without a stored/translated value (e.g. legal/archival terms).
+    /// </summary>
+    /// <param name="key">Content key.</param>
+    /// <param name="defaultsByLanguage">
+    /// Default text keyed by two-letter ISO language code (e.g. <c>"en"</c>, <c>"sv"</c>), matched
+    /// case-insensitively. The default used is chosen by this chain: code default for the active UI
+    /// culture → English (<c>"en"</c>) code default → the content key. A stored translation for the
+    /// selected language still takes precedence over the resolved default.
+    /// </param>
+    /// <param name="application">Application scope; see <see cref="GetAsync(string, string, string)"/>.</param>
+    Task<string> GetAsync(string key, IReadOnlyDictionary<string, string> defaultsByLanguage, string application = null);
 }
