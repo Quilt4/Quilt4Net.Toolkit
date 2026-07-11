@@ -1,0 +1,120 @@
+@using Quilt4Net.Toolkit.Features.Content
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+
+<RadzenSplitButton Text="@_text"
+                   Icon="@Icon"
+                   Click="@OnClickAsync"
+                   Style="@Style"
+                   Disabled="@Disabled"
+                   IsBusy="@Busy"
+                   BusyText="@_busyText">
+    @foreach (var resolved in _items)
+    {
+        <RadzenSplitButtonItem Text="@resolved.Text"
+                               Value="@resolved.Item.Value"
+                               Icon="@resolved.Item.Icon"
+                               Disabled="@resolved.Item.Disabled" />
+    }
+</RadzenSplitButton>
+
+@code {
+    private string _text;
+    private string _busyText;
+    private IReadOnlyList<ResolvedItem> _items = [];
+
+    /// <summary>Content key for the primary button label.</summary>
+    [Parameter]
+    public string TextKey { get; set; }
+
+    /// <summary>Fallback label used when <see cref="TextKey"/> is unset or the lookup misses.</summary>
+    [Parameter]
+    public string DefaultText { get; set; }
+
+    /// <summary>Optional Radzen icon name for the primary button.</summary>
+    [Parameter]
+    public string Icon { get; set; }
+
+    /// <summary>Inline style forwarded to the underlying <c>RadzenSplitButton</c>.</summary>
+    [Parameter]
+    public string Style { get; set; }
+
+    /// <summary>When <c>true</c> the whole split button is disabled (primary + menu).</summary>
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>When <c>true</c> the primary button shows an in-button spinner and is
+    /// non-interactive (mirrors <c>RadzenSplitButton.IsBusy</c>). Set this for the duration of
+    /// a slow async <see cref="Click"/> handler to give feedback and prevent double-clicks.</summary>
+    [Parameter]
+    public bool Busy { get; set; }
+
+    /// <summary>Optional content key for the label shown while <see cref="Busy"/> is
+    /// <c>true</c> (e.g. "Saving…"). Falls back to <see cref="DefaultBusyText"/> on miss.</summary>
+    [Parameter]
+    public string BusyTextKey { get; set; }
+
+    /// <summary>Fallback busy label used when <see cref="BusyTextKey"/> isn't set or the
+    /// lookup yields nothing.</summary>
+    [Parameter]
+    public string DefaultBusyText { get; set; }
+
+    /// <summary>Invoked when the primary button (not a menu item) is clicked.</summary>
+    [Parameter]
+    public Func<Task> Click { get; set; }
+
+    /// <summary>The drop-down menu items. Each item's label is content-localised from its
+    /// <see cref="Quilt4SplitButtonItem.TextKey"/> / <see cref="Quilt4SplitButtonItem.DefaultText"/>.</summary>
+    [Parameter]
+    public IReadOnlyList<Quilt4SplitButtonItem> Items { get; set; }
+
+    /// <summary>Invoked with the chosen item's <see cref="Quilt4SplitButtonItem.Value"/> when a
+    /// menu item is clicked.</summary>
+    [Parameter]
+    public Func<string, Task> ItemClick { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LanguageStateService.LanguageChangedEvent += async (_, _) =>
+        {
+            await LoadContentAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await LoadContentAsync();
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        _text = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TextKey, DefaultText);
+        _busyText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, BusyTextKey, DefaultBusyText);
+
+        var resolved = new List<ResolvedItem>();
+        if (Items != null)
+        {
+            foreach (var item in Items)
+            {
+                var text = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, item.TextKey, item.DefaultText);
+                resolved.Add(new ResolvedItem(item, text));
+            }
+        }
+
+        _items = resolved;
+    }
+
+    private async Task OnClickAsync(RadzenSplitButtonItem item)
+    {
+        if (item is null)
+        {
+            if (Click != null) await Click();
+        }
+        else if (ItemClick != null)
+        {
+            await ItemClick(item.Value);
+        }
+    }
+
+    private sealed record ResolvedItem(Quilt4SplitButtonItem Item, string Text);
+}

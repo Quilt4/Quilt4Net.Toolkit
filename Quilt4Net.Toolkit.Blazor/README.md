@@ -36,7 +36,7 @@ builder.AddQuilt4NetBlazorContent(o =>
 
 Two shapes ship in this package, with the same purpose — render text managed via Quilt4Net.Server in a Blazor app and have it switch language live without per-component plumbing.
 
-- **Standalone components** (`Quilt4Text`, `Quilt4Content`, `Quilt4Span`, `Quilt4Raw`, `Quilt4Button`, `Quilt4PageTitle`) — content-aware controls. Drop them in where you'd otherwise hard-code a string.
+- **Standalone components** (`Quilt4Text`, `Quilt4Content`, `Quilt4Span`, `Quilt4Raw`, `Quilt4Button`, `Quilt4SplitButton`, `Quilt4PageTitle`) — content-aware controls. Drop them in where you'd otherwise hard-code a string.
 - **Content-aware Radzen wrappers** (`Quilt4Radzen*`) — thin wrappers around Radzen components that resolve a specific `string` attribute (Text / Title / Placeholder / EmptyText / Tooltip) through the content service. Drop them in where the only thing you need to localise on a Radzen control is one or two text attributes.
 
 Every component below:
@@ -58,10 +58,18 @@ Renders plain text using a Radzen `TextStyle`.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `Key` | — | Content key. |
-| `Default` | — | Fallback text when no content exists. |
+| `Default` | — | Fallback text when no content exists (treated as the English/default-language default). |
+| `Defaults` | `null` | Optional authoritative default text per language, keyed by two-letter ISO code (e.g. `["en"]`, `["sv"]`). When set, the default shown before/without a stored translation is chosen by: active-UI-culture code default → English (`"en"` here or `Default`) → key. Use for domain-critical vocabulary (e.g. legal/archival terms) that must render correct wording out-of-the-box. |
 | `TextStyle` | `Body1` | Radzen `TextStyle` (H1, H2, Body1, etc.). |
 | `Visible` | `true` | Show or hide the component. |
 | `Style` | `null` | Custom CSS styles. |
+
+```razor
+@* Authoritative Swedish wording for a domain-critical key, before any translation exists: *@
+<Quilt4Text Key="case.subject"
+            Default="Case subject"
+            Defaults="@(new Dictionary<string,string> { ["en"] = "Case subject", ["sv"] = "Ärendemening" })" />
+```
 
 #### Quilt4Content
 
@@ -114,6 +122,42 @@ Renders a Radzen button with managed text — and, optionally, a managed hover t
 | `TooltipKey` | Optional content key resolved into the button's `title` attribute. |
 | `DefaultTooltip` | Optional fallback tooltip text. Set without `TooltipKey` for a static, non-localised tooltip. |
 | `Click` | Async click handler (`Func<Task>`). |
+| `Style` | Custom CSS styles. |
+| `Disabled` | Disables the button (mirrors `RadzenButton.Disabled`). |
+| `Busy` | Shows an in-button spinner and blocks clicks while set (mirrors `RadzenButton.IsBusy`). Set it around a slow async `Click` for feedback and double-click protection. |
+| `BusyTextKey` | Optional content key for the label shown while `Busy` (e.g. "Saving…"). |
+| `DefaultBusyText` | Optional fallback busy label. Set without `BusyTextKey` for a static, non-localised busy label; leave both unset to keep the normal label next to the spinner. |
+
+#### Quilt4SplitButton
+
+Wraps `RadzenSplitButton` with managed text on both the primary button and every drop-down item — the content-localized counterpart of a split button. Use it for per-row "primary action + menu of secondary actions" without hand-resolving each label via `IQuilt4ContentService.GetAsync`.
+
+```razor
+<Quilt4SplitButton TextKey="row.open" DefaultText="Open" Icon="folder_open"
+                   Click="@OnOpen"
+                   Items="_actions" ItemClick="@OnAction" />
+
+@code {
+    private readonly IReadOnlyList<Quilt4SplitButtonItem> _actions =
+    [
+        new() { TextKey = "row.rename", DefaultText = "Rename", Value = "rename", Icon = "edit" },
+        new() { TextKey = "row.delete", DefaultText = "Delete", Value = "delete", Icon = "delete", Disabled = false },
+    ];
+
+    private Task OnOpen() => /* primary action */;
+    private Task OnAction(string value) => value switch { "rename" => Rename(), "delete" => Delete(), _ => Task.CompletedTask };
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TextKey` / `DefaultText` | Content key + fallback for the primary button label. |
+| `Icon` | Radzen icon name for the primary button. |
+| `Click` | Async handler for the primary button (`Func<Task>`). |
+| `Items` | The drop-down items (`Quilt4SplitButtonItem`): each has `TextKey` / `DefaultText` (localized label), `Value`, `Icon`, `Disabled`. |
+| `ItemClick` | Async handler invoked with the chosen item's `Value` (`Func<string, Task>`). |
+| `Disabled` | Disables the whole split button. |
+| `Busy` / `BusyTextKey` / `DefaultBusyText` | In-button spinner + optional localized busy label (as `Quilt4Button`). |
 | `Style` | Custom CSS styles. |
 
 #### Quilt4PageTitle

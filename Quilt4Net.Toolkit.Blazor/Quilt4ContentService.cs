@@ -19,4 +19,13 @@ internal class Quilt4ContentService : IQuilt4ContentService
         var result = await _contentService.GetContentAsync(key, defaultValue, _languageStateService.Selected.Key, ContentFormat.String, application);
         return result.Value;
     }
+
+    public async Task<string> GetAsync(string key, IReadOnlyDictionary<string, string> defaultsByLanguage, string application = null)
+    {
+        // Resolve the authoritative default for the active culture, then let a stored translation for
+        // the selected language win over it inside GetContentAsync (issue #135).
+        var codeDefault = LanguageDefaultResolver.Resolve(defaultsByLanguage, invariantDefault: null, key);
+        var result = await _contentService.GetContentAsync(key, codeDefault, _languageStateService.Selected.Key, ContentFormat.String, application);
+        return result.Value;
+    }
 }

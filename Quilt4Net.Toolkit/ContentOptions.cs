@@ -72,4 +72,16 @@ public record ContentOptions
     /// Default is false.
     /// </summary>
     public bool AssumeAdmin { get; set; }
+
+    /// <summary>
+    /// Diagnostics (issue #132): when a content fetch or language-list load from the server takes
+    /// at least this long, a single <c>Warning</c> is logged naming the endpoint, elapsed time and
+    /// HTTP status — so slow content/language loads surface in production even when <c>Debug</c>
+    /// logging is off. The detailed per-resolution timing lines (key, resolved language, cache
+    /// hit/miss, source, elapsed) are logged at <c>Debug</c> on category
+    /// <c>Quilt4Net.Toolkit.Features.Content.RemoteContentCallService</c> and are opt-in via normal
+    /// log configuration. Set <see cref="TimeSpan.Zero"/> to disable the slow-load warning.
+    /// Default is 3 seconds.
+    /// </summary>
+    public TimeSpan SlowLogThreshold { get; set; } = TimeSpan.FromSeconds(3);
 }

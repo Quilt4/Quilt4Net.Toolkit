@@ -61,6 +61,49 @@ public class Quilt4ButtonTests : BunitContext
         cut.Find(".rz-button").TextContent.Should().Contain("Spara");
     }
 
+    [Fact]
+    public void Not_disabled_by_default()
+    {
+        _contentService.SetResult("Save");
+
+        var cut = Render<Quilt4Button>(parameters => parameters
+            .Add(p => p.TextKey, "btn.save")
+            .Add(p => p.DefaultText, "Save"));
+
+        cut.Find(".rz-button").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Disabled_parameter_disables_the_button()
+    {
+        _contentService.SetResult("Save");
+
+        var cut = Render<Quilt4Button>(parameters => parameters
+            .Add(p => p.TextKey, "btn.save")
+            .Add(p => p.DefaultText, "Save")
+            .Add(p => p.Disabled, true));
+
+        cut.Find(".rz-button").HasAttribute("disabled").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Busy_disables_the_button_and_shows_the_busy_text()
+    {
+        // Content lookups miss so the label + busy label fall back to their defaults.
+        _contentService.SetResult(null, success: false);
+
+        var cut = Render<Quilt4Button>(parameters => parameters
+            .Add(p => p.TextKey, "btn.save")
+            .Add(p => p.DefaultText, "Save")
+            .Add(p => p.Busy, true)
+            .Add(p => p.BusyTextKey, "btn.save.busy")
+            .Add(p => p.DefaultBusyText, "Saving…"));
+
+        var button = cut.Find(".rz-button");
+        button.HasAttribute("disabled").Should().BeTrue();
+        button.TextContent.Should().Contain("Saving…");
+    }
+
     private class FakeContentService : IContentService
     {
         private string _value = "";

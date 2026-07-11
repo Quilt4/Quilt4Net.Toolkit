@@ -20,6 +20,16 @@
     [Parameter]
     public string Default { get; set; }
 
+    /// <summary>
+    /// Optional authoritative default text per language (issue #135), keyed by two-letter ISO code
+    /// (e.g. <c>"en"</c>, <c>"sv"</c>). When set, the default shown before/without a stored
+    /// translation is chosen by: active-UI-culture code default → English (<c>"en"</c> here or
+    /// <see cref="Default"/>) → key. Use for domain-critical vocabulary whose wording must be correct
+    /// out-of-the-box (e.g. legal/archival terms). Leave unset for the ordinary single-<see cref="Default"/> flow.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Defaults { get; set; }
+
     [Parameter]
     public TextStyle TextStyle { get; set; } = TextStyle.Body1;
 
@@ -50,7 +60,12 @@
 
     private async Task LoadContentAsync()
     {
-        _response = await ContentService.GetContentAsync(Key, Default, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        // Backward compatible: with no per-language Defaults, pass Default through unchanged. When
+        // Defaults is supplied, resolve the authoritative default for the active culture (#135).
+        var effectiveDefault = Defaults is { Count: > 0 }
+            ? LanguageDefaultResolver.Resolve(Defaults, Default, Key)
+            : Default;
+        _response = await ContentService.GetContentAsync(Key, effectiveDefault, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
         _content = _response.Value;
     }
 

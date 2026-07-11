@@ -1,4 +1,6 @@
-﻿using Blazored.LocalStorage;
+﻿using System.Diagnostics;
+using Blazored.LocalStorage;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Quilt4Net.Toolkit.Features.Content;
 
@@ -9,15 +11,17 @@ internal class LanguageStateService : ILanguageStateService
     private readonly ILanguageService _languageService;
     private readonly ILocalStorageService _localStorageService;
     private readonly IRemoteContentCallService _remoteContentCallService;
+    private readonly ILogger<LanguageStateService> _logger;
     private Language _selected;
     private bool _developerMode;
     private readonly Language _defaultLanguage;
 
-    public LanguageStateService(ILanguageService languageService, ILocalStorageService localStorageService, IRemoteContentCallService remoteContentCallService)
+    public LanguageStateService(ILanguageService languageService, ILocalStorageService localStorageService, IRemoteContentCallService remoteContentCallService, ILogger<LanguageStateService> logger)
     {
         _languageService = languageService;
         _localStorageService = localStorageService;
         _remoteContentCallService = remoteContentCallService;
+        _logger = logger;
         _defaultLanguage = new Language { Name = null };
 
         Task.Run(async () =>
@@ -54,6 +58,7 @@ internal class LanguageStateService : ILanguageStateService
         {
             if (_developerMode == value) return;
             _developerMode = value;
+            _logger.LogDebug("Developer mode set to {DeveloperMode}; reloading languages.", value);
             Task.Run(async () =>
             {
                 await ReloadAsync(false);
@@ -69,6 +74,10 @@ internal class LanguageStateService : ILanguageStateService
 
     public async Task<Language[]> ReloadAsync(bool forceReload)
     {
+        // #132: bracket the language reload with timing so a spinning selector can be attributed to
+        // the language load specifically. Debug — opt-in via log config.
+        var sw = Stopwatch.StartNew();
+        _logger.LogDebug("Reloading languages (forceReload: {ForceReload}, developerMode: {DeveloperMode}).", forceReload, DeveloperMode);
         var languages = await _languageService.GetLanguagesAsync(forceReload);
         if (DeveloperMode)
         {
@@ -100,6 +109,9 @@ internal class LanguageStateService : ILanguageStateService
             _selected = languages.Single(x => x.Key == Selected.Key);
         }
 
+        _logger.LogDebug("Languages reloaded in {Elapsed}ms: {Count} language(s); selected '{Selected}'.",
+            sw.ElapsedMilliseconds, Languages?.Length ?? 0, Selected?.Name);
+
         return languages;
     }
 
@@ -110,6 +122,8 @@ internal class LanguageStateService : ILanguageStateService
         {
             if (_selected?.Key != value?.Key)
             {
+                _logger.LogDebug("Selected language changing from '{From}' to '{To}' (key {Key}); raising LanguageChangedEvent to trigger content reload.",
+                    _selected?.Name, value?.Name, value?.Key);
                 _selected = value;
                 Task.Run(async () =>
                 {

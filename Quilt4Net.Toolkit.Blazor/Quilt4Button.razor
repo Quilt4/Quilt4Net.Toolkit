@@ -8,10 +8,14 @@
               Icon="@Icon"
               Click="@Click"
               Style="@Style"
+              Disabled="@Disabled"
+              IsBusy="@Busy"
+              BusyText="@_busyText"
               Attributes="@_attributes" />
 
 @code {
     private string _text;
+    private string _busyText;
     // RadzenButton renders unknown DOM attributes from its `Attributes` dictionary. We use
     // it to set the native HTML `title` for tooltips so icon-only buttons can carry a
     // localised hover-text without TooltipService plumbing. Null/empty title attribute is
@@ -32,6 +36,30 @@
 
     [Parameter]
     public string Style{ get; set; }
+
+    /// <summary>When <c>true</c> the button is disabled (mirrors
+    /// <c>RadzenButton.Disabled</c>). Use to guard against clicks while a precondition
+    /// isn't met.</summary>
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>When <c>true</c> the button shows an in-button spinner and is
+    /// non-interactive (mirrors <c>RadzenButton.IsBusy</c>). Set this for the duration of a
+    /// slow async <see cref="Click"/> handler to give feedback and prevent double-clicks.</summary>
+    [Parameter]
+    public bool Busy { get; set; }
+
+    /// <summary>Optional content key for the label shown while <see cref="Busy"/> is
+    /// <c>true</c> (e.g. "Saving…"). Falls back to <see cref="DefaultBusyText"/> on miss /
+    /// empty / lookup failure; when both are unset the button keeps its normal label next to
+    /// the spinner.</summary>
+    [Parameter]
+    public string BusyTextKey { get; set; }
+
+    /// <summary>Fallback busy label used when <see cref="BusyTextKey"/> isn't set or the
+    /// lookup yields nothing. Set this alone for a static, non-localised busy label.</summary>
+    [Parameter]
+    public string DefaultBusyText { get; set; }
 
     /// <summary>Optional content key resolved for the button's hover tooltip (HTML
     /// <c>title</c> attribute). Falls back to <see cref="DefaultTooltip"/> on miss / empty /
@@ -62,6 +90,7 @@
     private async Task LoadContentAsync()
     {
         _text = (await ContentService.GetContentAsync(TextKey, DefaultText, LanguageStateService.Selected.Key, ContentFormat.String)).Value;
+        _busyText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, BusyTextKey, DefaultBusyText);
         var tooltip = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TooltipKey, DefaultTooltip);
         _attributes = string.IsNullOrEmpty(tooltip)
             ? null
