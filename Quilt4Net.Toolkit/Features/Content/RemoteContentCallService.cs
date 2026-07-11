@@ -255,8 +255,19 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Unable to get content for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
-                    key, response.StatusCode, response.ReasonPhrase);
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    // A key with no override on the server is the designed fallback path — the caller's
+                    // Default is used. Expected and non-fatal, so log at Debug (not Error) to avoid
+                    // flooding logs/telemetry with a line per unseeded key on every render.
+                    _logger.LogDebug("No content override for key '{Key}' (404). Using default value.", key);
+                }
+                else
+                {
+                    _logger.LogError("Unable to get content for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
+                        key, response.StatusCode, response.ReasonPhrase);
+                }
+                // Negative-cache either way so the key isn't re-requested (and re-logged) every render.
                 CacheFailure(cacheKey, defaultValue);
                 _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
                     key, sw.ElapsedMilliseconds);
@@ -321,8 +332,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogError("Background refresh for content '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
-                        key, response.StatusCode, response.ReasonPhrase);
+                    if (response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        // No override on the server — the designed fallback path, not a failure. Debug only.
+                        _logger.LogDebug("Background refresh for content '{Key}': no override (404). Keeping default value.", key);
+                    }
+                    else
+                    {
+                        _logger.LogError("Background refresh for content '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
+                            key, response.StatusCode, response.ReasonPhrase);
+                    }
                     var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
                     CacheFailure(cacheKey, staleValue);
                     return;
