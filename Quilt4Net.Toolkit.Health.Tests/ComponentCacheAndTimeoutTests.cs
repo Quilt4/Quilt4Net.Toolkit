@@ -41,12 +41,12 @@ public class ComponentCacheAndTimeoutTests
         });
         var sut = BuildSut(option, new ComponentCheckCache(time));
 
-        await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync();
-        await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync();
+        await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
+        await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
         runs.Should().Be(1, "the second poll within CacheDuration must reuse the cached result");
 
         time.Advance(TimeSpan.FromSeconds(31));
-        await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync();
+        await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
         runs.Should().Be(2, "once CacheDuration has elapsed the check must run again");
     }
 
@@ -66,8 +66,8 @@ public class ComponentCacheAndTimeoutTests
         });
         var sut = BuildSut(option, new ComponentCheckCache(new FakeTimeProvider(DateTimeOffset.UtcNow)));
 
-        await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync();
-        await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync();
+        await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
+        await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken);
 
         runs.Should().Be(2, "without CacheDuration caching is disabled and each poll runs the check");
     }
@@ -91,8 +91,8 @@ public class ComponentCacheAndTimeoutTests
         });
         var sut = BuildSut(option, new ComponentCheckCache(new FakeTimeProvider(DateTimeOffset.UtcNow)));
 
-        var poll1 = sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync().AsTask();
-        var poll2 = sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync().AsTask();
+        var poll1 = sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken).AsTask();
+        var poll2 = sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken).AsTask();
         await Task.Delay(100, TestContext.Current.CancellationToken); // let both reach the per-key gate
         gate.SetResult();
         await Task.WhenAll(poll1, poll2);
@@ -120,7 +120,7 @@ public class ComponentCacheAndTimeoutTests
         var sut = BuildSut(option, new ComponentCheckCache(TimeProvider.System));
 
         var sw = Stopwatch.StartNew();
-        var result = (await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken)).ToHealthResponse();
         sw.Stop();
 
         sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3), "a timed-out check must not block the fan-out for its full duration");
@@ -156,7 +156,7 @@ public class ComponentCacheAndTimeoutTests
         var sut = BuildSut(option, new ComponentCheckCache(TimeProvider.System));
 
         var sw = Stopwatch.StartNew();
-        var result = (await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken)).ToHealthResponse();
         sw.Stop();
 
         sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3));
@@ -176,7 +176,7 @@ public class ComponentCacheAndTimeoutTests
         });
         var sut = BuildSut(option, new ComponentCheckCache(TimeProvider.System));
 
-        var result = (await sut.GetStatusAsync(null, false, CancellationToken.None).ToArrayAsync()).ToHealthResponse();
+        var result = (await sut.GetStatusAsync(null, false, TestContext.Current.CancellationToken).ToArrayAsync(TestContext.Current.CancellationToken)).ToHealthResponse();
 
         result.Status.Should().Be(HealthStatus.Healthy);
         result.Components.Single().Value.Details.First(x => x.Key == "message").Value.Should().Be("ok");
