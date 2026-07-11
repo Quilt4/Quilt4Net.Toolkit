@@ -73,9 +73,23 @@ public class Quilt4ContentTests : BunitContext
         _loggerProvider.Entries.Should().NotContain(e => e.Level == LogLevel.Warning);
     }
 
+    [Fact]
+    public void No_child_content_renders_local_placeholder_and_persists_nothing()
+    {
+        // Previously a key with no stored value and no ChildContent fetched lorem-ipsum from the
+        // external lorem-api.com and auto-registered it as the key's default. It must now render a
+        // purely local placeholder and write nothing back to the content store.
+        var cut = Render<Quilt4Content>(p => p
+            .Add(x => x.Key, "missing-key"));
+
+        cut.Markup.Should().Contain("No content for 'missing-key'.");
+        _contentService.SetContentCalls.Should().BeEmpty();
+    }
+
     private sealed class StubContentService : IContentService
     {
         public Exception SetContentThrow { get; set; }
+        public List<(string Key, string Value)> SetContentCalls { get; } = new();
 
         public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue,
             Guid languageKey, ContentFormat? contentType, string application = null)
@@ -85,6 +99,7 @@ public class Quilt4ContentTests : BunitContext
             ContentFormat contentType, string application = null)
         {
             if (SetContentThrow != null) throw SetContentThrow;
+            SetContentCalls.Add((key, value));
             return Task.CompletedTask;
         }
 
