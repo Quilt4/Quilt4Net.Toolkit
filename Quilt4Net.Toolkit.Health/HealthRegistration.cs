@@ -64,6 +64,10 @@ public static class HealthRegistration
 
         services.TryAddSingleton(TimeProvider.System);
 
+        // Singleton so per-Component check-result caching survives across health polls; HealthService
+        // itself is transient (its IServiceProvider must stay request-scoped for the checks).
+        services.AddSingleton<ComponentCheckCache>();
+
         services.AddTransient<ILiveService, LiveService>();
         services.AddTransient<IReadyService, ReadyService>();
         services.AddTransient<IHealthService, HealthService>();
