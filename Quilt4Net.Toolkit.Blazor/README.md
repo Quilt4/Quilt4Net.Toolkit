@@ -36,7 +36,7 @@ builder.AddQuilt4NetBlazorContent(o =>
 
 Two shapes ship in this package, with the same purpose — render text managed via Quilt4Net.Server in a Blazor app and have it switch language live without per-component plumbing.
 
-- **Standalone components** (`Quilt4Text`, `Quilt4Content`, `Quilt4Span`, `Quilt4Raw`, `Quilt4Button`, `Quilt4PageTitle`) — content-aware controls. Drop them in where you'd otherwise hard-code a string.
+- **Standalone components** (`Quilt4Text`, `Quilt4Content`, `Quilt4Span`, `Quilt4Raw`, `Quilt4Button`, `Quilt4SplitButton`, `Quilt4PageTitle`) — content-aware controls. Drop them in where you'd otherwise hard-code a string.
 - **Content-aware Radzen wrappers** (`Quilt4Radzen*`) — thin wrappers around Radzen components that resolve a specific `string` attribute (Text / Title / Placeholder / EmptyText / Tooltip) through the content service. Drop them in where the only thing you need to localise on a Radzen control is one or two text attributes.
 
 Every component below:
@@ -127,6 +127,38 @@ Renders a Radzen button with managed text — and, optionally, a managed hover t
 | `Busy` | Shows an in-button spinner and blocks clicks while set (mirrors `RadzenButton.IsBusy`). Set it around a slow async `Click` for feedback and double-click protection. |
 | `BusyTextKey` | Optional content key for the label shown while `Busy` (e.g. "Saving…"). |
 | `DefaultBusyText` | Optional fallback busy label. Set without `BusyTextKey` for a static, non-localised busy label; leave both unset to keep the normal label next to the spinner. |
+
+#### Quilt4SplitButton
+
+Wraps `RadzenSplitButton` with managed text on both the primary button and every drop-down item — the content-localized counterpart of a split button. Use it for per-row "primary action + menu of secondary actions" without hand-resolving each label via `IQuilt4ContentService.GetAsync`.
+
+```razor
+<Quilt4SplitButton TextKey="row.open" DefaultText="Open" Icon="folder_open"
+                   Click="@OnOpen"
+                   Items="_actions" ItemClick="@OnAction" />
+
+@code {
+    private readonly IReadOnlyList<Quilt4SplitButtonItem> _actions =
+    [
+        new() { TextKey = "row.rename", DefaultText = "Rename", Value = "rename", Icon = "edit" },
+        new() { TextKey = "row.delete", DefaultText = "Delete", Value = "delete", Icon = "delete", Disabled = false },
+    ];
+
+    private Task OnOpen() => /* primary action */;
+    private Task OnAction(string value) => value switch { "rename" => Rename(), "delete" => Delete(), _ => Task.CompletedTask };
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TextKey` / `DefaultText` | Content key + fallback for the primary button label. |
+| `Icon` | Radzen icon name for the primary button. |
+| `Click` | Async handler for the primary button (`Func<Task>`). |
+| `Items` | The drop-down items (`Quilt4SplitButtonItem`): each has `TextKey` / `DefaultText` (localized label), `Value`, `Icon`, `Disabled`. |
+| `ItemClick` | Async handler invoked with the chosen item's `Value` (`Func<string, Task>`). |
+| `Disabled` | Disables the whole split button. |
+| `Busy` / `BusyTextKey` / `DefaultBusyText` | In-button spinner + optional localized busy label (as `Quilt4Button`). |
+| `Style` | Custom CSS styles. |
 
 #### Quilt4PageTitle
 
