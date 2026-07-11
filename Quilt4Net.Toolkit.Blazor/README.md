@@ -115,6 +115,10 @@ Renders a Radzen button with managed text — and, optionally, a managed hover t
 | `DefaultTooltip` | Optional fallback tooltip text. Set without `TooltipKey` for a static, non-localised tooltip. |
 | `Click` | Async click handler (`Func<Task>`). |
 | `Style` | Custom CSS styles. |
+| `Disabled` | Disables the button (mirrors `RadzenButton.Disabled`). |
+| `Busy` | Shows an in-button spinner and blocks clicks while set (mirrors `RadzenButton.IsBusy`). Set it around a slow async `Click` for feedback and double-click protection. |
+| `BusyTextKey` | Optional content key for the label shown while `Busy` (e.g. "Saving…"). |
+| `DefaultBusyText` | Optional fallback busy label. Set without `BusyTextKey` for a static, non-localised busy label; leave both unset to keep the normal label next to the spinner. |
 
 #### Quilt4PageTitle
 

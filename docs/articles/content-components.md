@@ -67,6 +67,9 @@ A Radzen button with managed Text **and** an optional managed hover tooltip (HTM
 | `Icon` | Radzen icon name. |
 | `Click` | `Func<Task>` click handler. |
 | `Style` | Inline CSS. |
+| `Disabled` | Disables the button (mirrors `RadzenButton.Disabled`). |
+| `Busy` | Shows an in-button spinner and blocks clicks while set (mirrors `RadzenButton.IsBusy`) — set it around a slow async `Click`. |
+| `BusyTextKey` / `DefaultBusyText` | Optional busy-label content key + fallback shown while `Busy` (e.g. "Saving…"). Leave both unset to keep the normal label next to the spinner. |
 
 ### `<Quilt4PageTitle>`
 
