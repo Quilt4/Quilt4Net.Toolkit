@@ -119,8 +119,26 @@ var (value, success) = await _contentService.GetContentAsync("welcome-message", 
 | `Quilt4NetAddress` | `"https://quilt4net.com/"` | Quilt4Net server address. |
 | `ApiKey` | `null` | API key from [Quilt4Net Web](https://quilt4net.com). |
 | `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
+| `SlowLogThreshold` | `3s` | When a content fetch or language-list load from the server takes at least this long, a single `Warning` is logged (endpoint, elapsed, HTTP status) — so slow loads surface even with `Debug` off. Set `TimeSpan.Zero` to disable. |
 
 Configuration path: `Quilt4Net:Content`
+
+#### Diagnostic logging
+
+To diagnose slow or looping content/language loads, enable `Debug` logging for the content categories — no code change required:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Quilt4Net.Toolkit.Features.Content.RemoteContentCallService": "Debug",
+      "Quilt4Net.Toolkit.Blazor.LanguageStateService": "Debug"
+    }
+  }
+}
+```
+
+At `Debug` you get, per content read, the key, resolved language + application, cache hit/miss (`Cache` / `StaleCache` / `Server` / `Default`) and elapsed time; per language load, the source (cache vs server), count and elapsed time; and, in Blazor, each language reload (with timing) and every selected-language change that triggers a content reload. Genuinely slow server round-trips are logged at `Warning` regardless (see `SlowLogThreshold`).
 
 ## Health check client
 

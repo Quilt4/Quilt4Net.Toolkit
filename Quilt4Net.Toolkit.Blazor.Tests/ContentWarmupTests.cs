@@ -45,7 +45,8 @@ public class ContentWarmupTests
         var call = new RecordingRemoteCallService();
         var other = new Language { Key = Guid.NewGuid(), Name = "Swedish" };
         var languages = new[] { new Language { Key = Guid.Empty, Name = "Default" }, other };
-        var sut = new LanguageStateService(new FakeLanguageService(languages), new NoopLocalStorage(), call);
+        var sut = new LanguageStateService(new FakeLanguageService(languages), new NoopLocalStorage(), call,
+            NullLogger<LanguageStateService>.Instance);
 
         sut.Selected = other;
 

@@ -63,8 +63,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             // at their original levels. Matches RemoteConfigCallService.
             if (!needRefresh)
             {
-                _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false.",
-                    key, sw.ElapsedMilliseconds);
+                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Cache", stale: false);
                 return (cached.Value ?? defaultValue, true);
             }
 
@@ -73,8 +72,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             if (cached != null && _contentOptions.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication);
-                _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true.",
-                    key, sw.ElapsedMilliseconds);
+                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "StaleCache", stale: true);
                 return (cached.Value ?? defaultValue, true);
             }
 
@@ -88,8 +86,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var staleValue = stale?.Value ?? defaultValue;
             _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
             CacheFailure(cacheKey, staleValue);
-            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: true.",
-                key, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default");
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default", stale: true);
             return (staleValue, false);
         }
     }
@@ -136,15 +133,25 @@ internal class RemoteContentCallService : IRemoteContentCallService
     {
         if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return [new Language { Name = "No ApiKey provided.", Key = Language.NoApiKeyLanguageKey }];
 
-        if (_languages != null && !forceReload && DateTime.UtcNow < _languagesValidTo) return _languages;
+        if (_languages != null && !forceReload && DateTime.UtcNow < _languagesValidTo)
+        {
+            // #132: trace cache-served language lists so a spinning selector can be told apart from
+            // an actual server round-trip. Debug, opt-in via log config.
+            _logger.LogDebug("Languages resolved from cache: {Count} language(s), valid to {ValidTo}.",
+                _languages.Length, _languagesValidTo);
+            return _languages;
+        }
+
+        var sw = Stopwatch.StartNew();
+        var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
+        var address = $"Api/Language/{assemblyName}/{_environmentName.Name}";
 
         try
         {
-            var assemblyName = _contentOptions.Application ?? Assembly.GetEntryAssembly()?.GetName()?.Name;
-
             using var client = GetHttpClient();
-            var address = $"Api/Language/{assemblyName}/{_environmentName.Name}";
             var response = await client.GetAsync(address);
+
+            WarnIfSlow(sw.ElapsedMilliseconds, $"language load via '{address}'", (int)response.StatusCode, response.ReasonPhrase);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -161,6 +168,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var langInterval = result.ValidTo - DateTime.UtcNow;
             if (langInterval > TimeSpan.Zero)
                 _lastKnownLanguageTtl = langInterval;
+
+            _logger.LogDebug("Languages loaded from '{Address}' in {Elapsed}ms: {Count} language(s), valid to {ValidTo}.",
+                address, sw.ElapsedMilliseconds, _languages.Length, _languagesValidTo);
 
             return _languages;
         }
@@ -253,6 +263,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var address = $"Api/Content/{complexKey}";
             var response = await client.GetAsync(address, cts.Token);
 
+            WarnIfSlow(sw.ElapsedMilliseconds, $"content load for '{key}' (language {languageKey})", (int)response.StatusCode, response.ReasonPhrase);
+
             if (!response.IsSuccessStatusCode)
             {
                 if (response.StatusCode == HttpStatusCode.NotFound)
@@ -269,8 +281,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 }
                 // Negative-cache either way so the key isn't re-requested (and re-logged) every render.
                 CacheFailure(cacheKey, defaultValue);
-                _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
-                    key, sw.ElapsedMilliseconds);
+                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Default", stale: true);
                 return (defaultValue, false);
             }
 
@@ -282,8 +293,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
             _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
 
-            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false.",
-                key, sw.ElapsedMilliseconds);
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Server", stale: false);
             return (result.Value ?? defaultValue, true);
         }
         catch (OperationCanceledException)
@@ -291,16 +301,14 @@ internal class RemoteContentCallService : IRemoteContentCallService
             _logger.LogWarning("HTTP request timed out for content '{Key}' after {Timeout}ms. Using default value.",
                 key, _contentOptions.HttpTimeout.TotalMilliseconds);
             CacheFailure(cacheKey, defaultValue);
-            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
-                key, sw.ElapsedMilliseconds);
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Default", stale: true);
             return (defaultValue, false);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using default for content key {Key}.", e.Message, key);
             CacheFailure(cacheKey, defaultValue);
-            _logger.LogDebug("Content '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true.",
-                key, sw.ElapsedMilliseconds);
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Default", stale: true);
             return (defaultValue, false);
         }
     }
@@ -375,6 +383,29 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 _refreshInProgress.TryRemove(cacheKey, out _);
             }
         });
+    }
+
+    // #132 diagnostics: one consistent Debug line per content resolution, carrying the resolved
+    // language + application so a slow or looping content load can be traced by key+language.
+    // These fire on every read (typically a 0ms cache hit) so they stay at Debug — opt-in via the
+    // category Quilt4Net.Toolkit.Features.Content.RemoteContentCallService at Debug.
+    private void LogResolved(string key, Guid languageKey, string application, long elapsedMs, string source, bool stale)
+    {
+        _logger.LogDebug(
+            "Content '{Key}' (language {LanguageKey}, application '{Application}') resolved in {Elapsed}ms. Source: {Source}, Stale: {Stale}.",
+            key, languageKey, application ?? "", elapsedMs, source, stale);
+    }
+
+    // #132 diagnostics: surface a genuinely slow server round-trip as a single Warning (visible
+    // without Debug logging) so consumers can tell network latency apart from cache/render cost.
+    // Gated by ContentOptions.SlowLogThreshold (TimeSpan.Zero disables). Only called after a
+    // completed HTTP response, so a timeout — which already logs its own Warning — isn't double-counted.
+    private void WarnIfSlow(long elapsedMs, string what, int statusCode, string reasonPhrase)
+    {
+        var threshold = _contentOptions.SlowLogThreshold;
+        if (threshold <= TimeSpan.Zero || elapsedMs < threshold.TotalMilliseconds) return;
+        _logger.LogWarning("Slow {What}: {Elapsed}ms → {StatusCode} {ReasonPhrase} (threshold {Threshold}ms).",
+            what, elapsedMs, statusCode, reasonPhrase, (long)threshold.TotalMilliseconds);
     }
 
     private void CacheFailure(string cacheKey, string value)
