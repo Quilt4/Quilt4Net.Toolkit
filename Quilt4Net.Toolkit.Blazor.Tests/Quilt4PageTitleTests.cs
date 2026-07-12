@@ -82,7 +82,7 @@ public class Quilt4PageTitleTests : BunitContext
             _success = success;
         }
 
-        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
         {
             if (_success && !string.IsNullOrEmpty(_value))
                 return Task.FromResult((_value, true));

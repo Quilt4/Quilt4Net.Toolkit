@@ -11,9 +11,9 @@ internal class ContentService : IContentService
         _remoteContentCallService = remoteContentCallService;
     }
 
-    public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+    public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
     {
-        return _remoteContentCallService.GetContentAsync(key, defaultValue, languageKey, contentType, application);
+        return _remoteContentCallService.GetContentAsync(key, defaultValue, languageKey, contentType, application, translations);
     }
 
     public Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null)

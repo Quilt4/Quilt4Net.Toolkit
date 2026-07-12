@@ -140,7 +140,7 @@ public class Quilt4SplitButtonTests : BunitContext
 
         public void Set(string key, string value) => _values[key] = value;
 
-        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
         {
             if (!string.IsNullOrEmpty(key) && _values.TryGetValue(key, out var value))
                 return Task.FromResult((value, true));
