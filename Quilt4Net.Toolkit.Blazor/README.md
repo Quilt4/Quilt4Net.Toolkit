@@ -492,6 +492,19 @@ Inject `IQuilt4ContentService` to retrieve content programmatically. It automati
 var text = await ContentService.GetAsync("welcome-message", "Hello!");
 ```
 
+### Supplying exact translations from code
+
+You can provide the default value **plus exact translations for one or more other languages** on the same key. Each supplied translation is stored on the server as **authoritative** the first time the key is materialized, and AI translation is **skipped** for those languages; the remaining AI-enabled languages are machine-translated as usual. Translations are keyed by **language name** exactly as entered on the server (a name matching no configured language is ignored):
+
+```csharp
+var subject = await ContentService.GetAsync(
+    "case.subject",
+    "Case subject",                                     // default-language value
+    new Dictionary<string, string> { ["Swedish"] = "Ärende" });
+```
+
+Use it for domain-critical vocabulary (e.g. legal/archival terms) whose wording must be exact rather than machine-translated. Available from Quilt4Net.Toolkit.Blazor >= 0.10.3. (Requires a server that understands the field; older servers ignore it.)
+
 For advanced scenarios (specific language, HTML format), inject `IContentService` directly:
 
 ```csharp
