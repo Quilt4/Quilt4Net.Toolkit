@@ -101,7 +101,7 @@ public class Quilt4RadzenAlertTests : BunitContext
     {
         public Dictionary<string, string> Map { get; } = new();
 
-        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
         {
             if (Map.TryGetValue(key ?? "", out var value) && !string.IsNullOrEmpty(value))
                 return Task.FromResult((value, true));

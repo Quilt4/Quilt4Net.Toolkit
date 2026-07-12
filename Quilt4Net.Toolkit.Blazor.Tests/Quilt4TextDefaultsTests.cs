@@ -102,7 +102,7 @@ public class Quilt4TextDefaultsTests
 
     private sealed class NotFoundContentService : IContentService
     {
-        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
             => Task.FromResult((defaultValue ?? "", false));
         public Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null) => Task.CompletedTask;
         public Task ClearCacheAsync() => Task.CompletedTask;
@@ -112,7 +112,7 @@ public class Quilt4TextDefaultsTests
     {
         private readonly string _stored;
         public StoredValueContentService(string stored) => _stored = stored;
-        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
             => Task.FromResult((_stored, true));
         public Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null) => Task.CompletedTask;
         public Task ClearCacheAsync() => Task.CompletedTask;

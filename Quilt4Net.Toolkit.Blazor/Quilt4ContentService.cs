@@ -28,4 +28,13 @@ internal class Quilt4ContentService : IQuilt4ContentService
         var result = await _contentService.GetContentAsync(key, codeDefault, _languageStateService.Selected.Key, ContentFormat.String, application);
         return result.Value;
     }
+
+    public async Task<string> GetAsync(string key, string defaultValue, IReadOnlyDictionary<string, string> translations, string application = null)
+    {
+        // Send the default-language value plus the exact per-language translations. The server stores
+        // each supplied translation as authoritative and skips AI translation for those languages when
+        // the key is first materialized (issue #135 server half).
+        var result = await _contentService.GetContentAsync(key, defaultValue, _languageStateService.Selected.Key, ContentFormat.String, application, translations);
+        return result.Value;
+    }
 }

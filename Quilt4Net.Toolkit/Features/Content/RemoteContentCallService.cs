@@ -38,7 +38,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _logger = logger;
     }
 
-    public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+    public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
     {
         if (languageKey == Language.DeveloperLanguageKey) return ("X", true);
 
@@ -71,14 +71,14 @@ internal class RemoteContentCallService : IRemoteContentCallService
             // Disabled via options → fall through to a synchronous fetch so the caller gets a fresh value.
             if (cached != null && _contentOptions.StaleWhileRevalidate)
             {
-                StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication);
+                StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication, translations);
                 LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "StaleCache", stale: true);
                 return (cached.Value ?? defaultValue, true);
             }
 
             // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
             // still falls back to any stale cached value on failure.
-            return await FetchContentWithTimeout(key, cacheKey, defaultValue, languageKey, contentType, sw, effectiveApplication);
+            return await FetchContentWithTimeout(key, cacheKey, defaultValue, languageKey, contentType, sw, effectiveApplication, translations);
         }
         catch (Exception e)
         {
@@ -242,7 +242,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string effectiveApplication)
+    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string effectiveApplication, IReadOnlyDictionary<string, string> translations = null)
     {
         try
         {
@@ -254,7 +254,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 Environment = _environmentName.Name,
                 Instance = null,
                 DefaultValue = contentType == null ? null : $"{defaultValue}",
-                ContentFormat = contentType
+                ContentFormat = contentType,
+                Translations = translations
             };
             var complexKey = BuildKey(request);
 
@@ -313,7 +314,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    private void StartBackgroundRefresh(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, string effectiveApplication)
+    private void StartBackgroundRefresh(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, string effectiveApplication, IReadOnlyDictionary<string, string> translations = null)
     {
         if (!_refreshInProgress.TryAdd(cacheKey, true)) return;
 
@@ -329,7 +330,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     Environment = _environmentName.Name,
                     Instance = null,
                     DefaultValue = contentType == null ? null : $"{defaultValue}",
-                    ContentFormat = contentType
+                    ContentFormat = contentType,
+                    Translations = translations
                 };
                 var complexKey = BuildKey(request);
 

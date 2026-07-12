@@ -72,7 +72,7 @@ public class Quilt4NotificationServiceTests
     {
         public Dictionary<string, string> Map { get; } = new();
 
-        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null)
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
         {
             if (Map.TryGetValue(key ?? "", out var v) && !string.IsNullOrEmpty(v)) return Task.FromResult((v, true));
             return Task.FromResult((defaultValue ?? "", false));

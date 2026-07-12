@@ -92,7 +92,7 @@ public class Quilt4ContentTests : BunitContext
         public List<(string Key, string Value)> SetContentCalls { get; } = new();
 
         public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue,
-            Guid languageKey, ContentFormat? contentType, string application = null)
+            Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
             => Task.FromResult<(string, bool)>(("", true));
 
         public Task SetContentAsync(string key, string value, Guid languageKey,
