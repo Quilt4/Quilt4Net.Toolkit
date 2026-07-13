@@ -22,4 +22,11 @@ public sealed class Quilt4SplitButtonItem
 
     /// <summary>When <c>true</c> the item renders disabled and cannot be chosen.</summary>
     public bool Disabled { get; init; }
+
+    /// <summary>
+    /// Optional exact translations for this item's label, keyed by <b>language name</b> (e.g.
+    /// <c>{ ["Swedish"] = "Ta bort" }</c>). Applied only the first time the key is created on the
+    /// server: stored as authoritative for the matching language, AI skipped (issue #141). Optional.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Translations { get; init; }
 }

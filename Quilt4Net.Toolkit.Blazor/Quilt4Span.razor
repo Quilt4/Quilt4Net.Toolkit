@@ -16,6 +16,10 @@
     [Parameter]
     public string Default { get; set; }
 
+    /// <summary>Optional exact translations keyed by language name; applied only on first server creation (stored authoritative, AI skipped). See #141. Optional.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Translations { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         LanguageStateService.LanguageChangedEvent += async (_, e) =>
@@ -33,7 +37,7 @@
 
     private async Task LoadContentAsync()
     {
-        _response = await ContentService.GetContentAsync(Key, Default, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        _response = await ContentService.GetContentAsync(Key, Default, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String, application: null, translations: Translations);
         _content = _response.Value;
     }
 }

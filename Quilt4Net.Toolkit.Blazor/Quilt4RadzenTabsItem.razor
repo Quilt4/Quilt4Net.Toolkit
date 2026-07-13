@@ -23,6 +23,9 @@
     /// <summary>Fallback tab label used when the key isn't set or the lookup yields nothing.</summary>
     [Parameter] public string DefaultText { get; set; }
 
+    /// <summary>Optional exact translations keyed by language name; applied only on first server creation (stored authoritative, AI skipped). See #141. Optional.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string> Translations { get; set; }
+
     [Parameter] public string Icon { get; set; }
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public bool Visible { get; set; } = true;
@@ -41,5 +44,5 @@
     }
 
     private async Task LoadContentAsync()
-        => LoadedText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TextKey, DefaultText);
+        => LoadedText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TextKey, DefaultText, Translations);
 }

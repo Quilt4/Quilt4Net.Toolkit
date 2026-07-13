@@ -34,6 +34,9 @@
     /// <summary>Optional inline style on the wrapping span (display: inline-block / flex / etc.).</summary>
     [Parameter] public string Style { get; set; }
 
+    /// <summary>Optional exact translations keyed by language name; applied only on first server creation (stored authoritative, AI skipped). See #141. Optional.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string> Translations { get; set; }
+
     internal string LoadedTooltip { get; private set; }
 
     protected override async Task OnInitializedAsync()
@@ -47,5 +50,5 @@
     }
 
     private async Task LoadContentAsync()
-        => LoadedTooltip = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TooltipKey, DefaultTooltip);
+        => LoadedTooltip = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TooltipKey, DefaultTooltip, Translations);
 }
