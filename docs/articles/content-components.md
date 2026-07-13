@@ -25,7 +25,8 @@ Plain text inside a Radzen `<RadzenText>` with a `TextStyle`.
 |---|---|---|
 | `Key` | — | Content key. |
 | `Default` | — | Fallback text (treated as the English/default-language default). |
-| `Defaults` | `null` | Optional authoritative default text per language, keyed by two-letter ISO code (`"en"`, `"sv"`, …). Resolution chain: active-UI-culture code default → English (`"en"` or `Default`) → key. For domain-critical vocabulary whose wording must be correct before any translation exists. |
+| `Defaults` | `null` | Optional authoritative default text per language, keyed by two-letter ISO code (`"en"`, `"sv"`, …), resolved **locally**. Resolution chain: active-UI-culture code default → English (`"en"` or `Default`) → key. For correct wording before any translation exists. |
+| `Translations` | `null` | Optional exact per-language values keyed by **language name** (e.g. `["Swedish"]="Ärende"`). Sent to the server and applied **only on first creation**: stored authoritative, AI skipped (0.10.4, #141). Distinct from `Defaults` (which is ISO-code + local-only). |
 | `TextStyle` | `Body1` | Radzen text style. |
 | `Visible` | `true` | Show or hide. |
 | `Style` | `null` | Inline CSS. |
@@ -36,7 +37,7 @@ Plain text inside a Radzen `<RadzenText>` with a `TextStyle`.
             Defaults="@(new Dictionary<string,string> { ["en"] = "Case subject", ["sv"] = "Ärendemening" })" />
 ```
 
-Also available on the service: `IQuilt4ContentService.GetAsync(key, IReadOnlyDictionary<string,string> defaultsByLanguage, application)`.
+Also on the service: `IQuilt4ContentService.GetAsync(key, IReadOnlyDictionary<string,string> defaultsByLanguage, application)` (local per-language default, ISO-code keyed) and `GetAsync(key, defaultValue, IReadOnlyDictionary<string,string> translations, application)` (server-authoritative per-language values, language-name keyed; 0.10.3). The components' `Translations` parameter uses the latter. `Quilt4Span`, `Quilt4Raw`, `Quilt4PageTitle`, `Quilt4Tooltip` and the menu-item components (`Quilt4RadzenPanelMenuItem`, `Quilt4RadzenTabsItem`, `Quilt4SplitButton` + items) accept the same `Translations` parameter.
 
 ### `<Quilt4Content>`
 
