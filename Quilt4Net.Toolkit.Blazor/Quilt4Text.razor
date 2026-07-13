@@ -30,6 +30,15 @@
     [Parameter]
     public IReadOnlyDictionary<string, string> Defaults { get; set; }
 
+    /// <summary>
+    /// Optional exact translations for this key, keyed by <b>language name</b> exactly as entered on
+    /// the server (e.g. <c>{ ["Swedish"] = "Ärende" }</c>). Applied only the first time the key is
+    /// created on the server: each is stored as authoritative for the matching language and AI
+    /// translation is skipped for it (issue #141). Optional — omit for the ordinary key + default flow.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Translations { get; set; }
+
     [Parameter]
     public TextStyle TextStyle { get; set; } = TextStyle.Body1;
 
@@ -65,7 +74,7 @@
         var effectiveDefault = Defaults is { Count: > 0 }
             ? LanguageDefaultResolver.Resolve(Defaults, Default, Key)
             : Default;
-        _response = await ContentService.GetContentAsync(Key, effectiveDefault, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        _response = await ContentService.GetContentAsync(Key, effectiveDefault, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String, application: null, translations: Translations);
         _content = _response.Value;
     }
 

@@ -31,6 +31,10 @@
     [Parameter]
     public string DefaultText { get; set; }
 
+    /// <summary>Optional exact translations for the primary label, keyed by language name; applied only on first server creation (stored authoritative, AI skipped). See #141. Optional.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Translations { get; set; }
+
     /// <summary>Optional Radzen icon name for the primary button.</summary>
     [Parameter]
     public string Icon { get; set; }
@@ -88,7 +92,7 @@
 
     private async Task LoadContentAsync()
     {
-        _text = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TextKey, DefaultText);
+        _text = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TextKey, DefaultText, Translations);
         _busyText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, BusyTextKey, DefaultBusyText);
 
         var resolved = new List<ResolvedItem>();
@@ -96,7 +100,7 @@
         {
             foreach (var item in Items)
             {
-                var text = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, item.TextKey, item.DefaultText);
+                var text = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, item.TextKey, item.DefaultText, item.Translations);
                 resolved.Add(new ResolvedItem(item, text));
             }
         }

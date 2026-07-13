@@ -22,11 +22,12 @@ internal static class PlaceholderResolver
         IContentService contentService,
         ILanguageStateService languageState,
         string key,
-        string @default)
+        string @default,
+        IReadOnlyDictionary<string, string> translations = null)
     {
         if (string.IsNullOrEmpty(key)) return @default;
         var response = await contentService.GetContentAsync(
-            key, @default, languageState.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+            key, @default, languageState.Selected?.Key ?? Guid.Empty, ContentFormat.String, application: null, translations: translations);
         return !string.IsNullOrEmpty(response.Value) ? response.Value : @default;
     }
 }

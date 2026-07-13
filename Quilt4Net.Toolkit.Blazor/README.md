@@ -505,6 +505,15 @@ var subject = await ContentService.GetAsync(
 
 Use it for domain-critical vocabulary (e.g. legal/archival terms) whose wording must be exact rather than machine-translated. Available from Quilt4Net.Toolkit.Blazor >= 0.10.3. (Requires a server that understands the field; older servers ignore it.)
 
+The same capability is available **on the components** (>= 0.10.4) via an optional `Translations` parameter (name-keyed) — on the basic-text components (`Quilt4Text`, `Quilt4Span`, `Quilt4Raw`, `Quilt4PageTitle`, `Quilt4Tooltip`) and the menu-item components (`Quilt4RadzenPanelMenuItem`, `Quilt4RadzenTabsItem`, `Quilt4SplitButton` + its items):
+
+```razor
+<Quilt4Text Key="case.subject" Default="Case subject"
+            Translations="@(new Dictionary<string,string> { ["Swedish"] = "Ärende" })" />
+```
+
+It's optional — every component behaves exactly as before when it's omitted. (Note: this is distinct from `Quilt4Text.Defaults`, which is ISO-code-keyed and resolved locally only; `Translations` is language-name-keyed and stored server-authoritative on first creation.)
+
 For advanced scenarios (specific language, HTML format), inject `IContentService` directly:
 
 ```csharp
