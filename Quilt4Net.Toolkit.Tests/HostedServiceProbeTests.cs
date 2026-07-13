@@ -51,6 +51,10 @@ public class HostedServiceProbeTests
         probe.Register("test", plannedInterval: null, autoMaxInterval: true, pulseWindowSize: 50);
 
         using var cts = new CancellationTokenSource();
+        // Deliberately no cancellation token on Task.Run (hence the xUnit1051 suppression): passing one
+        // would let a canceled token mark the pulser task Canceled and reintroduce the exact
+        // TaskCanceledException flake this test removes. The loop exits purely on the flag.
+#pragma warning disable xUnit1051
         var pulser = Task.Run(() =>
         {
             while (!cts.IsCancellationRequested)
@@ -58,6 +62,7 @@ public class HostedServiceProbeTests
                 probe.Pulse();
             }
         });
+#pragma warning restore xUnit1051
 
         Action poll = () =>
         {
