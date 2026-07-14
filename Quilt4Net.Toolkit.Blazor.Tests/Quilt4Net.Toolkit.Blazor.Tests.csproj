@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <!-- Test fakes must implement every interface event (e.g. ILanguageStateService's), but a given
+         test only raises the one it needs; "event is never used" (CS0067) is expected in a stub and
+         is never a defect, so silence it project-wide rather than per-fake. -->
+    <NoWarn>$(NoWarn);CS0067</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

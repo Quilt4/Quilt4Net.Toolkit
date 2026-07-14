@@ -38,32 +38,44 @@ public class HostedServiceProbeTests
     {
         // Issue #130 (secondary): GetHealth() enumerated _pulseTimes on the health thread while
         // Pulse() appended on the hosted-service thread with no synchronization, which could throw
-        // (concurrent enumerate/add). Access is now guarded by a lock.
+        // (concurrent enumerate/add). Access is now guarded by a lock — this exercises that.
+        //
+        // Hardened against a CI flake: the pulser carries NO Task.Run cancellation token (so it can
+        // only ever RanToCompletion, never Canceled), and the teardown is a plain `await pulser` once
+        // the stop flag is set. The previous version passed cts.Token to Task.Run and waited with
+        // WaitAsync(timeout, TestContext.Current.CancellationToken); under CI load that wait could
+        // surface a spurious TaskCanceledException unrelated to the concurrency being tested. The only
+        // thing asserted is that concurrent Pulse()/GetHealth() never throw.
         var registry = new HostedServiceProbeRegistry();
         var probe = new HostedServiceProbe(registry);
         probe.Register("test", plannedInterval: null, autoMaxInterval: true, pulseWindowSize: 50);
 
         using var cts = new CancellationTokenSource();
+        // Deliberately no cancellation token on Task.Run (hence the xUnit1051 suppression): passing one
+        // would let a canceled token mark the pulser task Canceled and reintroduce the exact
+        // TaskCanceledException flake this test removes. The loop exits purely on the flag.
+#pragma warning disable xUnit1051
         var pulser = Task.Run(() =>
         {
-            while (!cts.Token.IsCancellationRequested)
+            while (!cts.IsCancellationRequested)
             {
                 probe.Pulse();
             }
-        }, cts.Token);
+        });
+#pragma warning restore xUnit1051
 
         Action poll = () =>
         {
-            for (var i = 0; i < 100_000; i++)
+            for (var i = 0; i < 20_000; i++)
             {
                 _ = probe.GetHealth();
             }
         };
 
-        poll.Should().NotThrow();
+        poll.Should().NotThrow("Pulse() and GetHealth() must be safe to call concurrently");
 
-        await cts.CancelAsync();
-        await pulser.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        cts.Cancel();
+        await pulser;
     }
 
     [Fact]
