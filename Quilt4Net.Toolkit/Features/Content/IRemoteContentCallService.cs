@@ -5,6 +5,12 @@ namespace Quilt4Net.Toolkit.Features.Content;
 public interface IRemoteContentCallService
 {
     Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null);
+
+    /// <summary>
+    /// As <see cref="GetContentAsync"/>, but also reports where the value came from. Prefer this
+    /// when the caller needs to tell a server value apart from a cached one or a fallback default.
+    /// </summary>
+    Task<ContentResult> GetContentResultAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null);
     Task SetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat contentType, string application = null);
     Task<Language[]> GetLanguagesAsync(bool forceReload);
     Task ClearContentCacheAsync();

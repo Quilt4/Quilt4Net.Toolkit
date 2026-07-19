@@ -77,6 +77,8 @@ public class ContentWarmupTests
 
         public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
             => Task.FromResult((defaultValue, true));
+        public Task<ContentResult> GetContentResultAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
+            => Task.FromResult(new ContentResult { Value = defaultValue, Success = true, Source = ContentSource.Default, Stale = false });
         public Task SetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat contentType, string application = null) => Task.CompletedTask;
         public Task<Language[]> GetLanguagesAsync(bool forceReload) => Task.FromResult(Array.Empty<Language>());
         public Task ClearContentCacheAsync() => Task.CompletedTask;
