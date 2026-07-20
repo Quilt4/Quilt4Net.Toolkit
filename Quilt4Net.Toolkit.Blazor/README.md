@@ -540,6 +540,43 @@ Or use the built-in admin component.
 
 The `ContentAdmin` component provides toggle switches for edit mode and developer mode, plus a button to reload content.
 
+## Content source
+
+Enable the source overlay by setting `Enabled` on `IContentSourceService`, or from the
+`LanguageSelector` menu (**Show content source**, admin only). Each rendered value is outlined and
+gets a tooltip naming where it came from.
+
+```csharp
+@inject IContentSourceService ContentSourceService
+
+<button @onclick="() => ContentSourceService.Enabled = !ContentSourceService.Enabled">
+    Toggle content source
+</button>
+```
+
+| Colour | Source | Meaning |
+|---|---|---|
+| Red | `Default` | The server has no value for this key — the hard-coded default is rendering. |
+| Green | `Server` | Fetched on this render. |
+| Blue | `Cache` | Cached value that came from the server. |
+| Amber | `StaleCache` | Cached, past TTL, refreshing in the background. |
+| Purple | `Developer` | Developer-language placeholder. |
+| Grey | `NoApiKey` / `Unknown` | No lookup attempted, or provenance not reported. |
+
+Red is the one to look for: it means the text you are seeing is not managed by Quilt4Net.
+
+Supported on `Quilt4Text`, `Quilt4Span`, `Quilt4Raw` and `Quilt4Content`. `Quilt4PageTitle` is not
+included — it renders into `<PageTitle>`, which has no on-page surface to annotate.
+
+Notes:
+
+- **Edit mode wins.** With both enabled, the edit outline is shown, since it carries the
+  click-to-edit affordance.
+- **`Quilt4Raw` normally renders with no wrapping element.** It adds a `<span>` only while the
+  overlay is on; with it off, markup is unchanged.
+- This is distinct from **developer mode** (labelled "Debug mode" in the language menu), which
+  replaces every value with a placeholder. The source overlay leaves the text alone.
+
 ## Languages
 
 Content supports multiple languages managed at [Quilt4Net Web](https://quilt4net.com).

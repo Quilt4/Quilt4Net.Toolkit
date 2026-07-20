@@ -111,6 +111,34 @@ Inject `IContentService` to retrieve and manage content.
 var (value, success) = await _contentService.GetContentAsync("welcome-message", "Hello!", languageKey, ContentFormat.String);
 ```
 
+#### Knowing where a value came from
+
+`GetContentResultAsync` returns the same value plus its provenance, so you can tell a real server
+value apart from a cache hit or a hard-coded fallback.
+
+```csharp
+var result = await _contentService.GetContentResultAsync("welcome-message", "Hello!", languageKey, ContentFormat.String);
+
+if (result.Source == ContentSource.Default)
+{
+    // The server has no value for this key — the caller's default is being rendered.
+}
+```
+
+| `ContentSource` | Meaning |
+|---|---|
+| `Server` | Fetched from Quilt4Net.Server on this call. |
+| `Cache` | Served from the local cache, within TTL, from a value the server supplied. |
+| `StaleCache` | Served from the local cache past its TTL; a background refresh was started. |
+| `Default` | The caller's default was used — no override on the server (404), unreachable, or timed out. Also reported for a cached *default*, so a negative-cache hit is never mistaken for a real cache hit. |
+| `Developer` | Developer language is active; every key resolves to a placeholder. |
+| `NoApiKey` | No API key configured, so no lookup was attempted. |
+| `Unknown` | The `IContentService` implementation does not report provenance (custom or test implementations that only override `GetContentAsync`). |
+
+> `Success` on the legacy tuple is **not** a source discriminator — it is `true` for a cache hit, a
+> stale hit and a fresh fetch alike, and `false` for a missing API key, a 404, a timeout and an
+> error alike. Use `Source` when the distinction matters.
+
 ### ContentOptions
 
 | Property | Default | Description |
@@ -125,6 +153,19 @@ Configuration path: `Quilt4Net:Content`
 
 #### Diagnostic logging
 
+Content logging is split by whether a condition is **actionable**. These fire without any log
+configuration:
+
+| Condition | Level | Frequency |
+|---|---|---|
+| A key has no value on the server (404) | `Information` | Once per key per `FailureCacheDuration` — the negative cache stops it repeating per render. |
+| No `ApiKey` configured, so content can never load | `Warning` | Once per process. |
+| Server round-trip slower than `SlowLogThreshold` | `Warning` | Per slow call. |
+| Timeout, or a non-404 failure response | `Warning` / `Error` | Per occurrence. |
+
+A normal server fetch stays at `Debug` — it is the designed happy path, and at cold start it is one
+line per key.
+
 To diagnose slow or looping content/language loads, enable `Debug` logging for the content categories — no code change required:
 
 ```json
@@ -138,7 +179,10 @@ To diagnose slow or looping content/language loads, enable `Debug` logging for t
 }
 ```
 
-At `Debug` you get, per content read, the key, resolved language + application, cache hit/miss (`Cache` / `StaleCache` / `Server` / `Default`) and elapsed time; per language load, the source (cache vs server), count and elapsed time; and, in Blazor, each language reload (with timing) and every selected-language change that triggers a content reload. Genuinely slow server round-trips are logged at `Warning` regardless (see `SlowLogThreshold`).
+At `Debug` you get, per content read, the key, resolved language + application, the resolved
+`ContentSource` and elapsed time; per language load, the source (cache vs server), count and elapsed
+time; and, in Blazor, each language reload (with timing) and every selected-language change that
+triggers a content reload. Genuinely slow server round-trips are logged at `Warning` regardless (see `SlowLogThreshold`).
 
 ## Health check client
 

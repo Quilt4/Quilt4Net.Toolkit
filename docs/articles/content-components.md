@@ -329,6 +329,36 @@ The content admin panel (`<ContentAdmin>`) shows content admins a **Loaded conte
 list — the number of cached content entries per language, with a Refresh button — so you can confirm
 the warm-up populated the cache as expected.
 
+## Seeing where each value came from
+
+A rendered string gives no clue whether it is real content or the hard-coded fallback the component
+was written with. Turning on **Show content source** (in the `LanguageSelector` menu, admin only, or
+`IContentSourceService.Enabled` from code) outlines every value and adds a tooltip naming its origin.
+
+```csharp
+@inject IContentSourceService ContentSourceService
+
+ContentSourceService.Enabled = true;
+```
+
+Red means the server has no value for that key, so what you are reading is the component's default —
+usually the thing you are looking for. Green is a fresh server fetch, blue a cache hit, amber a stale
+cache entry being refreshed in the background.
+
+Supported on `<Quilt4Text>`, `<Quilt4Span>`, `<Quilt4Raw>` and `<Quilt4Content>`. Edit mode takes
+precedence when both are on, and `<Quilt4Raw>` gains a wrapping `<span>` only while the overlay is
+enabled — with it off, markup is exactly as before.
+
+For the same information without a browser — aggregated across an environment rather than per render
+— see the content log levels in the
+[Quilt4Net.Toolkit README](https://github.com/Quilt4/Quilt4Net.Toolkit/blob/master/Quilt4Net.Toolkit/README.md#diagnostic-logging):
+an unseeded key logs at `Information` once per key, and a missing API key logs a `Warning` once per
+process.
+
+> Not to be confused with **developer mode**, labelled "Debug mode" in the same menu, which swaps
+> every value for a placeholder to reveal unmanaged text. The source overlay leaves the text alone
+> and only annotates it.
+
 ## Where next
 
 - **[Log views](log-views.md)** — content-aware host of the AI log surface.
