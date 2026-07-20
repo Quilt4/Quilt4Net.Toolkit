@@ -4,6 +4,7 @@
 @inject ILanguageStateService LanguageStateService
 @inject IContentService ContentService
 @inject IEditContentService EditContentService
+@inject IContentSourceService ContentSourceService
 @inject IContentAdminService ContentAdminService
 @inject NavigationManager NavigationManager
 
@@ -25,6 +26,10 @@
                     <RadzenMenuItem Text="Debug mode" Icon="@devModeIcon" Click="@(_ => LanguageStateService.DeveloperMode = !LanguageStateService.DeveloperMode)" />
                     var editIcon = EditContentService.Enabled ? "check_box" : "check_box_outline_blank";
                     <RadzenMenuItem Text="Edit mode" Icon="@editIcon" Click="@(_ => EditContentService.Enabled = !EditContentService.Enabled)" />
+                    @* Deliberately NOT called "debug mode" — that label is already taken above by
+                       developer-language mode. This one annotates provenance, it does not swap text. *@
+                    var sourceIcon = ContentSourceService.Enabled ? "check_box" : "check_box_outline_blank";
+                    <RadzenMenuItem Text="Show content source" Icon="@sourceIcon" Click="@(_ => ContentSourceService.Enabled = !ContentSourceService.Enabled)" />
                 }
             </RadzenMenuItem>
         </RadzenMenu>

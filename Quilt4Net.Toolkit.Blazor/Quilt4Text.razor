@@ -3,16 +3,18 @@
 @using Quilt4Net.Toolkit.Features.FeatureToggle
 @inject IContentService ContentService
 @inject IEditContentService EditContentService
+@inject IContentSourceService ContentSourceService
 @inject ILanguageStateService LanguageStateService
 @inject Radzen.DialogService DialogService
 
-<RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@(new Dictionary<string, object> { { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) } })" style="@GetStyle()" Visible="@Visible" />
+<RadzenText Text="@_content" TextStyle="@TextStyle" Attributes="@GetAttributes()" style="@GetStyle()" Visible="@Visible" />
 
 @code {
     private const string EditStyle = "outline: 2px dotted #ffc0cb; outline-offset: -4px; cursor: pointer;";
     private string _content;
     private string _edit = null;
-    private (string Value, bool Success) _response;
+    private bool _showSource;
+    private ContentResult _response;
 
     [Parameter]
     public string Key { get; set; }
@@ -48,7 +50,26 @@
     [Parameter]
     public string Style { get; set; }
 
-    private string GetStyle() => _edit ?? Style;
+    // Edit mode wins when both are on — it is interactive (click-to-edit) and its cursor affordance
+    // must survive. Source mode is read-only annotation, so it yields.
+    private string GetStyle()
+    {
+        if (_edit != null) return _edit;
+        // _response is null until the first load completes, so fall back to Unknown rather than
+        // faulting on an early render.
+        if (_showSource && _response != null) return $"{Style}{(string.IsNullOrEmpty(Style) ? "" : " ")}{ContentSourceDecoration.Style(_response.Source)}";
+        return Style;
+    }
+
+    private Dictionary<string, object> GetAttributes()
+    {
+        var attributes = new Dictionary<string, object>
+        {
+            { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) }
+        };
+        if (_showSource && _response != null) attributes["title"] = ContentSourceDecoration.Tooltip(_response.Source);
+        return attributes;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -64,6 +85,15 @@
         };
         _edit = EditContentService.Enabled ? EditStyle : null;
 
+        // InvokeAsync so the toggle works from any thread, not just a UI click — matches the
+        // LanguageChangedEvent handler above.
+        ContentSourceService.SourceModeEvent += async (s, e) =>
+        {
+            _showSource = e.Enabled;
+            await InvokeAsync(StateHasChanged);
+        };
+        _showSource = ContentSourceService.Enabled;
+
         await LoadContentAsync();
     }
 
@@ -74,14 +104,14 @@
         var effectiveDefault = Defaults is { Count: > 0 }
             ? LanguageDefaultResolver.Resolve(Defaults, Default, Key)
             : Default;
-        _response = await ContentService.GetContentAsync(Key, effectiveDefault, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String, application: null, translations: Translations);
+        _response = await ContentService.GetContentResultAsync(Key, effectiveDefault, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String, application: null, translations: Translations);
         _content = _response.Value;
     }
 
     private async Task OpenDialog()
     {
         if (!EditContentService.Enabled) return;
-        if (!_response.Success) return;
+        if (_response?.Success != true) return;
 
         var result = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
             new Dictionary<string, object>
@@ -92,7 +122,7 @@
             }, new DialogOptions { Resizable = true, Draggable = true });
         if (result != true) return;
 
-        _response = await ContentService.GetContentAsync(Key, null, LanguageStateService.Selected?.Key ?? Guid.Empty, null);
+        _response = await ContentService.GetContentResultAsync(Key, null, LanguageStateService.Selected?.Key ?? Guid.Empty, null);
         _content = _response.Value;
         StateHasChanged();
     }

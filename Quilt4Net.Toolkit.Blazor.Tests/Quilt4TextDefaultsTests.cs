@@ -56,6 +56,7 @@ public class Quilt4TextDefaultsTests
             using var ctx = new BunitContext();
             ctx.Services.AddSingleton<IContentService>(new NotFoundContentService());
             ctx.Services.AddSingleton<IEditContentService>(new StubEditContentService());
+            ctx.Services.AddSingleton<IContentSourceService>(new ContentSourceService());
             ctx.Services.AddSingleton<ILanguageStateService>(new StubLanguageState());
             ctx.Services.AddScoped<DialogService>();
 
@@ -84,6 +85,7 @@ public class Quilt4TextDefaultsTests
             using var ctx = new BunitContext();
             ctx.Services.AddSingleton<IContentService>(new StoredValueContentService("Diarienummer (stored)"));
             ctx.Services.AddSingleton<IEditContentService>(new StubEditContentService());
+            ctx.Services.AddSingleton<IContentSourceService>(new ContentSourceService());
             ctx.Services.AddSingleton<ILanguageStateService>(new StubLanguageState());
             ctx.Services.AddScoped<DialogService>();
 

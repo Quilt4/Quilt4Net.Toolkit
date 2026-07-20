@@ -21,6 +21,7 @@ public class ComponentTranslationsTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddSingleton<IContentService>(_content);
         Services.AddSingleton<IEditContentService>(new StubEditContentService());
+        Services.AddSingleton<IContentSourceService>(new ContentSourceService());
         Services.AddSingleton<ILanguageStateService>(new StubLanguageState());
         Services.AddScoped<DialogService>();
     }

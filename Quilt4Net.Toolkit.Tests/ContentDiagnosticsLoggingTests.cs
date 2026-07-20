@@ -56,6 +56,25 @@ public class ContentDiagnosticsLoggingTests
             "the per-resolution Debug line must carry the resolved language so a slow/looping load is traceable by key + language");
     }
 
+    // Content was registered but no API key was supplied, so every value silently falls back to its
+    // default. Warning, not Error — nothing failed and a key-less setup is valid for local dev — and
+    // once per process, because the check runs on every single read.
+    [Fact]
+    public async Task Missing_api_key_logs_a_warning_once_not_per_read()
+    {
+        using var listener = StartListener(out var prefix, HttpStatusCode.NotFound, TimeSpan.Zero);
+        var recorder = new RecordingLoggerProvider();
+        var service = BuildContentService(prefix, recorder, o => o.ApiKey = "");
+
+        for (var i = 0; i < 5; i++)
+            await service.GetContentAsync("Some.Key", "the-default", Guid.NewGuid(), ContentFormat.String, application: "App");
+
+        var warnings = recorder.Entries.Count(e => e.Level == LogLevel.Warning && e.Message.Contains("API key"));
+        warnings.Should().Be(1, "a missing API key is a startup misconfiguration, not a per-read event");
+        recorder.Entries.Should().NotContain(e => e.Level == LogLevel.Error,
+            "no API key is a misconfiguration, not a failure — the app still renders from defaults");
+    }
+
     private static IContentService BuildContentService(string baseAddress, ILoggerProvider loggerProvider, Action<ContentOptions> configure)
     {
         var host = Host.CreateDefaultBuilder()

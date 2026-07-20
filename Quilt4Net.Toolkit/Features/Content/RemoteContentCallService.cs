@@ -18,9 +18,10 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private readonly EnvironmentName _environmentName;
     private readonly ContentOptions _contentOptions;
     private readonly ILogger<RemoteContentCallService> _logger;
-    private readonly ConcurrentDictionary<string, GetContentResponse> _localCache = new();
+    private readonly ConcurrentDictionary<string, CachedContent> _localCache = new();
     private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
     private readonly ConcurrentDictionary<string, bool> _refreshInProgress = new();
+    private int _missingApiKeyWarned;
     private Language[] _languages;
     private DateTime _languagesValidTo;
     private TimeSpan _lastKnownLanguageTtl;
@@ -40,11 +41,21 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
     public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
     {
-        if (languageKey == Language.DeveloperLanguageKey) return ("X", true);
+        var result = await GetContentResultAsync(key, defaultValue, languageKey, contentType, application, translations);
+        return (result.Value, result.Success);
+    }
+
+    public async Task<ContentResult> GetContentResultAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
+    {
+        if (languageKey == Language.DeveloperLanguageKey) return Result("X", true, ContentSource.Developer, false);
 
         defaultValue ??= $"No content for '{key}'.";
 
-        if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey)) return (defaultValue, false);
+        if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey))
+        {
+            WarnMissingApiKeyOnce();
+            return Result(defaultValue, false, ContentSource.NoApiKey, true);
+        }
 
         var sw = Stopwatch.StartNew();
         // Resolve effective application up front so cache key + request share the same value.
@@ -63,8 +74,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
             // at their original levels. Matches RemoteConfigCallService.
             if (!needRefresh)
             {
-                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Cache", stale: false);
-                return (cached.Value ?? defaultValue, true);
+                // A negative-cache entry holds the caller's default, not server content. Report it as
+                // Default so an unseeded key is never mistaken for a genuine cache hit from the second
+                // render onwards. Success stays true either way — unchanged from the legacy tuple.
+                var source = cached.IsDefault ? ContentSource.Default : ContentSource.Cache;
+                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, source, stale: cached.IsDefault);
+                return Result(cached.Value ?? defaultValue, true, source, cached.IsDefault);
             }
 
             // Stale-while-revalidate: return stale value immediately, refresh in background.
@@ -72,8 +87,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
             if (cached != null && _contentOptions.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication, translations);
-                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "StaleCache", stale: true);
-                return (cached.Value ?? defaultValue, true);
+                var source = cached.IsDefault ? ContentSource.Default : ContentSource.StaleCache;
+                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, source, stale: true);
+                return Result(cached.Value ?? defaultValue, true, source, true);
             }
 
             // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
@@ -86,9 +102,26 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var staleValue = stale?.Value ?? defaultValue;
             _logger.LogError(e, "{Message} Using stale cache or fallback for key {Key}.", e.Message, key);
             CacheFailure(cacheKey, staleValue);
-            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, stale != null ? "StaleCache" : "Default", stale: true);
-            return (staleValue, false);
+            var source = stale is { IsDefault: false } ? ContentSource.StaleCache : ContentSource.Default;
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, source, stale: true);
+            return Result(staleValue, false, source, true);
         }
+    }
+
+    private static ContentResult Result(string value, bool success, ContentSource source, bool stale)
+    {
+        return new ContentResult { Value = value, Success = success, Source = source, Stale = stale };
+    }
+
+    // Content was registered but cannot reach the server, so every value silently falls back to its
+    // default. Warning rather than Error: nothing failed — the app renders correctly, and a key-less
+    // setup is a legitimate local/dev state (hence Language.NoApiKeyLanguageKey). Logged once per
+    // process: this is a startup misconfiguration, and the check runs on every single read.
+    private void WarnMissingApiKeyOnce()
+    {
+        if (Interlocked.Exchange(ref _missingApiKeyWarned, 1) != 0) return;
+        _logger.LogWarning(
+            "No Quilt4Net content API key is configured. Every content value will fall back to its default and no lookups will be attempted. Set ContentOptions.ApiKey to enable content.");
     }
 
     public async Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null)
@@ -223,7 +256,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             foreach (var item in result.Items)
             {
                 var cacheKey = BuildCacheKey(item.Key, languageKey, effectiveApplication);
-                var cached = new GetContentResponse { Value = item.Value, ValidTo = result.ValidTo };
+                var cached = new CachedContent { Value = item.Value, ValidTo = result.ValidTo };
                 _localCache.AddOrUpdate(cacheKey, cached, (_, _) => cached);
                 if (ttl > TimeSpan.Zero) _lastKnownTtl[cacheKey] = ttl;
             }
@@ -242,7 +275,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    private async Task<(string Value, bool Success)> FetchContentWithTimeout(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string effectiveApplication, IReadOnlyDictionary<string, string> translations = null)
+    private async Task<ContentResult> FetchContentWithTimeout(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string effectiveApplication, IReadOnlyDictionary<string, string> translations = null)
     {
         try
         {
@@ -270,10 +303,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
             {
                 if (response.StatusCode == HttpStatusCode.NotFound)
                 {
-                    // A key with no override on the server is the designed fallback path — the caller's
-                    // Default is used. Expected and non-fatal, so log at Debug (not Error) to avoid
-                    // flooding logs/telemetry with a line per unseeded key on every render.
-                    _logger.LogDebug("No content override for key '{Key}' (404). Using default value.", key);
+                    // Information, not Debug: an unseeded key is actionable — someone should seed it —
+                    // and Debug is not enabled in practice, so it was effectively invisible. Safe to
+                    // raise because CacheFailure() below negative-caches the key, so this fires once
+                    // per key per FailureCacheDuration rather than once per render. Still not a
+                    // Warning: falling back to the caller's Default is the designed behaviour.
+                    _logger.LogInformation("No content override for key '{Key}' (404). Using default value.", key);
                 }
                 else
                 {
@@ -282,8 +317,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 }
                 // Negative-cache either way so the key isn't re-requested (and re-logged) every render.
                 CacheFailure(cacheKey, defaultValue);
-                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Default", stale: true);
-                return (defaultValue, false);
+                LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Default, stale: true);
+                return Result(defaultValue, false, ContentSource.Default, true);
             }
 
             var result = await response.Content.ReadFromJsonAsync<GetContentResponse>(cancellationToken: cts.Token);
@@ -292,25 +327,26 @@ internal class RemoteContentCallService : IRemoteContentCallService
             if (interval > TimeSpan.Zero)
                 _lastKnownTtl[cacheKey] = interval;
 
-            _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
+            var cached = new CachedContent { Value = result.Value, ValidTo = result.ValidTo };
+            _localCache.AddOrUpdate(cacheKey, cached, (_, _) => cached);
 
-            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Server", stale: false);
-            return (result.Value ?? defaultValue, true);
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Server, stale: false);
+            return Result(result.Value ?? defaultValue, true, ContentSource.Server, false);
         }
         catch (OperationCanceledException)
         {
             _logger.LogWarning("HTTP request timed out for content '{Key}' after {Timeout}ms. Using default value.",
                 key, _contentOptions.HttpTimeout.TotalMilliseconds);
             CacheFailure(cacheKey, defaultValue);
-            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Default", stale: true);
-            return (defaultValue, false);
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Default, stale: true);
+            return Result(defaultValue, false, ContentSource.Default, true);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using default for content key {Key}.", e.Message, key);
             CacheFailure(cacheKey, defaultValue);
-            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, "Default", stale: true);
-            return (defaultValue, false);
+            LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Default, stale: true);
+            return Result(defaultValue, false, ContentSource.Default, true);
         }
     }
 
@@ -344,8 +380,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 {
                     if (response.StatusCode == HttpStatusCode.NotFound)
                     {
-                        // No override on the server — the designed fallback path, not a failure. Debug only.
-                        _logger.LogDebug("Background refresh for content '{Key}': no override (404). Keeping default value.", key);
+                        // Same reasoning as the foreground 404 above: actionable, and deduped by the
+                        // negative cache to once per key per refresh cycle.
+                        _logger.LogInformation("Background refresh for content '{Key}': no override (404). Keeping default value.", key);
                     }
                     else
                     {
@@ -363,7 +400,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 if (interval > TimeSpan.Zero)
                     _lastKnownTtl[cacheKey] = interval;
 
-                _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
+                var refreshed = new CachedContent { Value = result.Value, ValidTo = result.ValidTo };
+                _localCache.AddOrUpdate(cacheKey, refreshed, (_, _) => refreshed);
                 _logger.LogInformation("Background refresh for content '{Key}' completed. ValidTo: {ValidTo}.",
                     key, result.ValidTo);
             }
@@ -391,7 +429,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
     // language + application so a slow or looping content load can be traced by key+language.
     // These fire on every read (typically a 0ms cache hit) so they stay at Debug — opt-in via the
     // category Quilt4Net.Toolkit.Features.Content.RemoteContentCallService at Debug.
-    private void LogResolved(string key, Guid languageKey, string application, long elapsedMs, string source, bool stale)
+    private void LogResolved(string key, Guid languageKey, string application, long elapsedMs, ContentSource source, bool stale)
     {
         _logger.LogDebug(
             "Content '{Key}' (language {LanguageKey}, application '{Application}') resolved in {Elapsed}ms. Source: {Source}, Stale: {Stale}.",
@@ -410,13 +448,16 @@ internal class RemoteContentCallService : IRemoteContentCallService
             what, elapsedMs, statusCode, reasonPhrase, (long)threshold.TotalMilliseconds);
     }
 
+    // Negative cache. IsDefault marks the entry as a fallback rather than server content, so a later
+    // hit reports ContentSource.Default instead of masquerading as a cache hit.
     private void CacheFailure(string cacheKey, string value)
     {
         var duration = _lastKnownTtl.GetValueOrDefault(cacheKey, _contentOptions.FailureCacheDuration);
-        var failureResponse = new GetContentResponse
+        var failureResponse = new CachedContent
         {
             Value = value,
-            ValidTo = DateTime.UtcNow.Add(duration)
+            ValidTo = DateTime.UtcNow.Add(duration),
+            IsDefault = true
         };
         _localCache.AddOrUpdate(cacheKey, failureResponse, (_, _) => failureResponse);
     }
