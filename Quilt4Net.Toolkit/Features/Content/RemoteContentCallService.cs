@@ -21,6 +21,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private readonly ConcurrentDictionary<string, CachedContent> _localCache = new();
     private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
     private readonly ConcurrentDictionary<string, bool> _refreshInProgress = new();
+    private int _missingApiKeyWarned;
     private Language[] _languages;
     private DateTime _languagesValidTo;
     private TimeSpan _lastKnownLanguageTtl;
@@ -50,7 +51,11 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
         defaultValue ??= $"No content for '{key}'.";
 
-        if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey)) return Result(defaultValue, false, ContentSource.NoApiKey, true);
+        if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey))
+        {
+            WarnMissingApiKeyOnce();
+            return Result(defaultValue, false, ContentSource.NoApiKey, true);
+        }
 
         var sw = Stopwatch.StartNew();
         // Resolve effective application up front so cache key + request share the same value.
@@ -106,6 +111,17 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private static ContentResult Result(string value, bool success, ContentSource source, bool stale)
     {
         return new ContentResult { Value = value, Success = success, Source = source, Stale = stale };
+    }
+
+    // Content was registered but cannot reach the server, so every value silently falls back to its
+    // default. Warning rather than Error: nothing failed — the app renders correctly, and a key-less
+    // setup is a legitimate local/dev state (hence Language.NoApiKeyLanguageKey). Logged once per
+    // process: this is a startup misconfiguration, and the check runs on every single read.
+    private void WarnMissingApiKeyOnce()
+    {
+        if (Interlocked.Exchange(ref _missingApiKeyWarned, 1) != 0) return;
+        _logger.LogWarning(
+            "No Quilt4Net content API key is configured. Every content value will fall back to its default and no lookups will be attempted. Set ContentOptions.ApiKey to enable content.");
     }
 
     public async Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null)
@@ -287,10 +303,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
             {
                 if (response.StatusCode == HttpStatusCode.NotFound)
                 {
-                    // A key with no override on the server is the designed fallback path — the caller's
-                    // Default is used. Expected and non-fatal, so log at Debug (not Error) to avoid
-                    // flooding logs/telemetry with a line per unseeded key on every render.
-                    _logger.LogDebug("No content override for key '{Key}' (404). Using default value.", key);
+                    // Information, not Debug: an unseeded key is actionable — someone should seed it —
+                    // and Debug is not enabled in practice, so it was effectively invisible. Safe to
+                    // raise because CacheFailure() below negative-caches the key, so this fires once
+                    // per key per FailureCacheDuration rather than once per render. Still not a
+                    // Warning: falling back to the caller's Default is the designed behaviour.
+                    _logger.LogInformation("No content override for key '{Key}' (404). Using default value.", key);
                 }
                 else
                 {
@@ -362,8 +380,9 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 {
                     if (response.StatusCode == HttpStatusCode.NotFound)
                     {
-                        // No override on the server — the designed fallback path, not a failure. Debug only.
-                        _logger.LogDebug("Background refresh for content '{Key}': no override (404). Keeping default value.", key);
+                        // Same reasoning as the foreground 404 above: actionable, and deduped by the
+                        // negative cache to once per key per refresh cycle.
+                        _logger.LogInformation("Background refresh for content '{Key}': no override (404). Keeping default value.", key);
                     }
                     else
                     {
