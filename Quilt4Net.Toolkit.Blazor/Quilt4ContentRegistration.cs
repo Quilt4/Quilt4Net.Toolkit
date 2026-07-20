@@ -29,6 +29,7 @@ public static class Quilt4ContentRegistration
     public static IServiceCollection AddQuilt4NetBlazorContent(this IServiceCollection services, IConfiguration configuration, Action<ContentOptions> options = null)
     {
         services.AddScoped<IEditContentService, EditContentService>();
+        services.AddScoped<IContentSourceService, ContentSourceService>();
         services.AddScoped<ILanguageStateService, LanguageStateService>();
         services.AddScoped<IQuilt4ContentService, Quilt4ContentService>();
         services.AddScoped<IContentAdminService, ContentAdminService>();

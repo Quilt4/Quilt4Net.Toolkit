@@ -27,6 +27,7 @@ public class Quilt4ContentTests : BunitContext
 
         Services.AddSingleton<IContentService>(_contentService);
         Services.AddSingleton<IEditContentService>(new StubEditContentService());
+        Services.AddSingleton<IContentSourceService>(new ContentSourceService());
         Services.AddSingleton<ILanguageStateService>(new StubLanguageState());
         Services.AddScoped<DialogService>();
         Services.AddLogging(b => b.AddProvider(_loggerProvider));

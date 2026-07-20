@@ -6,11 +6,12 @@
 @inject IJSRuntime JsRuntime
 @inject IContentService ContentService
 @inject IEditContentService EditContentService
+@inject IContentSourceService ContentSourceService
 @inject ILanguageStateService LanguageStateService
 @inject DialogService DialogService
 @inject ILogger<Quilt4Content> Logger
 
-<span style="@(string.IsNullOrEmpty(_content) ? "display:none" : _edit)" @onclick="OpenDialog" role="button" tabindex="0" @onkeydown="OnKeyDown">
+<span style="@(string.IsNullOrEmpty(_content) ? "display:none" : GetStyle())" title="@GetTitle()" @onclick="OpenDialog" role="button" tabindex="0" @onkeydown="OnKeyDown">
     @((MarkupString)(_content ?? ""))
 </span>
 <div style="display:none" @ref="_holder">
@@ -26,7 +27,19 @@
     private IJSObjectReference _mod;
     private string _content;
     private string _edit = "";
-    private (string Value, bool Success) _response;
+    private bool _showSource;
+    private ContentResult _response;
+
+    // Edit mode wins when both are on — it carries the click-to-edit cursor affordance. Source mode
+    // is read-only annotation, so it yields.
+    private string GetStyle()
+    {
+        if (EditContentService.Enabled) return _edit;
+        if (_showSource && _response != null) return $"{_edit} {ContentSourceDecoration.Style(_response.Source)}";
+        return _edit;
+    }
+
+    private string GetTitle() => _showSource && _response != null ? ContentSourceDecoration.Tooltip(_response.Source) : null;
 
     [Parameter]
     public string Key { get; set; }
@@ -48,14 +61,21 @@
         };
         _edit = EditContentService.Enabled ? EditStyle : "cursor: text;";
 
+        ContentSourceService.SourceModeEvent += async (_, e) =>
+        {
+            _showSource = e.Enabled;
+            await InvokeAsync(StateHasChanged);
+        };
+        _showSource = ContentSourceService.Enabled;
+
         await LoadContentAsync();
     }
 
     private async Task LoadContentAsync()
     {
         //NOTE: Provide empty string as default here, because default needs to be loaded after render. (null would give an answer that we do not want.)
-        _response = await ContentService.GetContentAsync(Key, "", LanguageStateService.Selected?.Key ?? Guid.Empty, null);
-        if (_response.Success) _content = _response.Value;
+        _response = await ContentService.GetContentResultAsync(Key, "", LanguageStateService.Selected?.Key ?? Guid.Empty, null);
+        if (_response?.Success == true) _content = _response.Value;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -81,7 +101,7 @@
             {
                 var defaultHtml = await _mod.InvokeAsync<string>("getInnerHtml", _holder);
 
-                if (_response.Success)
+                if (_response?.Success == true)
                 {
                     // Auto-registering the default value is best-effort: a transient HTTP failure
                     // (401, server unreachable, etc.) must not crash the consuming page — the
@@ -113,7 +133,7 @@
     private async Task OpenDialog()
     {
         if (!EditContentService.Enabled) return;
-        if (!_response.Success) return;
+        if (_response?.Success != true) return;
 
         var response = await DialogService.OpenAsync<ContentEditDialog>($"Edit {Key}",
             new Dictionary<string, object>
@@ -124,7 +144,7 @@
             }, new DialogOptions { Resizable = true, Draggable = true });
         if (response != true) return;
 
-        _response = await ContentService.GetContentAsync(Key, null, LanguageStateService.Selected?.Key ?? Guid.Empty, null);
+        _response = await ContentService.GetContentResultAsync(Key, null, LanguageStateService.Selected?.Key ?? Guid.Empty, null);
         _content = _response.Value;
         StateHasChanged();
     }
