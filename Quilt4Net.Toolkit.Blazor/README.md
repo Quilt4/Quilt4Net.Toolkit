@@ -577,6 +577,33 @@ Notes:
 - This is distinct from **developer mode** (labelled "Debug mode" in the language menu), which
   replaces every value with a placeholder. The source overlay leaves the text alone.
 
+## Startup warm-up (hot-load)
+
+On a cold cache each content component issues its own lookup, so a content-heavy page fans out into
+dozens of requests. `AddQuilt4NetBlazorContent` registers a background startup warm-up that pre-fills
+the cache with a **single bulk call per language**, so the first render serves warm.
+
+- The **default language** is always warmed at startup (non-blocking).
+- List **additional languages** to warm at startup — by name — via `ContentOptions.WarmUpLanguages`.
+  Without this, non-default languages warm lazily on first selection, so the first render in that
+  language pays a per-key fan-out.
+- **Reload Content** (in `LanguageSelector`, admin) clears the cache and then **re-warms** the same
+  set — a true hot-load, not just a flush.
+- Best-effort: against a server without the bulk endpoint, or on any failure, it falls back to lazy
+  per-key fetching.
+
+```csharp
+builder.AddQuilt4NetBlazorContent(o =>
+{
+    o.WarmUpLanguages = ["English", "Svenska"]; // hot-load these at startup, plus the default
+    // o.WarmUpEnabled = false;                 // or disable warm-up entirely
+});
+```
+
+`WarmUpLanguages` names must match the languages configured on the Quilt4Net server; an unmatched
+name is skipped with a `Warning`. See the
+[ContentOptions reference](https://github.com/Quilt4/Quilt4Net.Toolkit/blob/master/Quilt4Net.Toolkit/README.md#contentoptions).
+
 ## Languages
 
 Content supports multiple languages managed at [Quilt4Net Web](https://quilt4net.com).
