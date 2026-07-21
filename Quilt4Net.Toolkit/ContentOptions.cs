@@ -60,6 +60,17 @@ public record ContentOptions
     public bool WarmUpEnabled { get; set; } = true;
 
     /// <summary>
+    /// Additional languages to warm at startup (and on "Reload Content"), on top of the default
+    /// language which is always warmed. Identified by <b>language name</b> exactly as entered on the
+    /// server (e.g. <c>["English", "Svenska"]</c>), matching the naming convention used elsewhere in
+    /// the content API. A name with no matching server language is skipped with a <c>Warning</c>.
+    /// Empty (the default) preserves the previous behaviour — only the default language is warmed at
+    /// startup, and other languages warm per-circuit when first selected. Ignored when
+    /// <see cref="WarmUpEnabled"/> is false.
+    /// </summary>
+    public IReadOnlyList<string> WarmUpLanguages { get; set; } = [];
+
+    /// <summary>
     /// Roles that grant content admin access (edit, debug, reload).
     /// Checked against the authenticated user's claim roles (e.g. Entra ID).
     /// Default is ["ContentAdmin", "Developer"].

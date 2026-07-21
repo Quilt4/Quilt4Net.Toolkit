@@ -51,6 +51,9 @@ builder.Services.AddThargaBlazor(o =>
 builder.AddQuilt4NetBlazorContent(o =>
 {
     o.AssumeAdmin = true;
+    // Hot-load English + Svenska at startup (and on "Reload Content"), on top of the always-warmed
+    // default language. Names must match the languages configured on the target Quilt4Net server.
+    o.WarmUpLanguages = ["English", "Svenska"];
 });
 
 builder.AddQuilt4NetApplicationInsightsClient();

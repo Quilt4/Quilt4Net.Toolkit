@@ -275,6 +275,32 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
+    public async Task WarmConfiguredLanguagesAsync(string application = null)
+    {
+        if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return;
+
+        // The default language (Guid.Empty) is always warmed — this is the pre-existing behaviour.
+        await WarmCacheAsync(Guid.Empty, application);
+
+        if (_contentOptions.WarmUpLanguages is not { Count: > 0 }) return;
+
+        // Configured languages are named; resolve names -> keys against the server's language list.
+        var languages = await GetLanguagesAsync(forceReload: false);
+        var warmed = new HashSet<Guid> { Guid.Empty };
+        foreach (var name in _contentOptions.WarmUpLanguages)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var language = languages.FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (language == null)
+            {
+                _logger.LogWarning("WarmUpLanguages: no language named '{Name}' on the server; skipping.", name);
+                continue;
+            }
+            if (!warmed.Add(language.Key)) continue; // already warmed (e.g. the default) — don't double-fetch
+            await WarmCacheAsync(language.Key, application);
+        }
+    }
+
     private async Task<ContentResult> FetchContentWithTimeout(string key, string cacheKey, string defaultValue, Guid languageKey, ContentFormat? contentType, Stopwatch sw, string effectiveApplication, IReadOnlyDictionary<string, string> translations = null)
     {
         try

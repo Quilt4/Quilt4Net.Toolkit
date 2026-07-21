@@ -6,11 +6,12 @@ using Quilt4Net.Toolkit.Features.Content;
 namespace Quilt4Net.Toolkit.Blazor;
 
 /// <summary>
-/// Pre-fills the content cache with the default language at application startup via one bulk call,
-/// so the first page render serves from a warm cache instead of fanning out a request per key.
-/// Runs in the background (does not block startup) and is best-effort — any failure is swallowed by
-/// the warm-up call, leaving the normal per-key path intact. Disabled via <see cref="ContentOptions.WarmUpEnabled"/>.
-/// The selected (non-default) language is warmed per-circuit by <see cref="LanguageStateService"/>.
+/// Pre-fills the content cache at application startup via one bulk call per language, so the first
+/// page render serves from a warm cache instead of fanning out a request per key. Warms the default
+/// language plus any listed in <see cref="ContentOptions.WarmUpLanguages"/>. Runs in the background
+/// (does not block startup) and is best-effort — any failure is swallowed, leaving the normal
+/// per-key path intact. Disabled via <see cref="ContentOptions.WarmUpEnabled"/>. Languages selected
+/// at runtime but not pre-warmed are warmed per-circuit by <see cref="LanguageStateService"/>.
 /// </summary>
 internal sealed class ContentWarmupHostedService : IHostedService
 {
@@ -29,12 +30,13 @@ internal sealed class ContentWarmupHostedService : IHostedService
     {
         if (!_options.WarmUpEnabled) return Task.CompletedTask;
 
-        // Background so app startup isn't blocked by the bulk fetch. Guid.Empty = default language.
+        // Background so app startup isn't blocked by the bulk fetch. Warms the default language plus
+        // any configured in ContentOptions.WarmUpLanguages.
         _ = Task.Run(async () =>
         {
             try
             {
-                await _callService.WarmCacheAsync(Guid.Empty);
+                await _callService.WarmConfiguredLanguagesAsync();
             }
             catch (Exception e)
             {
