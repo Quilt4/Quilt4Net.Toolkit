@@ -305,13 +305,32 @@ call per language**:
 
 - The **default language** is warmed in the background at application start (non-blocking — startup
   is not delayed).
-- The user's **selected language** is warmed per circuit as soon as it's known, and again whenever
-  they switch language. The cache is process-wide, so the first user on a language pays the one bulk
-  call and everyone after hits the warm cache.
+- **Additional languages** can be warmed at startup too, by name, via `WarmUpLanguages` — see below.
+- The user's **selected language** is warmed per circuit as soon as it's known (if not already
+  pre-warmed), and again whenever they switch language. The cache is process-wide, so the first user
+  on a language pays the one bulk call and everyone after hits the warm cache.
 - Warming is **best-effort and backward-compatible**: against a server that doesn't expose the bulk
   endpoint (404), or on any failure/timeout, it silently falls back to the existing per-key fetching.
 
-Disable it to rely purely on lazy per-key loading:
+### Warming specific languages at startup
+
+By default only the default language is warmed at start; other languages warm lazily when first
+selected — so the first render in, say, Swedish pays a per-key fan-out. To hot-load a fixed set at
+startup, list them by **name** (matching the server's language names):
+
+```csharp
+builder.AddQuilt4NetBlazorContent(o =>
+{
+    o.WarmUpLanguages = ["English", "Svenska"];
+});
+```
+
+Each named language is resolved against the server's language list and warmed with its own bulk
+call; a name with no match is skipped with a `Warning`. The default language is always warmed
+regardless. The admin **Reload Content** action (in `LanguageSelector`) clears the cache and then
+re-warms this same set, so it is a true hot-load rather than just a cache flush.
+
+Disable warm-up entirely to rely purely on lazy per-key loading:
 
 ```json
 {

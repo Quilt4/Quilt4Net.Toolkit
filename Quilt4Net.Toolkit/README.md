@@ -148,6 +148,8 @@ if (result.Source == ContentSource.Default)
 | `ApiKey` | `null` | API key from [Quilt4Net Web](https://quilt4net.com). |
 | `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
 | `SlowLogThreshold` | `3s` | When a content fetch or language-list load from the server takes at least this long, a single `Warning` is logged (endpoint, elapsed, HTTP status) — so slow loads surface even with `Debug` off. Set `TimeSpan.Zero` to disable. |
+| `WarmUpEnabled` | `true` | Pre-fill the cache at startup with one bulk call per language (Blazor). Set `false` for lazy per-key loading only. |
+| `WarmUpLanguages` | `[]` | Extra languages to warm at startup and on "Reload Content", by **name** (e.g. `["English", "Svenska"]`), on top of the always-warmed default. Empty = only the default warms at startup; others warm per-circuit on first selection. |
 
 Configuration path: `Quilt4Net:Content`
 
