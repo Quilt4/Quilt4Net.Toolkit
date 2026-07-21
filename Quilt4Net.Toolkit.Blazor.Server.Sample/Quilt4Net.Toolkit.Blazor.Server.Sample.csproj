@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Quilt4Net.Toolkit.Api\Quilt4Net.Toolkit.Api.csproj" />
     <ProjectReference Include="..\Quilt4Net.Toolkit.Blazor\Quilt4Net.Toolkit.Blazor.csproj" />
   </ItemGroup>

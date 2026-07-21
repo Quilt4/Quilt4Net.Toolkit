@@ -1,0 +1,216 @@
+@page "/content-diagnostics"
+@rendermode InteractiveServer
+@using System.Diagnostics
+@using Quilt4Net.Toolkit.Features.Content
+@using Quilt4Net.Toolkit.Features.FeatureToggle
+@inject IContentService ContentService
+@inject ILanguageStateService LanguageStateService
+
+<PageTitle>Content diagnostics</PageTitle>
+
+<h1>Content diagnostics</h1>
+
+<p>
+    Resolves each key below in <strong>every configured language</strong> and reports where the value
+    came from. This is how you verify AI translation and spot the outage gap from the client side:
+    a non-default language that resolves to <span style="color:#c62828;font-weight:600">Default</span>
+    has <em>no translated value on the server</em> — the translation was never produced (or was lost).
+    <span style="color:#2e7d32;font-weight:600">Server</span> / <span style="color:#1565c0;font-weight:600">Cache</span>
+    means a real value came back.
+</p>
+
+<RadzenAlert AlertStyle="AlertStyle.Info" Variant="Variant.Flat" ShowIcon="true" AllowClose="false" class="rz-my-2">
+    This observes the <strong>client-visible symptom</strong> only. A true audit of the translation
+    <em>queue</em> (requests created during the outage but never drained) needs a server-side endpoint —
+    the client cannot see the <code>TranslationRequest</code> collection. Also: probing a key the server
+    has never seen can cause it to <strong>seed the key on read</strong>. Use known keys when pointing at
+    production.
+</RadzenAlert>
+
+<div class="rz-my-3">
+    <RadzenText TextStyle="TextStyle.Subtitle2">Application</RadzenText>
+    <RadzenTextBox @bind-Value="_application" Placeholder="(blank = this sample's own application)"
+                   class="rz-w-100" aria-label="Application" />
+    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2">
+        Set this to the application whose content you want to inspect — e.g.
+        <code>Eplicta.FortDocs.Web</code> to audit FortDocs. Leave blank to use the sample's own.
+    </RadzenText>
+</div>
+
+<div class="rz-my-3">
+    <RadzenText TextStyle="TextStyle.Subtitle2">Keys to probe (one per line)</RadzenText>
+    <RadzenTextArea @bind-Value="_keysText" Rows="6" class="rz-w-100" aria-label="Keys to probe" />
+    <div class="rz-mt-2">
+        <RadzenButton Text="Probe" Icon="search" Click="@(() => ProbeAsync(clearCache: false))" Disabled="@_running" />
+        <RadzenButton Text="Clear cache & re-probe" Icon="refresh" ButtonStyle="ButtonStyle.Light"
+                      Click="@(() => ProbeAsync(clearCache: true))" Disabled="@_running" class="rz-ml-2" />
+        @if (_running)
+        {
+            <span class="rz-ml-2">Probing…</span>
+        }
+    </div>
+</div>
+
+@if (_languages is { Length: > 0 } && _results.Count > 0)
+{
+    <h3>Per-language summary</h3>
+    <p style="color:gray">Each language across the @_results.Count probed key(s). Defaults in a
+        non-default language are the translation gap.</p>
+    <table class="diag-table">
+        <thead>
+            <tr><th>Language</th><th>Server</th><th>Cache</th><th>Stale</th><th>Default (fallback)</th><th>Other</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var lang in _languages)
+            {
+                var cells = _results.Values.Select(r => r[lang.Key].Source).ToArray();
+                var fallbacks = cells.Count(s => s == ContentSource.Default);
+                <tr>
+                    <td><strong>@lang.Name</strong></td>
+                    <td>@cells.Count(s => s == ContentSource.Server)</td>
+                    <td>@cells.Count(s => s == ContentSource.Cache)</td>
+                    <td>@cells.Count(s => s == ContentSource.StaleCache)</td>
+                    <td style="@(fallbacks > 0 ? "color:#c62828;font-weight:600" : "")">@fallbacks</td>
+                    <td>@cells.Count(s => s is not (ContentSource.Server or ContentSource.Cache or ContentSource.StaleCache or ContentSource.Default))</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h3 class="rz-mt-4">Key × language matrix</h3>
+    <div style="overflow-x:auto">
+        <table class="diag-table">
+            <thead>
+                <tr>
+                    <th>Key</th>
+                    @foreach (var lang in _languages)
+                    {
+                        <th>@lang.Name</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var (key, byLang) in _results)
+                {
+                    <tr>
+                        <td><code>@key</code></td>
+                        @foreach (var lang in _languages)
+                        {
+                            var cell = byLang[lang.Key];
+                            <td style="@CellStyle(cell.Source)" title="@Tooltip(cell)">
+                                @SourceLabel(cell.Source)
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else if (_probed)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" ShowIcon="true" AllowClose="false">
+        No languages returned from the server. Confirm the sample's <code>Quilt4Net:ApiKey</code> and
+        <code>Quilt4Net:Quilt4NetAddress</code> point at a running Quilt4Net server.
+    </RadzenAlert>
+}
+
+<style>
+    .diag-table { border-collapse: collapse; }
+    .diag-table th, .diag-table td { border: 1px solid var(--rz-base-300, #ccc); padding: 4px 10px; text-align: left; }
+    .diag-table thead th { background: var(--rz-base-200, #f0f0f0); }
+</style>
+
+@code {
+    private string _keysText = string.Join("\n", DefaultKeys);
+    private string _application = string.Empty;
+    private bool _running;
+    private bool _probed;
+    private Language[] _languages = [];
+
+    // key -> (languageKey -> result)
+    private readonly Dictionary<string, Dictionary<Guid, ContentResult>> _results = new();
+
+    // The keys the sample's own Content.razor renders — safe to probe against any server.
+    private static readonly string[] DefaultKeys =
+    [
+        "sample-h1", "sample-h3", "sample-body", "sample-rich",
+        "inline-label", "inline-value",
+        "menu.home", "menu.content", "menu.settings",
+        "col.name", "col.description", "col.status",
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Populate the language list up front so the matrix has its columns.
+        _languages = await LanguageStateService.ReloadAsync() ?? [];
+    }
+
+    private async Task ProbeAsync(bool clearCache)
+    {
+        _running = true;
+        _probed = true;
+        _results.Clear();
+        StateHasChanged();
+
+        try
+        {
+            if (clearCache) await ContentService.ClearCacheAsync();
+
+            // Refresh languages in case they changed since page load.
+            _languages = await LanguageStateService.ReloadAsync() ?? [];
+
+            var keys = _keysText
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct()
+                .ToArray();
+
+            foreach (var key in keys)
+            {
+                var byLang = new Dictionary<Guid, ContentResult>();
+                // null application → the client resolves the sample's own; a non-empty box targets
+                // another app's content (e.g. Eplicta.FortDocs.Web).
+                var application = string.IsNullOrWhiteSpace(_application) ? null : _application.Trim();
+                foreach (var lang in _languages)
+                {
+                    byLang[lang.Key] = await ContentService.GetContentResultAsync(
+                        key, "(no server value)", lang.Key, ContentFormat.String, application);
+                }
+                _results[key] = byLang;
+            }
+        }
+        finally
+        {
+            _running = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string SourceLabel(ContentSource source) => source switch
+    {
+        ContentSource.Server => "Server",
+        ContentSource.Cache => "Cache",
+        ContentSource.StaleCache => "Stale",
+        ContentSource.Default => "Default",
+        ContentSource.Developer => "Developer",
+        ContentSource.NoApiKey => "No API key",
+        _ => source.ToString(),
+    };
+
+    private static string CellStyle(ContentSource source)
+    {
+        var colour = source switch
+        {
+            ContentSource.Server => "#2e7d32",
+            ContentSource.Cache => "#1565c0",
+            ContentSource.StaleCache => "#ef6c00",
+            ContentSource.Default => "#c62828",
+            ContentSource.Developer => "#6a1b9a",
+            _ => "#546e7a",
+        };
+        return $"color:{colour};font-weight:600";
+    }
+
+    private static string Tooltip(ContentResult r)
+        => $"Source: {r.Source}, Stale: {r.Stale}\nValue: {r.Value}";
+}
