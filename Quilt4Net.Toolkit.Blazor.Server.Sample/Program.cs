@@ -3,9 +3,35 @@ using Quilt4Net.Toolkit.Api;
 using Quilt4Net.Toolkit.Blazor;
 using Quilt4Net.Toolkit.Blazor.Server.Sample.Components;
 using Radzen;
+using Serilog;
+using Serilog.Events;
 using Tharga.Blazor.Framework;
+// `using Serilog;` also brings Serilog.ILogger into scope, which collides with the
+// Microsoft.Extensions.Logging.ILogger used by the correlation-demo endpoint below. Alias the
+// unqualified name back to the MS type; Serilog is referenced via its own qualified names.
+using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serilog file sink — a plain, tailable log on disk so you can see exactly what the content client
+// is doing (which key resolved from where, when it fell back to a default, when translation is
+// missing) without an App Insights round-trip. Added as an ADDITIONAL logging provider via
+// builder.Logging.AddSerilog (not builder.Host.UseSerilog, which would clear the existing OTel/AI
+// providers that AddQuilt4NetLogging sets up). Both sinks receive every log line.
+// The content categories are raised to Debug in appsettings.Development.json so the per-resolution
+// source lines reach this file. logs/ is git-ignored (*.log).
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .WriteTo.File(
+        "logs/sample-.log",
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
+
+builder.Logging.AddSerilog(Log.Logger, dispose: true);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -25,6 +51,9 @@ builder.Services.AddThargaBlazor(o =>
 builder.AddQuilt4NetBlazorContent(o =>
 {
     o.AssumeAdmin = true;
+    // Hot-load English + Svenska at startup (and on "Reload Content"), on top of the always-warmed
+    // default language. Names must match the languages configured on the target Quilt4Net server.
+    o.WarmUpLanguages = ["English", "Svenska"];
 });
 
 builder.AddQuilt4NetApplicationInsightsClient();

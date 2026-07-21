@@ -24,6 +24,14 @@ public interface IRemoteContentCallService
     Task WarmCacheAsync(Guid languageKey, string application = null);
 
     /// <summary>
+    /// Warm the default language plus every language named in
+    /// <see cref="ContentOptions.WarmUpLanguages"/> in one bulk call each. Used by the startup
+    /// warm-up and by "Reload Content". A configured name with no matching server language is
+    /// skipped with a <c>Warning</c>. Best-effort throughout, like <see cref="WarmCacheAsync"/>.
+    /// </summary>
+    Task WarmConfiguredLanguagesAsync(string application = null);
+
+    /// <summary>
     /// Number of currently-cached content entries grouped by language key — i.e. how much content
     /// has been loaded so far per language (warm-up + lazy loads). For diagnostics/admin display.
     /// </summary>

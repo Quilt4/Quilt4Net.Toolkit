@@ -3,6 +3,7 @@
 @using Quilt4Net.Toolkit.Framework
 @inject ILanguageStateService LanguageStateService
 @inject IContentService ContentService
+@inject IRemoteContentCallService RemoteContentCallService
 @inject IEditContentService EditContentService
 @inject IContentSourceService ContentSourceService
 @inject IContentAdminService ContentAdminService
@@ -52,6 +53,16 @@
     {
         await LanguageStateService.ReloadAsync();
         await ContentService.ClearCacheAsync();
+        // Re-warm before the forced reload so the new circuit renders from a warm cache (the singleton
+        // cache persists across circuits). Best-effort — a warm failure must not block the reload.
+        try
+        {
+            await RemoteContentCallService.WarmConfiguredLanguagesAsync();
+        }
+        catch
+        {
+            // Ignored: the per-key path still serves content on the reload.
+        }
         NavigationManager.NavigateTo(NavigationManager.Uri, true);
     }
 }
