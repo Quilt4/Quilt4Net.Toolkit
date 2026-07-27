@@ -7,7 +7,7 @@ on:
     branches: [master]
 
 env:
-  MAJOR_MINOR: '0.10'
+  MAJOR_MINOR: '1.0'
 
 permissions:
   contents: write
@@ -75,7 +75,7 @@ jobs:
         id: version
         run: |
           LATEST_TAG=$(git tag -l "${MAJOR_MINOR}.*" --sort=-v:refname \
-            | grep -E "^${MAJOR_MINOR}\.[0-9]+$" \
+            | { grep -E "^${MAJOR_MINOR}\.[0-9]+$" || true; } \
             | head -1)
 
           if [ -z "$LATEST_TAG" ]; then
@@ -179,7 +179,7 @@ jobs:
         id: version
         run: |
           LATEST_TAG=$(git tag -l "${MAJOR_MINOR}.*" --sort=-v:refname \
-            | grep -E "^${MAJOR_MINOR}\.[0-9]+$" \
+            | { grep -E "^${MAJOR_MINOR}\.[0-9]+$" || true; } \
             | head -1)
 
           if [ -z "$LATEST_TAG" ]; then
@@ -321,7 +321,7 @@ jobs:
         id: version
         run: |
           LATEST_TAG=$(git tag -l "${MAJOR_MINOR}.*" --sort=-v:refname \
-            | grep -E "^${MAJOR_MINOR}\.[0-9]+$" \
+            | { grep -E "^${MAJOR_MINOR}\.[0-9]+$" || true; } \
             | head -1)
 
           if [ -z "$LATEST_TAG" ]; then

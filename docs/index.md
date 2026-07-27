@@ -4,7 +4,7 @@ _layout: landing
 
 # Quilt4Net.Toolkit
 
-A toolkit for **.NET 8 / 9 / 10** that adds health checks, observability, remote configuration, feature toggles, content / language management, and a drop-in Application Insights UI to your application. Self-host the admin pieces or pair with [Quilt4Net Web](https://quilt4net.com).
+A toolkit for **.NET 10** that adds health checks, observability, remote configuration, feature toggles, content / language management, and a drop-in Application Insights UI to your application. Self-host the admin pieces or pair with [Quilt4Net Web](https://quilt4net.com).
 
 ## Packages
 
