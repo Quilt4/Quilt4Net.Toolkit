@@ -28,6 +28,15 @@
     [Parameter]
     public string DefaultText { get; set; }
 
+    /// <summary>Optional exact translations for <see cref="TextKey"/> (the button label), keyed by
+    /// <b>language name</b> exactly as entered on the server (e.g. <c>{ ["Svenska"] = "Spara" }</c>).
+    /// Applied only the first time the key is created on the server: each is stored as authoritative
+    /// for the matching language and AI translation is skipped for it (issue #141). The button's other
+    /// two text surfaces have their own dictionaries — see <see cref="BusyTextTranslations"/> and
+    /// <see cref="TooltipTranslations"/> — because each resolves a different key.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Translations { get; set; }
+
     [Parameter]
     public string Icon { get; set; }
 
@@ -61,6 +70,12 @@
     [Parameter]
     public string DefaultBusyText { get; set; }
 
+    /// <summary>Optional exact translations for <see cref="BusyTextKey"/>, keyed by <b>language
+    /// name</b> as entered on the server (e.g. <c>{ ["Svenska"] = "Sparar…" }</c>). Separate from
+    /// <see cref="Translations"/> because the busy label is its own content key. See #141.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> BusyTextTranslations { get; set; }
+
     /// <summary>Optional content key resolved for the button's hover tooltip (HTML
     /// <c>title</c> attribute). Falls back to <see cref="DefaultTooltip"/> on miss / empty /
     /// lookup failure. Most useful on icon-only buttons; leave unset for buttons whose
@@ -73,6 +88,12 @@
     /// tooltip; set both for localised content with a sane fallback.</summary>
     [Parameter]
     public string DefaultTooltip { get; set; }
+
+    /// <summary>Optional exact translations for <see cref="TooltipKey"/>, keyed by <b>language
+    /// name</b> as entered on the server (e.g. <c>{ ["Svenska"] = "Spara dokumentet" }</c>). Separate
+    /// from <see cref="Translations"/> because the tooltip is its own content key. See #141.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> TooltipTranslations { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,9 +110,9 @@
 
     private async Task LoadContentAsync()
     {
-        _text = (await ContentService.GetContentAsync(TextKey, DefaultText, LanguageStateService.Selected.Key, ContentFormat.String)).Value;
-        _busyText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, BusyTextKey, DefaultBusyText);
-        var tooltip = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TooltipKey, DefaultTooltip);
+        _text = (await ContentService.GetContentAsync(TextKey, DefaultText, LanguageStateService.Selected.Key, ContentFormat.String, application: null, translations: Translations)).Value;
+        _busyText = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, BusyTextKey, DefaultBusyText, BusyTextTranslations);
+        var tooltip = await PlaceholderResolver.ResolveAsync(ContentService, LanguageStateService, TooltipKey, DefaultTooltip, TooltipTranslations);
         _attributes = string.IsNullOrEmpty(tooltip)
             ? null
             : new Dictionary<string, object> { ["title"] = tooltip };

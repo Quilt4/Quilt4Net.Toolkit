@@ -13,6 +13,14 @@
     [Parameter]
     public string DefaultTitle { get; set; }
 
+    /// <summary>Optional exact translations for <see cref="TitleKey"/>, keyed by <b>language name</b>
+    /// exactly as entered on the server (e.g. <c>{ ["Svenska"] = "Ärende" }</c>). Applied only the
+    /// first time the key is created on the server: each is stored as authoritative for the matching
+    /// language and AI translation is skipped for it (issue #141). Optional — omit for the ordinary
+    /// key + default flow.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Translations { get; set; }
+
     [Parameter]
     public string Property { get; set; }
 
@@ -55,7 +63,7 @@
 
     private async Task LoadContentAsync()
     {
-        var response = await ContentService.GetContentAsync(TitleKey, DefaultTitle, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String);
+        var response = await ContentService.GetContentAsync(TitleKey, DefaultTitle, LanguageStateService.Selected?.Key ?? Guid.Empty, ContentFormat.String, application: null, translations: Translations);
         LoadedTitle = !string.IsNullOrEmpty(response.Value) ? response.Value : DefaultTitle;
     }
 }
