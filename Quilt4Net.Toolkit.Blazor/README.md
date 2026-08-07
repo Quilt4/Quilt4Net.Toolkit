@@ -514,6 +514,29 @@ The same capability is available **on the components** (>= 0.10.4) via an option
 
 It's optional — every component behaves exactly as before when it's omitted. (Note: this is distinct from `Quilt4Text.Defaults`, which is ISO-code-keyed and resolved locally only; `Translations` is language-name-keyed and stored server-authoritative on first creation.)
 
+`Quilt4RadzenDataGridColumn` and `Quilt4Button` also take `Translations`. Because a button resolves **three separate content keys**, it takes three separate dictionaries — one shared dictionary could not tell a label from a busy label from a tooltip:
+
+```razor
+<Quilt4RadzenDataGridColumn TItem="Case" Property="Number"
+                            TitleKey="col.case.number" DefaultTitle="Case number"
+                            Translations="@(new Dictionary<string,string> { ["Swedish"] = "Ärendenummer" })" />
+
+<Quilt4Button TextKey="btn.save"              DefaultText="Save"
+              Translations="@(new Dictionary<string,string> { ["Swedish"] = "Spara" })"
+              BusyTextKey="btn.save.busy"      DefaultBusyText="Saving…"
+              BusyTextTranslations="@(new Dictionary<string,string> { ["Swedish"] = "Sparar…" })"
+              TooltipKey="btn.save.tooltip"    DefaultTooltip="Save the document"
+              TooltipTranslations="@(new Dictionary<string,string> { ["Swedish"] = "Spara dokumentet" })" />
+```
+
+Each dictionary is independent — supplying only `Translations` leaves the busy label and tooltip untranslated rather than reusing the label's text.
+
+> **`Quilt4Content` does not take `Translations`, by design.** Unlike every component above it has no default parameter — it captures its default from the rendered `ChildContent` *after* first render and writes it back through the content **write** path, which carries no translations. Use `Quilt4Raw` (which does take `Translations`) for HTML content that must ship translations from code, or author the other languages in the content admin UI.
+
+**Passing `Translations` to a component that does not declare it is not a compile error.** Blazor binds component parameters by name at render time, so it builds cleanly and then throws `does not have a property matching the name 'Translations'` when the component renders — which, behind an error boundary, shows up as a blank page rather than an error.
+
+> **`Translations` applies only when the key is first created.** It is seed data, not an update mechanism. On a key that already exists on the server the dictionary is ignored — no error, no change. Retrofitting translations onto an app that has been running (so its keys are already materialized) therefore has no effect from code; author those in the content admin UI, or remove the key first so the next read re-creates it.
+
 For advanced scenarios (specific language, HTML format), inject `IContentService` directly:
 
 ```csharp
