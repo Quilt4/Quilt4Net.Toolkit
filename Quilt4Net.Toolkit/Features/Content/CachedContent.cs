@@ -21,4 +21,17 @@ internal record CachedContent
 
     /// <summary>True when this entry holds a fallback default rather than a value from the server.</summary>
     public bool IsDefault { get; init; }
+
+    /// <summary>
+    /// Fallback metadata as reported by the server for this value, carried so a <b>cache hit</b>
+    /// reports the same provenance as the fetch that filled it. Without this the indicator would
+    /// flicker between informative and blank as entries moved in and out of cache.
+    /// </summary>
+    public Guid? ServedLanguageKey { get; init; }
+
+    /// <inheritdoc cref="ServedLanguageKey"/>
+    public ContentFallbackReason FallbackReason { get; init; }
+
+    /// <inheritdoc cref="ServedLanguageKey"/>
+    public bool IsStageFallback { get; init; }
 }

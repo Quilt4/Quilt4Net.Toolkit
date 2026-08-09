@@ -28,4 +28,39 @@ public record ContentResult
     /// in for a value the server never confirmed.
     /// </summary>
     public required bool Stale { get; init; }
+
+    /// <summary>
+    /// The language <see cref="Value"/> is actually in. <c>Guid.Empty</c> is the default language;
+    /// <c>null</c> when the server did not report it.
+    /// </summary>
+    public Guid? ServedLanguageKey { get; init; }
+
+    /// <summary>
+    /// Why <see cref="Value"/> is not in the requested language, when it is not.
+    /// <see cref="ContentFallbackReason.Unknown"/> against a server that predates the field.
+    /// </summary>
+    public ContentFallbackReason FallbackReason { get; init; }
+
+    /// <summary>
+    /// True when the value came from a lower stage than this environment maps to. Orthogonal to
+    /// <see cref="FallbackReason"/> — a value can be both.
+    /// </summary>
+    public bool IsStageFallback { get; init; }
+
+    /// <summary>
+    /// Whether asking again later could yield a better answer: <c>true</c> only while a translation
+    /// is queued, <c>false</c> for a dead end, and <c>null</c> when the server did not say.
+    /// </summary>
+    /// <remarks>
+    /// Derived rather than carried on the wire, so it can never disagree with
+    /// <see cref="FallbackReason"/>. Three-valued on purpose — an older server reports nothing, and
+    /// "no better result is coming" is a meaningfully different claim from "I don't know", which a
+    /// plain <c>bool</c> would quietly conflate.
+    /// </remarks>
+    public bool? CanImprove => FallbackReason switch
+    {
+        ContentFallbackReason.Unknown => null,
+        ContentFallbackReason.TranslationPending => true,
+        _ => false,
+    };
 }

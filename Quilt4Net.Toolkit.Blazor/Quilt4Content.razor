@@ -35,11 +35,11 @@
     private string GetStyle()
     {
         if (EditContentService.Enabled) return _edit;
-        if (_showSource && _response != null) return $"{_edit} {ContentSourceDecoration.Style(_response.Source)}";
+        if (_showSource && _response != null) return $"{_edit} {ContentSourceDecoration.Style(_response)}";
         return _edit;
     }
 
-    private string GetTitle() => _showSource && _response != null ? ContentSourceDecoration.Tooltip(_response.Source) : null;
+    private string GetTitle() => _showSource && _response != null ? ContentSourceDecoration.Tooltip(_response) : null;
 
     [Parameter]
     public string Key { get; set; }

@@ -79,7 +79,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 // render onwards. Success stays true either way — unchanged from the legacy tuple.
                 var source = cached.IsDefault ? ContentSource.Default : ContentSource.Cache;
                 LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, source, stale: cached.IsDefault);
-                return Result(cached.Value ?? defaultValue, true, source, cached.IsDefault);
+                return Result(cached.Value ?? defaultValue, true, source, cached.IsDefault, cached);
             }
 
             // Stale-while-revalidate: return stale value immediately, refresh in background.
@@ -89,7 +89,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 StartBackgroundRefresh(key, cacheKey, defaultValue, languageKey, contentType, effectiveApplication, translations);
                 var source = cached.IsDefault ? ContentSource.Default : ContentSource.StaleCache;
                 LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, source, stale: true);
-                return Result(cached.Value ?? defaultValue, true, source, true);
+                return Result(cached.Value ?? defaultValue, true, source, true, cached);
             }
 
             // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
@@ -108,9 +108,22 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
     }
 
-    private static ContentResult Result(string value, bool success, ContentSource source, bool stale)
+    private static ContentResult Result(string value, bool success, ContentSource source, bool stale, CachedContent metadata = null)
     {
-        return new ContentResult { Value = value, Success = success, Source = source, Stale = stale };
+        return new ContentResult
+        {
+            Value = value,
+            Success = success,
+            Source = source,
+            Stale = stale,
+            // Carried from the cache entry (or the fetch that just filled it) so a cache hit reports
+            // the same fallback provenance as the server call did. Absent for the paths that never
+            // reached the server — no API key, developer language, a hard failure — where "unknown"
+            // is the honest answer rather than "no fallback".
+            ServedLanguageKey = metadata?.ServedLanguageKey,
+            FallbackReason = metadata?.FallbackReason ?? ContentFallbackReason.Unknown,
+            IsStageFallback = metadata?.IsStageFallback ?? false,
+        };
     }
 
     // Content was registered but cannot reach the server, so every value silently falls back to its
@@ -257,7 +270,14 @@ internal class RemoteContentCallService : IRemoteContentCallService
             foreach (var item in result.Items)
             {
                 var cacheKey = BuildCacheKey(item.Key, languageKey, effectiveApplication);
-                var cached = new CachedContent { Value = item.Value, ValidTo = result.ValidTo };
+                var cached = new CachedContent
+                {
+                    Value = item.Value,
+                    ValidTo = result.ValidTo,
+                    ServedLanguageKey = item.ServedLanguageKey,
+                    FallbackReason = item.FallbackReason,
+                    IsStageFallback = item.IsStageFallback,
+                };
                 _localCache.AddOrUpdate(cacheKey, cached, (_, existing) =>
                 {
                     if (!ShouldKeepExisting(existing, cached)) return cached;
@@ -387,11 +407,18 @@ internal class RemoteContentCallService : IRemoteContentCallService
             if (interval > TimeSpan.Zero)
                 _lastKnownTtl[cacheKey] = interval;
 
-            var cached = new CachedContent { Value = result.Value, ValidTo = result.ValidTo };
+            var cached = new CachedContent
+            {
+                Value = result.Value,
+                ValidTo = result.ValidTo,
+                ServedLanguageKey = result.ServedLanguageKey,
+                FallbackReason = result.FallbackReason,
+                IsStageFallback = result.IsStageFallback,
+            };
             _localCache.AddOrUpdate(cacheKey, cached, (_, _) => cached);
 
             LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Server, stale: false);
-            return Result(result.Value ?? defaultValue, true, ContentSource.Server, false);
+            return Result(result.Value ?? defaultValue, true, ContentSource.Server, false, cached);
         }
         catch (OperationCanceledException)
         {
@@ -460,7 +487,14 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 if (interval > TimeSpan.Zero)
                     _lastKnownTtl[cacheKey] = interval;
 
-                var refreshed = new CachedContent { Value = result.Value, ValidTo = result.ValidTo };
+                var refreshed = new CachedContent
+                {
+                    Value = result.Value,
+                    ValidTo = result.ValidTo,
+                    ServedLanguageKey = result.ServedLanguageKey,
+                    FallbackReason = result.FallbackReason,
+                    IsStageFallback = result.IsStageFallback,
+                };
                 _localCache.AddOrUpdate(cacheKey, refreshed, (_, _) => refreshed);
                 _logger.LogInformation("Background refresh for content '{Key}' completed. ValidTo: {ValidTo}.",
                     key, result.ValidTo);

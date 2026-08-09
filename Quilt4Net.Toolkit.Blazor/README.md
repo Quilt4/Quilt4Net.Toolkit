@@ -591,6 +591,35 @@ Red is the one to look for: it means the text you are seeing is not managed by Q
 Supported on `Quilt4Text`, `Quilt4Span`, `Quilt4Raw` and `Quilt4Content`. `Quilt4PageTitle` is not
 included — it renders into `<PageTitle>`, which has no on-page surface to annotate.
 
+### Wrong language: the dashed outline
+
+Source colour answers *where the value came from*. Whether it is in the **language you asked for** is
+a separate question — a value can be a perfectly fresh server hit and still be the wrong language. So
+a language fallback **dashes** the outline instead of recolouring it, and the two read together.
+
+The tooltip then says why, and — the part that matters — whether loading again could do better:
+
+| `FallbackReason` | Tooltip says | Will retrying help? |
+|---|---|---|
+| `TranslationPending` | a translation is queued | **yes**, a later load may show it |
+| `TranslationFailed` | translation gave up | no — requeue it or write the text |
+| `TranslationDisabled` | machine translation is off for this language | no — it must be authored |
+| `NoContent` | the key has no stored content at all | no — this is your own default |
+| `None` | *(solid outline, no extra line)* | nothing is wrong |
+| `Unknown` | *(solid outline, no extra line)* | the server did not say |
+
+In code, `ContentResult.CanImprove` collapses that to the single question — `true`, `false`, or
+**`null` when the server did not report**. It is deliberately three-valued: an older server says
+nothing, and reporting that as a confident `false` would be indistinguishable from a translation
+that has genuinely given up.
+
+`ContentResult.ServedLanguageKey` carries the language the value is actually in, and
+`IsStageFallback` reports the stage dimension independently — a value can be both from a lower stage
+and in the wrong language.
+
+> Requires a server that populates the metadata. Against an older one every value reports `Unknown`
+> and the overlay behaves exactly as before — nothing is dashed, no extra tooltip lines.
+
 Notes:
 
 - **Edit mode wins.** With both enabled, the edit outline is shown, since it carries the

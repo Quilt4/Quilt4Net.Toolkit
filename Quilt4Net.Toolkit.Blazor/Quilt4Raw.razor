@@ -9,7 +9,7 @@
 {
     @* Source mode needs an element to carry the outline + tooltip. Off, this component renders the
        value bare exactly as before — no wrapper, no markup change. *@
-    <span style="@ContentSourceDecoration.Style(_response.Source)" title="@ContentSourceDecoration.Tooltip(_response.Source)">@_content</span>
+    <span style="@ContentSourceDecoration.Style(_response)" title="@ContentSourceDecoration.Tooltip(_response)">@_content</span>
 }
 else
 {

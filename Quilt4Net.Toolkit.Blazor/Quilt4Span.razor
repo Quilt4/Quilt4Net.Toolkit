@@ -12,9 +12,9 @@
     private bool _showSource;
     private ContentResult _response;
 
-    private string GetStyle() => _showSource && _response != null ? ContentSourceDecoration.Style(_response.Source) : null;
+    private string GetStyle() => _showSource && _response != null ? ContentSourceDecoration.Style(_response) : null;
 
-    private string GetTitle() => _showSource && _response != null ? ContentSourceDecoration.Tooltip(_response.Source) : null;
+    private string GetTitle() => _showSource && _response != null ? ContentSourceDecoration.Tooltip(_response) : null;
 
     [Parameter]
     public string Key { get; set; }
