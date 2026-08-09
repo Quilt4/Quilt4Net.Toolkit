@@ -9,7 +9,11 @@
 @inject IContentAdminService ContentAdminService
 @inject NavigationManager NavigationManager
 
-<ConnectionWrapper Service="Service.Content">
+@* Ready as soon as there is a menu to draw. The languages come from LanguageStateService and the
+   admin flag from the auth state — neither is what the connectivity probe answers, so waiting on
+   it only ever delayed a menu that was already complete (#156). The probe still decides what an
+   empty selector shows: nothing, or "not connected". *@
+<ConnectionWrapper Service="Service.Content" Ready="@(LanguageStateService.Languages.Length > 1 || _isAdmin)">
     @if (LanguageStateService.Languages.Length > 1 || _isAdmin)
     {
         <RadzenMenu>

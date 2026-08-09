@@ -2,6 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.Content;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Blazor;
 
@@ -16,12 +17,14 @@ namespace Quilt4Net.Toolkit.Blazor;
 internal sealed class ContentWarmupHostedService : IHostedService
 {
     private readonly IRemoteContentCallService _callService;
+    private readonly IConnectionService _connectionService;
     private readonly ContentOptions _options;
     private readonly ILogger<ContentWarmupHostedService> _logger;
 
-    public ContentWarmupHostedService(IRemoteContentCallService callService, IOptions<ContentOptions> options, ILogger<ContentWarmupHostedService> logger)
+    public ContentWarmupHostedService(IRemoteContentCallService callService, IConnectionService connectionService, IOptions<ContentOptions> options, ILogger<ContentWarmupHostedService> logger)
     {
         _callService = callService;
+        _connectionService = connectionService;
         _options = options.Value;
         _logger = logger;
     }
@@ -41,6 +44,18 @@ internal sealed class ContentWarmupHostedService : IHostedService
             catch (Exception e)
             {
                 _logger.LogError(e, "Content startup warm-up failed: {Message}", e.Message);
+            }
+
+            // The connectivity probe is warmed here too (#156). Its result is now shared
+            // process-wide, so paying for it once at startup keeps it off the render path of the
+            // first circuit — which is the one where a user actually notices it.
+            try
+            {
+                await _connectionService.CanConnectAsync(Service.Content);
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Connection probe warm-up failed: {Message}", e.Message);
             }
         }, CancellationToken.None);
 

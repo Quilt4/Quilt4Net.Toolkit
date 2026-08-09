@@ -1,7 +1,16 @@
-﻿@using Quilt4Net.Toolkit.Framework
+@using Quilt4Net.Toolkit.Framework
 @inject IConnectionService ConnectionService
 
-@if (_result == null)
+@if (Ready)
+{
+    @* The child already has the state it renders, so there is nothing to wait for. Capabilities
+       cascade as null unless a probe happened to complete earlier — a component opting in here is
+       declaring it does not read them. *@
+    <CascadingValue Value="@_result?.Capabilities">
+        @ChildContent
+    </CascadingValue>
+}
+else if (_result == null)
 {
     <Loading Size="ProgressBarCircularSize.Small" />
 }
@@ -23,6 +32,15 @@ else
     [Parameter]
     public Service? Service { get; set; }
 
+    /// <summary>
+    /// Set by a host component that already holds everything it renders. The connectivity probe is
+    /// then neither awaited nor issued: it answers a different question than "can this render", and
+    /// making it a precondition put a network round trip in front of content that was already in
+    /// hand (#156).
+    /// </summary>
+    [Parameter]
+    public bool Ready { get; set; }
+
     [Parameter]
     public RenderFragment ChildContent { get; set; }
 
@@ -30,7 +48,12 @@ else
     {
         if (!Service.HasValue) throw new InvalidOperationException($"No {nameof(Service)} parameter provided to {nameof(ConnectionWrapper)} component.");
 
-        _result = await ConnectionService.CanConnectAsync(Service.Value);
+        // The probe only decides between "nothing to show" and "not connected", and Ready has
+        // already settled that.
+        if (!Ready)
+        {
+            _result = await ConnectionService.CanConnectAsync(Service.Value);
+        }
 
         await base.OnParametersSetAsync();
     }

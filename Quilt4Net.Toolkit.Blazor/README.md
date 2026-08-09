@@ -689,6 +689,13 @@ Add the `LanguageSelector` component to let users switch languages.
 
 The selected language is persisted to browser local storage. All content components update automatically when the language changes.
 
+The selector renders as soon as it has a menu to draw — it does **not** wait on a connectivity check
+first. The connectivity probe (`GET Api/System/WhoAmI`) still runs, but only to decide what an
+*empty* selector shows: nothing, or "Not connected to Quilt4Net". Its result is cached for the whole
+process and warmed at startup alongside the content warm-up, so it is not re-issued per component or
+per circuit. An unsuccessful probe is cached briefly rather than permanently, so a server that comes
+back is picked up without a restart.
+
 ### Language state
 
 Inject `ILanguageStateService` to manage language state from code.
