@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Quilt4Net.Toolkit.Features.Content;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
 using Xunit;
@@ -47,6 +49,39 @@ public class ContentWarmUpTests
         r.Success.Should().BeTrue();
         r.Value.Should().Be("single-value");
         state.SingleKeyCalls.Should().Be(1, "an old server without the bulk endpoint must leave the per-key path working");
+    }
+
+    // #155: warm-up runs once per configured language, so a failure line naming neither the
+    // application nor the language cannot say which of them dropped to per-key fetching — which is
+    // exactly what FortDocs saw when the Swedish warm-up 500'd and the English one succeeded. The
+    // success line has always named them; the failure line was the odd one out.
+
+    [Fact]
+    public async Task A_failed_warm_up_names_the_application_and_language_it_was_warming()
+    {
+        var swedish = Guid.NewGuid();
+        using var listener = StartListener(out var prefix, out _, bulkItems: null, bulkStatus: 500);
+        var logs = new CapturingLoggerProvider();
+
+        var (warm, _) = Build(prefix, loggerProvider: logs);
+        await warm.WarmCacheAsync(swedish, App);
+
+        var entry = logs.Entries.Should().ContainSingle(x => x.Contains("Content warm-up failed")).Subject;
+        entry.Should().Contain(App).And.Contain(swedish.ToString());
+    }
+
+    [Fact]
+    public async Task A_failed_warm_up_reports_the_response_body_as_the_reason()
+    {
+        // "The 500 should say something." Without the body the only signal is the status code,
+        // which says a request failed but never why.
+        using var listener = StartListener(out var prefix, out _, bulkItems: null, bulkStatus: 500);
+        var logs = new CapturingLoggerProvider();
+
+        var (warm, _) = Build(prefix, loggerProvider: logs);
+        await warm.WarmCacheAsync(Guid.NewGuid(), App);
+
+        logs.Entries.Should().ContainSingle(x => x.Contains("Content warm-up failed") && x.Contains("Body:"));
     }
 
     [Fact]
@@ -137,11 +172,12 @@ public class ContentWarmUpTests
         after.Value.Should().Be("real-value", "a placeholder default must never outrank confirmed server content");
     }
 
-    private static (IRemoteContentCallService warm, IContentService content) Build(string baseAddress, string apiKey = "test-key")
+    private static (IRemoteContentCallService warm, IContentService content) Build(string baseAddress, string apiKey = "test-key", ILoggerProvider loggerProvider = null)
     {
         var host = Host.CreateDefaultBuilder()
             .ConfigureServices(services =>
             {
+                if (loggerProvider != null) services.AddLogging(b => b.AddProvider(loggerProvider).SetMinimumLevel(LogLevel.Debug));
                 services.AddQuilt4NetContent(null, o =>
                 {
                     o.Quilt4NetAddress = baseAddress;
@@ -158,6 +194,21 @@ public class ContentWarmUpTests
     {
         public int BulkCalls;
         public int SingleKeyCalls;
+    }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentBag<string> Entries { get; } = [];
+        public ILogger CreateLogger(string categoryName) => new Capturing(Entries);
+        public void Dispose() { }
+
+        private sealed class Capturing(ConcurrentBag<string> entries) : ILogger
+        {
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+                => entries.Add(formatter(state, exception));
+        }
     }
 
     private static HttpListener StartListener(out string prefix, out ListenerState state,
