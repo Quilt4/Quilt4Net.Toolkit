@@ -625,6 +625,25 @@ builder.AddQuilt4NetBlazorContent(o =>
 
 `WarmUpLanguages` names must match the languages configured on the Quilt4Net server; an unmatched
 name is skipped with a `Warning`. See the
+
+### Warm-up never overwrites a newer cached value
+
+A bulk response is a **snapshot** taken when the request was issued, and warm-up is fire-and-forget:
+selecting a language starts the bulk call and raises `LanguageChangedEvent` in the same breath, so
+components take the per-key path concurrently. Warm-up therefore keeps an existing cache entry when
+that entry is newer than its own response, rather than overwriting it.
+
+This matters when a per-key read causes the server to *produce* a value — for example a translation
+the server backfills the first time a language is requested for a key that already existed. Without
+the guard, the slower bulk response would put the pre-backfill fallback back over it, and the user
+would see the old language for the rest of the TTL, intermittently, depending on which response
+landed last.
+
+A **negative** cache entry (a default standing in after a 404, timeout or error) is always replaced
+by real warm-up content — its expiry comes from `FailureCacheDuration` rather than a real response,
+so it can otherwise outlast a genuine value.
+
+See the
 [ContentOptions reference](https://github.com/Quilt4/Quilt4Net.Toolkit/blob/master/Quilt4Net.Toolkit/README.md#contentoptions).
 
 ## Languages
