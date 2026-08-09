@@ -75,6 +75,68 @@ public class ContentWarmUpTests
         state.BulkCalls.Should().Be(0, "no API key means no calls are made at all");
     }
 
+    // Warm-up is fire-and-forget and runs concurrently with the per-key reads a language switch
+    // triggers, so a slower bulk response could overwrite what those reads cached — including a
+    // value the server produced *because* of them, such as a translation backfilled on first
+    // request (Quilt4Net.Server, Toolkit #152). The user then saw the old language for the rest of
+    // the TTL, intermittently, depending on which response landed last.
+
+    [Fact]
+    public async Task Warm_up_does_not_overwrite_a_newer_cached_value()
+    {
+        // Bulk response is deliberately older than the per-key entry already in the cache: it is a
+        // snapshot from before that read happened.
+        using var listener = StartListener(out var prefix, out _,
+            bulkItems: [("k1", "stale-from-bulk")], bulkTtl: TimeSpan.FromMinutes(30));
+
+        var (warm, content) = Build(prefix);
+
+        // Per-key read first — caches "single-value" with the longer TTL.
+        await content.GetContentAsync("k1", "def", Guid.Empty, ContentFormat.String, App);
+
+        await warm.WarmCacheAsync(Guid.Empty, App);
+
+        var after = await content.GetContentAsync("k1", "def", Guid.Empty, ContentFormat.String, App);
+        after.Value.Should().Be("single-value", "the bulk snapshot predates the per-key read and must not undo it");
+    }
+
+    [Fact]
+    public async Task Warm_up_does_replace_an_older_cached_value()
+    {
+        // The converse — the guard must not freeze the cache. A warm-up newer than what is cached
+        // is a legitimate refresh.
+        using var listener = StartListener(out var prefix, out _,
+            bulkItems: [("k1", "fresh-from-bulk")], bulkTtl: TimeSpan.FromHours(2));
+
+        var (warm, content) = Build(prefix);
+        await content.GetContentAsync("k1", "def", Guid.Empty, ContentFormat.String, App);
+
+        await warm.WarmCacheAsync(Guid.Empty, App);
+
+        var after = await content.GetContentAsync("k1", "def", Guid.Empty, ContentFormat.String, App);
+        after.Value.Should().Be("fresh-from-bulk");
+    }
+
+    [Fact]
+    public async Task Warm_up_replaces_a_negative_cache_entry_whatever_its_timestamp()
+    {
+        // A negative entry's ValidTo comes from FailureCacheDuration, not a real response, so it can
+        // outlast a genuine warm-up value. Real content must still win.
+        using var listener = StartListener(out var prefix, out _,
+            bulkItems: [("k1", "real-value")], bulkTtl: TimeSpan.FromMinutes(1), singleKeyStatus: 500);
+
+        var (warm, content) = Build(prefix);
+
+        // Fails -> negative-cached with the caller's default and a 10-minute FailureCacheDuration.
+        var failed = await content.GetContentAsync("k1", "def", Guid.Empty, ContentFormat.String, App);
+        failed.Value.Should().Be("def");
+
+        await warm.WarmCacheAsync(Guid.Empty, App);
+
+        var after = await content.GetContentAsync("k1", "def", Guid.Empty, ContentFormat.String, App);
+        after.Value.Should().Be("real-value", "a placeholder default must never outrank confirmed server content");
+    }
+
     private static (IRemoteContentCallService warm, IContentService content) Build(string baseAddress, string apiKey = "test-key")
     {
         var host = Host.CreateDefaultBuilder()
@@ -99,7 +161,7 @@ public class ContentWarmUpTests
     }
 
     private static HttpListener StartListener(out string prefix, out ListenerState state,
-        (string Key, string Value)[] bulkItems, int bulkStatus = 200)
+        (string Key, string Value)[] bulkItems, int bulkStatus = 200, TimeSpan? bulkTtl = null, int singleKeyStatus = 200)
     {
         var port = GetFreePort();
         prefix = $"http://127.0.0.1:{port}/";
@@ -132,12 +194,14 @@ public class ContentWarmUpTests
                     ctx.Response.StatusCode = bulkStatus;
                     var items = string.Join(",", (bulkItems ?? []).Select(i =>
                         $$"""{"key":"{{i.Key}}","value":"{{i.Value}}"}"""));
-                    body = $$"""{"items":[{{items}}],"validTo":"{{DateTime.UtcNow.AddHours(1):o}}"}""";
+                    // The bulk TTL is adjustable so a test can make the warm-up response older than
+                    // an entry already in the cache — the snapshot-vs-per-key race this guards.
+                    body = $$"""{"items":[{{items}}],"validTo":"{{DateTime.UtcNow.Add(bulkTtl ?? TimeSpan.FromHours(1)):o}}"}""";
                 }
                 else
                 {
                     lock (sync) s.SingleKeyCalls++;
-                    ctx.Response.StatusCode = 200;
+                    ctx.Response.StatusCode = singleKeyStatus;
                     body = $$"""{"value":"single-value","validTo":"{{DateTime.UtcNow.AddHours(1):o}}"}""";
                 }
 

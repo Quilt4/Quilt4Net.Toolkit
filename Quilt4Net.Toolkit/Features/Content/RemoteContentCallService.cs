@@ -253,16 +253,22 @@ internal class RemoteContentCallService : IRemoteContentCallService
             if (result?.Items == null) return;
 
             var ttl = result.ValidTo - DateTime.UtcNow;
+            var kept = 0;
             foreach (var item in result.Items)
             {
                 var cacheKey = BuildCacheKey(item.Key, languageKey, effectiveApplication);
                 var cached = new CachedContent { Value = item.Value, ValidTo = result.ValidTo };
-                _localCache.AddOrUpdate(cacheKey, cached, (_, _) => cached);
+                _localCache.AddOrUpdate(cacheKey, cached, (_, existing) =>
+                {
+                    if (!ShouldKeepExisting(existing, cached)) return cached;
+                    Interlocked.Increment(ref kept);
+                    return existing;
+                });
                 if (ttl > TimeSpan.Zero) _lastKnownTtl[cacheKey] = ttl;
             }
 
-            _logger.LogInformation("Content warm-up loaded {Count} item(s) in {Elapsed}ms for application '{Application}', language '{LanguageKey}'. ValidTo: {ValidTo}.",
-                result.Items.Length, sw.ElapsedMilliseconds, effectiveApplication, languageKey, result.ValidTo);
+            _logger.LogInformation("Content warm-up loaded {Count} item(s) in {Elapsed}ms for application '{Application}', language '{LanguageKey}'. ValidTo: {ValidTo}. Kept {Kept} newer cached value(s).",
+                result.Items.Length, sw.ElapsedMilliseconds, effectiveApplication, languageKey, result.ValidTo, kept);
         }
         catch (OperationCanceledException)
         {
@@ -273,6 +279,34 @@ internal class RemoteContentCallService : IRemoteContentCallService
         {
             _logger.LogError(e, "Content warm-up failed: {Message} Falling back to per-key fetching.", e.Message);
         }
+    }
+
+    /// <summary>
+    /// Whether a bulk warm-up result must leave an existing cache entry alone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A bulk response is a <b>snapshot</b> taken when the request was issued, and warm-up is
+    /// fire-and-forget: <c>LanguageStateService</c> starts it and raises
+    /// <c>LanguageChangedEvent</c> in the same breath, so components take the per-key path
+    /// concurrently. Without this guard the slower bulk response overwrites whatever those reads
+    /// cached — including a value the server only produced <i>because</i> of them, such as a
+    /// translation backfilled on first request. The user then sees the old language for the rest of
+    /// the TTL, intermittently, depending on which response happened to land last.
+    /// </para>
+    /// <para>
+    /// <see cref="CachedContent.ValidTo"/> doubles as a written-at stamp: the TTL is a server
+    /// constant, so a later <c>ValidTo</c> means the entry was written later.
+    /// </para>
+    /// </remarks>
+    private static bool ShouldKeepExisting(CachedContent existing, CachedContent incoming)
+    {
+        // A negative entry stands in for a value the server never confirmed, and its ValidTo comes
+        // from FailureCacheDuration rather than a real response — so it can easily outlast a
+        // genuine warm-up value. Real content always wins over it, timestamps notwithstanding.
+        if (existing.IsDefault) return false;
+
+        return existing.ValidTo > incoming.ValidTo;
     }
 
     public async Task WarmConfiguredLanguagesAsync(string application = null)
