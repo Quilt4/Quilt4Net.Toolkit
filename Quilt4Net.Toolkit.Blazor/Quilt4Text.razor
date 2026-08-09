@@ -57,7 +57,7 @@
         if (_edit != null) return _edit;
         // _response is null until the first load completes, so fall back to Unknown rather than
         // faulting on an early render.
-        if (_showSource && _response != null) return $"{Style}{(string.IsNullOrEmpty(Style) ? "" : " ")}{ContentSourceDecoration.Style(_response.Source)}";
+        if (_showSource && _response != null) return $"{Style}{(string.IsNullOrEmpty(Style) ? "" : " ")}{ContentSourceDecoration.Style(_response)}";
         return Style;
     }
 
@@ -67,7 +67,7 @@
         {
             { "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, OpenDialog) }
         };
-        if (_showSource && _response != null) attributes["title"] = ContentSourceDecoration.Tooltip(_response.Source);
+        if (_showSource && _response != null) attributes["title"] = ContentSourceDecoration.Tooltip(_response);
         return attributes;
     }
 

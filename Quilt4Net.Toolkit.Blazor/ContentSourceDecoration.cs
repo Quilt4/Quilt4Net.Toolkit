@@ -7,10 +7,17 @@ namespace Quilt4Net.Toolkit.Blazor;
 /// <see cref="ContentSource"/> the same way.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Colour carries meaning here: red marks a fallback default — the case you are usually hunting,
 /// because it means the server has no value for that key. Green is a fresh server value, blue a
 /// cache hit, amber a stale one. The outline shape matches the existing edit-mode decoration so the
 /// two modes look related.
+/// </para>
+/// <para>
+/// A <b>language</b> fallback is a second, independent dimension: the value can be a perfectly fresh
+/// server hit and still be the wrong language. That is drawn as a <b>dashed</b> outline rather than
+/// its own colour, so the source colour keeps meaning what it always did and the two read together.
+/// </para>
 /// </remarks>
 internal static class ContentSourceDecoration
 {
@@ -29,6 +36,18 @@ internal static class ContentSourceDecoration
         return $"outline: 2px solid {colour}; outline-offset: -4px;";
     }
 
+    /// <summary>
+    /// As <see cref="Style(ContentSource)"/>, but dashes the outline when the value is not in the
+    /// requested language. Falls through to the source-only style when the server reported nothing
+    /// (<see cref="ContentFallbackReason.Unknown"/>) — an older server must not make every value
+    /// look like a fallback.
+    /// </summary>
+    public static string Style(ContentResult result)
+    {
+        var style = Style(result.Source);
+        return IsLanguageFallback(result) ? style.Replace("solid", "dashed") : style;
+    }
+
     public static string Tooltip(ContentSource source)
     {
         return source switch
@@ -42,4 +61,40 @@ internal static class ContentSourceDecoration
             _ => "Source: not reported by this IContentService implementation"
         };
     }
+
+    /// <summary>
+    /// As <see cref="Tooltip(ContentSource)"/>, plus a line explaining the language fallback and —
+    /// the point of the whole thing — whether asking again later could do better.
+    /// </summary>
+    public static string Tooltip(ContentResult result)
+    {
+        var tooltip = Tooltip(result.Source);
+
+        if (result.IsStageFallback) tooltip += "\nStage: served from a lower stage than this environment maps to.";
+        if (!IsLanguageFallback(result)) return tooltip;
+
+        var reason = result.FallbackReason switch
+        {
+            // The only reason for which waiting is the right move.
+            ContentFallbackReason.TranslationPending =>
+                "Language: not translated yet — a translation is queued, so a later load may show it.",
+            ContentFallbackReason.TranslationFailed =>
+                "Language: translation failed and gave up. Waiting will not help — requeue it or write the text.",
+            ContentFallbackReason.TranslationDisabled =>
+                "Language: machine translation is off for this language. It has to be authored.",
+            ContentFallbackReason.NoContent =>
+                "Language: the key has no stored content at all — this is the caller's own default.",
+            _ => null,
+        };
+
+        return reason == null ? tooltip : $"{tooltip}\n{reason}";
+    }
+
+    /// <summary>
+    /// Whether the value is in a language other than the one asked for. <c>Unknown</c> and
+    /// <c>None</c> both mean "do not decorate" — the first because the server said nothing, the
+    /// second because there is nothing to say.
+    /// </summary>
+    private static bool IsLanguageFallback(ContentResult result)
+        => result.FallbackReason is not (ContentFallbackReason.Unknown or ContentFallbackReason.None);
 }
