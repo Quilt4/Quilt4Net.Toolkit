@@ -164,5 +164,9 @@ internal class LanguageStateService : ILanguageStateService
         });
     }
 
+    // SelectByCode / SelectByName are default interface members on ILanguageStateService — they need
+    // nothing this class has beyond Languages and Selected, so there is one implementation rather
+    // than one per implementor.
+
     public Language[] Languages { get; set; }
 }

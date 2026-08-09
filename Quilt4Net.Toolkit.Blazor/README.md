@@ -706,12 +706,40 @@ Inject `ILanguageStateService` to manage language state from code.
 // Get available languages
 var languages = LanguageState.Languages;
 
-// Change language
-LanguageState.Selected = languages.First(l => l.Key == "sv");
+// Change language by ISO code — the recommended way
+LanguageState.SelectByCode("sv");
 
 // Reload languages from server
 await LanguageState.ReloadAsync();
 ```
+
+#### Selecting by ISO code
+
+Each `Language` carries a stable, tenant-independent **`Code`** (ISO-639: `"sv"`, `"en"`, `"es"`), so
+a host that already stores its own language identity can make the content language follow it:
+
+```csharp
+// The team's working language, held by the host as an ISO code
+if (!LanguageState.SelectByCode(team.LanguageCode))
+{
+    // This team has no such language configured — keep the current one, or offer to add it.
+}
+```
+
+Both `SelectByCode(code)` and `SelectByName(name)` match case-insensitively, return `bool`, and
+**leave the current selection untouched on a miss** — a team simply may not have the language asked
+for, and silently swapping the user's language would be worse than doing nothing.
+
+Prefer `Code` over the alternatives:
+
+| Identifier | Why not |
+|---|---|
+| `Name` (`"Svenska"`) | A display string. Spelling, localisation or a rename breaks the match. |
+| `Key` (GUID) | Registered **per team**, so a hardcoded value does not survive a move between tenants or environments. |
+
+`Code` is **nullable — expect nulls.** A server older than this field never sends one, and a language
+whose code could not be determined keeps it `null` rather than being given a guess. `SelectByCode`
+never matches a language with no code.
 
 ### Developer mode
 
