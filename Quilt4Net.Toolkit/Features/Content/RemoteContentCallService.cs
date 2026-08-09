@@ -251,14 +251,20 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                _logger.LogInformation("Content warm-up endpoint unavailable (404). Server predates bulk content; falling back to per-key fetching.");
+                _logger.LogInformation("Content warm-up endpoint unavailable (404) for application '{Application}' in environment '{Environment}', language '{LanguageKey}'. Server predates bulk content; falling back to per-key fetching.",
+                    effectiveApplication, _environmentName.Name, languageKey);
                 return;
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Content warm-up failed. Response was {StatusCode} {ReasonPhrase}. Falling back to per-key fetching.",
-                    response.StatusCode, response.ReasonPhrase);
+                // Coordinates and body, because warm-up is per language: without them a host warming
+                // two languages sees one failure line that cannot say which one dropped to per-key
+                // fetching, and no reason at all (#155). The success line above has always named
+                // them, so a failure naming nothing was the odd one out.
+                var body = await ReadErrorBodyAsync(response, cts.Token);
+                _logger.LogWarning("Content warm-up failed for application '{Application}' in environment '{Environment}', language '{LanguageKey}'. Response was {StatusCode} {ReasonPhrase}. {Body}Falling back to per-key fetching.",
+                    effectiveApplication, _environmentName.Name, languageKey, response.StatusCode, response.ReasonPhrase, body);
                 return;
             }
 
@@ -292,12 +298,39 @@ internal class RemoteContentCallService : IRemoteContentCallService
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("Content warm-up timed out after {Timeout}ms. Falling back to per-key fetching.",
-                _contentOptions.HttpTimeout.TotalMilliseconds);
+            _logger.LogWarning("Content warm-up timed out after {Timeout}ms for application '{Application}' in environment '{Environment}', language '{LanguageKey}'. Falling back to per-key fetching.",
+                _contentOptions.HttpTimeout.TotalMilliseconds, effectiveApplication, _environmentName.Name, languageKey);
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Content warm-up failed: {Message} Falling back to per-key fetching.", e.Message);
+            _logger.LogError(e, "Content warm-up failed for application '{Application}' in environment '{Environment}', language '{LanguageKey}': {Message} Falling back to per-key fetching.",
+                effectiveApplication, _environmentName.Name, languageKey, e.Message);
+        }
+    }
+
+    /// <summary>
+    /// The error response body, trimmed to one log line, or an empty string when there is nothing
+    /// useful to show. Bounded because the failing response is not always ours — a proxy or gateway
+    /// in front of the server answers with a full HTML page, and that does not belong in a log.
+    /// Never throws: this runs on a path that is already reporting a failure.
+    /// </summary>
+    private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        const int maxLength = 200;
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(body)) return string.Empty;
+
+            // One line: a problem-detail payload is multi-line JSON, and a log entry that wraps is
+            // harder to scan than a truncated one.
+            body = body.ReplaceLineEndings(" ").Trim();
+            if (body.Length > maxLength) body = string.Concat(body.AsSpan(0, maxLength), "…");
+            return $"Body: {body}. ";
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 
