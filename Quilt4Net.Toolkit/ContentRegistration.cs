@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -50,6 +51,12 @@ public static class ContentRegistration
 
         services.AddTransient<ILanguageService, LanguageService>();
         services.AddTransient<IContentService, ContentService>();
+
+        // ConnectionWrapper (LanguageSelector, ContentAdmin) probes Service.Content, so a
+        // content-only host needs this too — it used to come solely from
+        // AddQuilt4NetRemoteConfiguration. Singleton so the probe cache is shared process-wide;
+        // TryAdd so registering both features stays a no-op the second time.
+        services.TryAddSingleton<IConnectionService, ConnectionService>();
 
         // Named factory client: BaseAddress + X-API-KEY configured once, correlation-id forwarded
         // to Quilt4Net.Server. Replaces the previous per-call `new HttpClient()` (socket-pooling +

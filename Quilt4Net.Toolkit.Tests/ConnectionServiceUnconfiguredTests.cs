@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Framework;
@@ -77,10 +78,70 @@ public class ConnectionServiceUnconfiguredTests
         second.Should().BeSameAs(first);
     }
 
-    private static ConnectionService CreateSut(string contentAddress, string configurationAddress)
+    // -------- Probe caching (#156) -----------------------------------------------------------
+
+    [Fact]
+    public async Task An_unreachable_server_is_probed_once_not_once_per_call()
+    {
+        // The catch used to return without caching, so every later probe re-paid the full timeout.
+        var handler = new CountingHandler(() => throw new HttpRequestException("unreachable"));
+        var sut = CreateSut("https://example.com/", "https://example.com/", handler);
+
+        await sut.CanConnectAsync(Service.Content);
+        await sut.CanConnectAsync(Service.Content);
+
+        handler.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_cached_failure_expires_so_the_server_coming_back_is_noticed()
+    {
+        // The cache is process-wide now. Caching a failure forever would leave a permanently
+        // "Not connected" UI after one blip at startup.
+        var handler = new CountingHandler(() => throw new HttpRequestException("unreachable"));
+        var sut = CreateSut("https://example.com/", "https://example.com/", handler);
+        sut.FailureCacheDuration = TimeSpan.Zero; // expired the moment it is written
+
+        await sut.CanConnectAsync(Service.Content);
+        await sut.CanConnectAsync(Service.Content);
+
+        handler.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_successful_probe_is_not_re_issued()
+    {
+        var handler = new CountingHandler(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
+        var sut = CreateSut("https://example.com/", "https://example.com/", handler);
+
+        await sut.CanConnectAsync(Service.Content);
+        await sut.CanConnectAsync(Service.Content);
+
+        handler.Calls.Should().Be(1);
+    }
+
+    private static ConnectionService CreateSut(string contentAddress, string configurationAddress, HttpMessageHandler handler = null)
     {
         var content = Options.Create(new ContentOptions { Quilt4NetAddress = contentAddress });
         var configuration = Options.Create(new RemoteConfigurationOptions { Quilt4NetAddress = configurationAddress });
-        return new ConnectionService(content, configuration);
+        return new ConnectionService(content, configuration, new StubHttpClientFactory(handler ?? new CountingHandler(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") })));
+    }
+
+    private sealed class CountingHandler(Func<HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(respond());
+        }
+    }
+
+    private sealed class StubHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        // No BaseAddress, mirroring a host that registered the other feature only — the service
+        // fills it in from options, which is the path worth exercising here.
+        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
     }
 }

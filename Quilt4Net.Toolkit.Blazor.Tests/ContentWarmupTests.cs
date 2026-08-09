@@ -7,6 +7,7 @@ using Quilt4Net.Toolkit;
 using Quilt4Net.Toolkit.Blazor;
 using Quilt4Net.Toolkit.Features.Content;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
+using Quilt4Net.Toolkit.Framework;
 using Xunit;
 
 namespace Quilt4Net.Toolkit.Blazor.Tests;
@@ -17,7 +18,7 @@ public class ContentWarmupTests
     public async Task HostedService_warms_the_default_language_on_start_when_enabled()
     {
         var call = new RecordingRemoteCallService();
-        var sut = new ContentWarmupHostedService(call, Options.Create(new ContentOptions { WarmUpEnabled = true }),
+        var sut = new ContentWarmupHostedService(call, new RecordingConnectionService(), Options.Create(new ContentOptions { WarmUpEnabled = true }),
             NullLogger<ContentWarmupHostedService>.Instance);
 
         await sut.StartAsync(CancellationToken.None);
@@ -27,16 +28,45 @@ public class ContentWarmupTests
     }
 
     [Fact]
+    public async Task HostedService_warms_the_connection_probe_on_start()
+    {
+        // #156: the probe is shared process-wide, so paying for it here keeps it off the render
+        // path of the first circuit — where a spinner is actually seen.
+        var probe = new RecordingConnectionService();
+        var sut = new ContentWarmupHostedService(new RecordingRemoteCallService(), probe, Options.Create(new ContentOptions { WarmUpEnabled = true }),
+            NullLogger<ContentWarmupHostedService>.Instance);
+
+        await sut.StartAsync(CancellationToken.None);
+
+        (await WaitUntil(() => probe.Probed.Contains(Service.Content))).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_failing_content_warm_up_does_not_skip_the_probe()
+    {
+        // The two warm-ups are independent; one failing must not silently cost the other.
+        var probe = new RecordingConnectionService();
+        var sut = new ContentWarmupHostedService(new ThrowingRemoteCallService(), probe, Options.Create(new ContentOptions { WarmUpEnabled = true }),
+            NullLogger<ContentWarmupHostedService>.Instance);
+
+        await sut.StartAsync(CancellationToken.None);
+
+        (await WaitUntil(() => probe.Probed.Contains(Service.Content))).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task HostedService_does_not_warm_when_disabled()
     {
         var call = new RecordingRemoteCallService();
-        var sut = new ContentWarmupHostedService(call, Options.Create(new ContentOptions { WarmUpEnabled = false }),
+        var probe = new RecordingConnectionService();
+        var sut = new ContentWarmupHostedService(call, probe, Options.Create(new ContentOptions { WarmUpEnabled = false }),
             NullLogger<ContentWarmupHostedService>.Instance);
 
         await sut.StartAsync(CancellationToken.None);
 
         await Task.Delay(150);
         call.Calls.Should().BeEmpty();
+        probe.Probed.Should().BeEmpty("WarmUpEnabled turns the whole startup warm-up off");
     }
 
     [Fact]
@@ -65,7 +95,7 @@ public class ContentWarmupTests
         return condition();
     }
 
-    private sealed class RecordingRemoteCallService : IRemoteContentCallService
+    private class RecordingRemoteCallService : IRemoteContentCallService
     {
         public ConcurrentBag<Guid> Calls { get; } = [];
 
@@ -76,7 +106,7 @@ public class ContentWarmupTests
         }
 
         // Mirrors the real service with no WarmUpLanguages configured: warm the default language.
-        public Task WarmConfiguredLanguagesAsync(string application = null) => WarmCacheAsync(Guid.Empty, application);
+        public virtual Task WarmConfiguredLanguagesAsync(string application = null) => WarmCacheAsync(Guid.Empty, application);
 
         public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
             => Task.FromResult((defaultValue, true));
@@ -86,6 +116,22 @@ public class ContentWarmupTests
         public Task<Language[]> GetLanguagesAsync(bool forceReload) => Task.FromResult(Array.Empty<Language>());
         public Task ClearContentCacheAsync() => Task.CompletedTask;
         public IReadOnlyDictionary<Guid, int> GetCacheCountsByLanguage() => new Dictionary<Guid, int>();
+    }
+
+    private sealed class ThrowingRemoteCallService : RecordingRemoteCallService
+    {
+        public override Task WarmConfiguredLanguagesAsync(string application = null) => throw new HttpRequestException("server unreachable");
+    }
+
+    private sealed class RecordingConnectionService : IConnectionService
+    {
+        public ConcurrentBag<Service> Probed { get; } = [];
+
+        public Task<ConnectionResult> CanConnectAsync(Service service)
+        {
+            Probed.Add(service);
+            return Task.FromResult(new ConnectionResult { Success = true });
+        }
     }
 
     private sealed class FakeLanguageService(Language[] languages) : ILanguageService

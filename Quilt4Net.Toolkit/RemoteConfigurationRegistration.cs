@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -73,6 +74,10 @@ public static class RemoteConfigurationRegistration
         });
         services.AddTransient<IFeatureToggleService, FeatureToggleService>();
         services.AddTransient<IRemoteConfigurationService, RemoteConfigurationService>();
-        services.AddTransient<IConnectionService, ConnectionService>();
+        // Singleton, and TryAdd because AddQuilt4NetContent registers the same service: the probe
+        // cache is only worth having if every caller shares it (#156). As a transient the cache
+        // died with each injected copy, so the connectivity probe ran once per component per
+        // circuit rather than once per process.
+        services.TryAddSingleton<IConnectionService, ConnectionService>();
     }
 }
