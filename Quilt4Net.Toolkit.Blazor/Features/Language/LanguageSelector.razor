@@ -55,18 +55,7 @@
 
     private async Task ReloadContent()
     {
-        await LanguageStateService.ReloadAsync();
-        await ContentService.ClearCacheAsync();
-        // Re-warm before the forced reload so the new circuit renders from a warm cache (the singleton
-        // cache persists across circuits). Best-effort — a warm failure must not block the reload.
-        try
-        {
-            await RemoteContentCallService.WarmConfiguredLanguagesAsync();
-        }
-        catch
-        {
-            // Ignored: the per-key path still serves content on the reload.
-        }
+        await ContentReloader.ReloadAsync(LanguageStateService, ContentService, RemoteContentCallService);
         NavigationManager.NavigateTo(NavigationManager.Uri, true);
     }
 }

@@ -327,8 +327,8 @@ builder.AddQuilt4NetBlazorContent(o =>
 
 Each named language is resolved against the server's language list and warmed with its own bulk
 call; a name with no match is skipped with a `Warning`. The default language is always warmed
-regardless. The admin **Reload Content** action (in `LanguageSelector`) clears the cache and then
-re-warms this same set, so it is a true hot-load rather than just a cache flush.
+regardless. The admin **Reload Content** action (in `LanguageSelector` and `ContentAdmin`) clears
+the cache and then re-warms this same set, so it is a true hot-load rather than just a cache flush.
 
 Disable warm-up entirely to rely purely on lazy per-key loading:
 

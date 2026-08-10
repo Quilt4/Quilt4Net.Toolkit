@@ -85,8 +85,7 @@
 
     private async Task ReloadContent()
     {
-        await LanguageStateService.ReloadAsync();
-        await ContentService.ClearCacheAsync();
+        await ContentReloader.ReloadAsync(LanguageStateService, ContentService, RemoteContentCallService);
         NavigationManager.NavigateTo(NavigationManager.Uri, true);
     }
 }

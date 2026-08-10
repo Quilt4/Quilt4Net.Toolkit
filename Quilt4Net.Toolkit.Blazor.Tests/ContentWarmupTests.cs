@@ -84,6 +84,40 @@ public class ContentWarmupTests
         call.Calls.Should().NotContain(Guid.Empty, "the default language is warmed at startup, not by the selector");
     }
 
+    [Fact]
+    public async Task Reload_content_clears_the_cache_and_then_re_warms_the_configured_languages()
+    {
+        // The re-warm is the whole point of "Reload Content": nothing else refills the singleton
+        // cache after a clear (the hosted service only runs at startup), so without it the button is
+        // a flush and content trickles back one key at a time as pages render.
+        var call = new RecordingRemoteCallService();
+        var state = NewLanguageState(call);
+
+        await ContentReloader.ReloadAsync(state, new DelegatingContentService(call), call);
+
+        call.Events.Should().ContainInOrder("clear", $"warm:{Guid.Empty}");
+    }
+
+    [Fact]
+    public async Task Reload_content_survives_a_failing_warm_up()
+    {
+        // Best-effort: the forced page reload must still happen, falling back to per-key fetching.
+        var call = new ThrowingRemoteCallService();
+        var state = NewLanguageState(call);
+
+        var act = async () => await ContentReloader.ReloadAsync(state, new DelegatingContentService(call), call);
+
+        await act.Should().NotThrowAsync();
+        call.Events.Should().Contain("clear");
+    }
+
+    private static LanguageStateService NewLanguageState(IRemoteContentCallService call)
+    {
+        var languages = new[] { new Language { Key = Guid.Empty, Name = "Default" } };
+        return new LanguageStateService(new FakeLanguageService(languages), new NoopLocalStorage(), call,
+            NullLogger<LanguageStateService>.Instance);
+    }
+
     private static async Task<bool> WaitUntil(Func<bool> condition, int timeoutMs = 2000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -99,9 +133,13 @@ public class ContentWarmupTests
     {
         public ConcurrentBag<Guid> Calls { get; } = [];
 
+        /// <summary>Ordered log — Calls is a bag, and "clear before warm" is an ordering claim.</summary>
+        public ConcurrentQueue<string> Events { get; } = new();
+
         public Task WarmCacheAsync(Guid languageKey, string application = null)
         {
             Calls.Add(languageKey);
+            Events.Enqueue($"warm:{languageKey}");
             return Task.CompletedTask;
         }
 
@@ -114,13 +152,30 @@ public class ContentWarmupTests
             => Task.FromResult(new ContentResult { Value = defaultValue, Success = true, Source = ContentSource.Default, Stale = false });
         public Task SetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat contentType, string application = null) => Task.CompletedTask;
         public Task<Language[]> GetLanguagesAsync(bool forceReload) => Task.FromResult(Array.Empty<Language>());
-        public Task ClearContentCacheAsync() => Task.CompletedTask;
+
+        public Task ClearContentCacheAsync()
+        {
+            Events.Enqueue("clear");
+            return Task.CompletedTask;
+        }
+
         public IReadOnlyDictionary<Guid, int> GetCacheCountsByLanguage() => new Dictionary<Guid, int>();
     }
 
     private sealed class ThrowingRemoteCallService : RecordingRemoteCallService
     {
         public override Task WarmConfiguredLanguagesAsync(string application = null) => throw new HttpRequestException("server unreachable");
+    }
+
+    // The real ContentService is a thin pass-through to the call service, so the reload sequence can
+    // be observed on one recorder.
+    private sealed class DelegatingContentService(IRemoteContentCallService remote) : IContentService
+    {
+        public Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
+            => remote.GetContentAsync(key, defaultValue, languageKey, contentType, application, translations);
+        public Task SetContentAsync(string key, string value, Guid languageKey, ContentFormat contentType, string application = null)
+            => remote.SetContentAsync(key, value, languageKey, contentType, application);
+        public Task ClearCacheAsync() => remote.ClearContentCacheAsync();
     }
 
     private sealed class RecordingConnectionService : IConnectionService
