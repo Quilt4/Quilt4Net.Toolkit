@@ -44,6 +44,37 @@ Every component below:
 - Subscribes to `ILanguageStateService.LanguageChangedEvent` so the resolved text re-renders live on language switch.
 - Falls back to the supplied default on miss / empty value / lookup failure — never throws.
 - Uses the same convention: `{Property}Key` for the content key and `Default{Property}` for the fallback.
+- Treats that default as **seed data**: it materializes the key on first read and is ignored on every read after. Read the next section before relying on it.
+
+### Who owns the text: code seeds it, the server owns it
+
+This is the single most important thing to understand before you use any of it, because it is not what "default" normally means.
+
+The text you write at the call site is a **seed**, not a default that keeps applying:
+
+1. The first time a key is read in a given application + environment, it **materializes** on the server, taking the value (and any `Translations` / `Defaults`) supplied in code.
+2. From that moment the **server is authoritative**. The stored value wins over the code value, forever.
+
+That is deliberate. An administrator's edit in the content admin UI must not be silently reverted by the next deploy.
+
+The consequence catches people out:
+
+```csharp
+// Ships. Renders the OLD text. The build is green and the diff looks right.
+await ContentService.GetAsync("Dashboard.Heading", "Enable {0}");
+```
+
+**Once a key is materialized, editing its text in code does nothing.** No error, no warning, no change on screen. The code value only ever applies again in an environment where that key has never been read.
+
+So a code value is best read as *"what this said when it was first written"* — useful documentation at the call site, and the seed for the next fresh environment, but not the live copy.
+
+#### Changing the text of a key that already exists
+
+Change it where it lives — **in the content admin UI**, per application and environment.
+
+Do **not** mint a numbered sibling key (`Heading2`, `Heading3`) to force new text through. It leaves the retired key materialized in every environment, visible in the admin UI and rendered by nothing, and it puts a revision number in a key name where it tells a translator nothing.
+
+> **A content write API is planned** for the case the admin UI does not scale to — a systematic rename across many keys and environments, applied from CI as one reviewed change. Until it ships, the admin UI is the supported path. See [#161](https://github.com/Quilt4/Quilt4Net.Toolkit/issues/161).
 
 ### Standalone components
 
@@ -535,7 +566,9 @@ Each dictionary is independent — supplying only `Translations` leaves the busy
 
 **Passing `Translations` to a component that does not declare it is not a compile error.** Blazor binds component parameters by name at render time, so it builds cleanly and then throws `does not have a property matching the name 'Translations'` when the component renders — which, behind an error boundary, shows up as a blank page rather than an error.
 
-> **`Translations` applies only when the key is first created.** It is seed data, not an update mechanism. On a key that already exists on the server the dictionary is ignored — no error, no change. Retrofitting translations onto an app that has been running (so its keys are already materialized) therefore has no effect from code; author those in the content admin UI, or remove the key first so the next read re-creates it.
+> **`Translations` applies only when the key is first created.** It is seed data, not an update mechanism — the same rule as the plain default, described under [Who owns the text](#who-owns-the-text-code-seeds-it-the-server-owns-it). On a key that already exists on the server the dictionary is ignored: no error, no change. Retrofitting translations onto an app that has been running (so its keys are already materialized) therefore has no effect from code — author those in the content admin UI.
+>
+> Deleting the key so the next read re-seeds it works, but it is a manual per-environment action and it **races a rolling deploy**: between the delete and the new build being live everywhere, any instance still running the old code that reads the key re-materializes the old value. Treat it as a last resort on a quiet environment, not as a release step.
 
 For advanced scenarios (specific language, HTML format), inject `IContentService` directly:
 
