@@ -245,7 +245,9 @@ Wraps `<RadzenAlert>`. Resolves `Text` (required) and `Title` (optional) — kee
 
 #### Quilt4RadzenDataGridColumn&lt;TItem&gt;
 
-Wraps `<RadzenDataGridColumn>`. Resolves the `Title` attribute. Drop in inline inside a `<RadzenDataGrid>` (or `Quilt4RadzenDataGrid`).
+**Is** a `RadzenDataGridColumn<TItem>` — it inherits rather than wraps — with the `Title` resolved from content. Drop it in inline inside a `<RadzenDataGrid>` (or `Quilt4RadzenDataGrid`).
+
+Because it inherits, **every Radzen column parameter works**, not just a forwarded subset: `OrderIndex`, `Frozen`, `Groupable`, `HeaderTemplate`, `FilterTemplate`, `MinWidth` and the rest behave exactly as on a plain column. **Mixing wrapped and plain columns in one grid is safe** — declaration order holds.
 
 ```razor
 <RadzenDataGrid TItem="Customer" Data="@_customers">
@@ -259,7 +261,10 @@ Wraps `<RadzenDataGridColumn>`. Resolves the `Title` attribute. Drop in inline i
 | Parameter | Description |
 |-----------|-------------|
 | `TitleKey` / `DefaultTitle` | Content key + fallback for the column header. |
-| `Property`, `Width`, `Sortable`, `Filterable`, `Visible`, `SortOrder`, `TextAlign`, `FormatString`, `Template` | Pass-through to `<RadzenDataGridColumn>`. |
+| `Translations` | Optional per-language seed values for `TitleKey`. See [Supplying exact translations from code](#supplying-exact-translations-from-code). |
+| *everything else* | Inherited from `RadzenDataGridColumn<TItem>` — `Property`, `Width`, `Sortable`, `Filterable`, `Visible`, `SortOrder`, `TextAlign`, `FormatString`, `Template`, `OrderIndex`, `Frozen`, `Groupable`, … |
+
+> **Don't set `Title` as well as `TitleKey`.** The resolved title is applied through Radzen's own `SetTitle` once content loads, so it replaces whatever `Title` held. Use `DefaultTitle` for the fallback instead.
 
 #### Quilt4RadzenDataGrid&lt;TItem&gt;
 
