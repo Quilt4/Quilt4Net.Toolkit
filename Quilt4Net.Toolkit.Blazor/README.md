@@ -775,6 +775,27 @@ Set `TogglesOnly="true"` to show only boolean toggles.
 
 The component displays a data grid with editors for boolean, integer, and string values. Changes are saved to [Quilt4Net Web](https://quilt4net.com).
 
+### Scope columns and the environment filter
+
+A configuration entry is scoped by **application**, **environment** and **instance**, and the grid lists every entry the team's API key can read — so the same key legitimately appears once per application × environment × instance. Those three are shown as their own columns, sortable like the rest:
+
+| Column | Shown |
+|---|---|
+| Application | Always |
+| Environment | Always |
+| Instance | Only when at least one loaded entry carries an instance |
+
+An entry that applies everywhere is stored with no application or environment, and renders as **`(all)`** rather than an empty cell — a blank reads as missing data rather than as a deliberate "not scoped".
+
+Above the grid, an **environment** dropdown filters the rows. It defaults to the host's own environment (`IHostEnvironment.EnvironmentName`), and clearing it shows every environment again. Two behaviours are deliberate:
+
+- **Shared entries are never filtered out.** They apply to every environment, so they stay listed whichever environment is selected — a filter that hid them would conceal more configuration than having no columns did.
+- **When the host's environment has no entries, no filter is applied.** Selecting an arbitrary environment instead would hide values the operator can edit.
+
+The dropdown is not rendered at all when every entry is shared, since there would be nothing to filter on.
+
+> The row actions (edit, reset, delete) have always acted on the row's own application/environment/instance. The columns exist so the operator can see which scope that is before acting on it.
+
 ## Log viewer
 
 View and search Application Insights logs with the `LogView` component. Requires the Application Insights client to be configured in one of two modes (mutually exclusive):

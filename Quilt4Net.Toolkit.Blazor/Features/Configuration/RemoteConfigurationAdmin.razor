@@ -1,8 +1,11 @@
-﻿@using Microsoft.Extensions.Logging
+﻿@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Hosting
+@using Microsoft.Extensions.Logging
 @using Quilt4Net.Toolkit.Blazor.Framework
 @using Quilt4Net.Toolkit.Features.FeatureToggle
 @using Quilt4Net.Toolkit.Framework
 @inject IRemoteConfigurationService RemoteConfigurationService
+@inject IServiceProvider ServiceProvider
 @inject DialogService DialogService
 @inject ILogger<RemoteConfigurationAdmin> Logger
 
@@ -13,9 +16,43 @@
     }
     else
     {
-        <RadzenDataGrid Data="@_model" TItem="ConfigurationResponse">
+        @if (_environments.Length > 0)
+        {
+            <RadzenRow Style="margin-bottom: 1rem;">
+                <RadzenColumn Size="4">
+                    <RadzenText Text="Environment" TextStyle="TextStyle.Caption"/>
+                    <div title="Entries shared across every environment are always listed, whichever environment is selected.">
+                        <RadzenDropDown Data="@_environments"
+                                        TValue="string"
+                                        @bind-Value="_selectedEnvironment"
+                                        AllowClear="true"
+                                        Placeholder="@ConfigurationScope.AllEnvironmentsLabel"
+                                        Change="@(_ => ApplyFilter())"/>
+                    </div>
+                </RadzenColumn>
+            </RadzenRow>
+        }
+        <RadzenDataGrid Data="@_filtered" TItem="ConfigurationResponse">
             <Columns>
                 <RadzenDataGridColumn Title="Key" Property="@nameof(ConfigurationResponse.Key)"/>
+                <RadzenDataGridColumn Title="Application" Property="@nameof(ConfigurationResponse.Application)">
+                    <Template>
+                        @ConfigurationScope.Label(context.Application)
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Environment" Property="@nameof(ConfigurationResponse.Environment)">
+                    <Template>
+                        @ConfigurationScope.Label(context.Environment)
+                    </Template>
+                </RadzenDataGridColumn>
+                @if (_showInstance)
+                {
+                    <RadzenDataGridColumn Title="Instance" Property="@nameof(ConfigurationResponse.Instance)">
+                        <Template>
+                            @ConfigurationScope.Label(context.Instance)
+                        </Template>
+                    </RadzenDataGridColumn>
+                }
                 <RadzenDataGridColumn Title="Value" Property="@nameof(ConfigurationResponse.Value)">
                     <Template>
                         @if (_canWrite)
@@ -80,6 +117,12 @@
 
 @code {
     private ConfigurationResponse[] _model;
+    private ConfigurationResponse[] _filtered = [];
+    private string[] _environments = [];
+    private string _selectedEnvironment;
+    private bool _environmentDefaulted;
+    private bool _showInstance;
+    private string _hostEnvironmentName;
     private bool _canWrite;
 
     [CascadingParameter]
@@ -87,6 +130,15 @@
 
     [Parameter]
     public bool TogglesOnly { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Resolved rather than @inject'ed. A Blazor WebAssembly host has no IHostEnvironment at all,
+        // and an @inject on an unregistered service fails at *render* time — the same trap the
+        // toolkit's own EnvironmentName record carries (it is built inline in each registration
+        // factory, never registered). No host environment simply means no default filter.
+        _hostEnvironmentName = ServiceProvider.GetService<IHostEnvironment>()?.EnvironmentName;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -108,6 +160,29 @@
     {
         var model = await RemoteConfigurationService.GetAsync();
         _model = model.Where(x => !TogglesOnly || x.ValueType == "Boolean").ToArray();
+        _environments = ConfigurationScope.AvailableEnvironments(_model);
+        _showInstance = ConfigurationScope.ShowInstance(_model);
+
+        if (!_environmentDefaulted)
+        {
+            _environmentDefaulted = true;
+            _selectedEnvironment = ConfigurationScope.DefaultEnvironment(_environments, _hostEnvironmentName);
+        }
+        else if (_selectedEnvironment != null && !_environments.Contains(_selectedEnvironment, StringComparer.OrdinalIgnoreCase))
+        {
+            // The selected environment's last entry was just deleted, so the dropdown no longer offers
+            // it. Keeping it selected would leave an empty grid filtered by an invisible criterion.
+            _selectedEnvironment = null;
+        }
+
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        _filtered = _model
+            .Where(x => ConfigurationScope.MatchesEnvironment(x.Environment, _selectedEnvironment))
+            .ToArray();
         StateHasChanged();
     }
 
