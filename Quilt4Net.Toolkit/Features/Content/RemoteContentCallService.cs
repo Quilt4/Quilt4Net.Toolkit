@@ -423,15 +423,33 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     // Warning: falling back to the caller's Default is the designed behaviour.
                     _logger.LogInformation("No content override for key '{Key}' (404). Using default value.", key);
                 }
+                else if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    // Warning, not Error: a 429 is the server applying backpressure, which is designed
+                    // behaviour on both sides — not a fault to page someone about. Logging it at Error
+                    // would make a healthy shed look like an outage, and under load it is the single
+                    // most repeated line there is.
+                    _logger.LogWarning("Rate limited (429) getting content for key '{Key}'. Backing off for {RetryAfter}.",
+                        key, RetryAfterOf(response)?.ToString() ?? "the default failure duration");
+                }
                 else
                 {
                     _logger.LogError("Unable to get content for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
                         key, response.StatusCode, response.ReasonPhrase);
                 }
+
+                // Prefer a value already cached over the caller's default. A 429 says nothing about the
+                // content, so overwriting a good Swedish value with the English default would make
+                // backpressure look like a translation regression — the half-translated page in
+                // Toolkit issue #172. The other failure branches keep the same preference.
+                var fallbackValue = _localCache.TryGetValue(cacheKey, out var cachedOnFailure)
+                    ? cachedOnFailure.Value
+                    : defaultValue;
+
                 // Negative-cache either way so the key isn't re-requested (and re-logged) every render.
-                CacheFailure(cacheKey, defaultValue);
+                CacheFailure(cacheKey, fallbackValue, RetryAfterOf(response));
                 LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Default, stale: true);
-                return Result(defaultValue, false, ContentSource.Default, true);
+                return Result(fallbackValue, false, ContentSource.Default, true);
             }
 
             var result = await response.Content.ReadFromJsonAsync<GetContentResponse>(cancellationToken: cts.Token);
@@ -504,13 +522,18 @@ internal class RemoteContentCallService : IRemoteContentCallService
                         // negative cache to once per key per refresh cycle.
                         _logger.LogInformation("Background refresh for content '{Key}': no override (404). Keeping default value.", key);
                     }
+                    else if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                    {
+                        _logger.LogWarning("Background refresh for content '{Key}' was rate limited (429). Backing off for {RetryAfter}.",
+                            key, RetryAfterOf(response)?.ToString() ?? "the default failure duration");
+                    }
                     else
                     {
                         _logger.LogError("Background refresh for content '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
                             key, response.StatusCode, response.ReasonPhrase);
                     }
                     var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
-                    CacheFailure(cacheKey, staleValue);
+                    CacheFailure(cacheKey, staleValue, RetryAfterOf(response));
                     return;
                 }
 
@@ -577,9 +600,44 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
     // Negative cache. IsDefault marks the entry as a fallback rather than server content, so a later
     // hit reports ContentSource.Default instead of masquerading as a cache hit.
-    private void CacheFailure(string cacheKey, string value)
+    /// <summary>
+    /// How long to hold off after a <c>429 Too Many Requests</c>, from the server's own
+    /// <c>Retry-After</c> header. Returns null when the response is not a 429 or carries no usable
+    /// header, in which case the caller's normal negative-cache duration applies.
+    /// </summary>
+    /// <remarks>
+    /// The server is telling us when it will be ready. Ignoring that and falling back to the last
+    /// successful TTL — which is a *content freshness* interval and has nothing to do with
+    /// backpressure — either retries far too early and deepens the overload that caused the 429, or
+    /// sits out a multi-minute TTL when the server asked for a few seconds.
+    /// <para>
+    /// RFC 9110 allows either delta-seconds or an HTTP-date; <see cref="HttpResponseHeaders.RetryAfter"/>
+    /// surfaces both, so both are handled. A date in the past yields <see cref="TimeSpan.Zero"/>, which
+    /// is treated as "no advice" rather than "retry immediately".
+    /// </para>
+    /// </remarks>
+    private static TimeSpan? RetryAfterOf(HttpResponseMessage response)
     {
-        var duration = _lastKnownTtl.GetValueOrDefault(cacheKey, _contentOptions.FailureCacheDuration);
+        if (response.StatusCode != HttpStatusCode.TooManyRequests) return null;
+
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter == null) return null;
+
+        if (retryAfter.Delta is { } delta && delta > TimeSpan.Zero) return delta;
+
+        if (retryAfter.Date is { } date)
+        {
+            var wait = date - DateTimeOffset.UtcNow;
+            if (wait > TimeSpan.Zero) return wait;
+        }
+
+        return null;
+    }
+
+    private void CacheFailure(string cacheKey, string value, TimeSpan? overrideDuration = null)
+    {
+        var duration = overrideDuration
+                       ?? _lastKnownTtl.GetValueOrDefault(cacheKey, _contentOptions.FailureCacheDuration);
         var failureResponse = new CachedContent
         {
             Value = value,
