@@ -84,6 +84,31 @@ public record ContentOptions
     public bool StaleWhileRevalidate { get; set; } = true;
 
     /// <summary>
+    /// Cache lifetime to request from the server. When <c>null</c> (the default) the server's own
+    /// configured lifetime applies, as before.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Issue #163: remote configuration has always been able to request a lifetime — <c>GetAsync</c>
+    /// and <c>GetToggleAsync</c> take a <c>ttl</c> — and content could not. Content that changes a few
+    /// times a week was expiring on the server's default of ten minutes.
+    /// </para>
+    /// <para>
+    /// This composes with the periodic re-warm rather than replacing it:
+    /// <see cref="WarmUpRefreshFraction"/> is applied to whatever lifetime the <b>server</b> reports,
+    /// so asking for 24 hours turns a bulk call every 8 minutes into one every 19.2 hours with nothing
+    /// else to change.
+    /// </para>
+    /// <para>
+    /// The server clamps this to its own maximum, so a value it considers unreasonable is reduced
+    /// rather than refused. <b>The trade-off is visibility of edits</b>: content changed on the server
+    /// takes up to this long to reach an instance that is not restarted or reloaded — "Reload Content"
+    /// in the admin UI remains the immediate path.
+    /// </para>
+    /// </remarks>
+    public TimeSpan? CacheDuration { get; set; }
+
+    /// <summary>
     /// When true (default), the Blazor content registration runs a startup warm-up that pre-fills
     /// the cache with the default language in one bulk call (so pages render without a request per
     /// key). The user's selected language is warmed per-circuit when it differs from the default.
