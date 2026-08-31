@@ -17,6 +17,13 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
 {
     private static readonly TimeSpan FallbackCacheDuration = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// The longest Retry-After a warm-up will wait out in place. Beyond this the periodic re-warm is
+    /// the better mechanism — it already runs on a timer, and a background task parked for minutes is
+    /// harder to reason about than one that simply tries again later.
+    /// </summary>
+    private static readonly TimeSpan MaxWarmUpRetryWait = TimeSpan.FromSeconds(30);
+
     private readonly Meter _meter;
     private readonly Counter<long> _resolutions;
     private readonly Histogram<double> _resolutionDuration;
@@ -260,7 +267,14 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
         _localCache.Clear();
     }
 
-    public async Task WarmCacheAsync(Guid languageKey, string application = null)
+    public Task WarmCacheAsync(Guid languageKey, string application = null) => WarmCacheAsync(languageKey, application, isRetry: false);
+
+    /// <summary>
+    /// <paramref name="isRetry"/> stops a rate-limited warm-up retrying itself more than once: a
+    /// second rejection falls through to the ordinary failure path rather than looping against a
+    /// server that is still shedding.
+    /// </summary>
+    private async Task WarmCacheAsync(Guid languageKey, string application, bool isRetry)
     {
         if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return;
         if (languageKey == Language.DeveloperLanguageKey || languageKey == Language.NoApiKeyLanguageKey) return;
@@ -283,6 +297,28 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
             {
                 _logger.LogInformation("Content warm-up endpoint unavailable (404) for application '{Application}' in environment '{Environment}', language '{LanguageKey}'. Server predates bulk content; falling back to per-key fetching.",
                     effectiveApplication, _environmentName.Name, languageKey);
+                return;
+            }
+
+            // A rate-limited warm-up is the one failure worth waiting out rather than falling through.
+            // Dropping to per-key fetching turns one shed call into hundreds — the exact burst the
+            // server shed the call to avoid — so a 429 carrying a short Retry-After is honoured with a
+            // single retry instead. Bounded: a long wait is left to the next periodic re-warm rather
+            // than parked on a background task.
+            if (response.StatusCode == HttpStatusCode.TooManyRequests && !isRetry)
+            {
+                var retryAfter = RetryAfterPolicy.Of(response);
+                if (retryAfter != null && retryAfter <= MaxWarmUpRetryWait)
+                {
+                    _logger.LogWarning("Content warm-up rate limited (429) for application '{Application}', language '{LanguageKey}'. Retrying in {RetryAfter} rather than falling back to per-key fetching.",
+                        effectiveApplication, languageKey, retryAfter);
+                    await Task.Delay(retryAfter.Value);
+                    await WarmCacheAsync(languageKey, application, isRetry: true);
+                    return;
+                }
+
+                _logger.LogWarning("Content warm-up rate limited (429) for application '{Application}', language '{LanguageKey}'. Retry-After was {RetryAfter}; leaving it to the next periodic re-warm.",
+                    effectiveApplication, languageKey, retryAfter?.ToString() ?? "absent");
                 return;
             }
 
@@ -490,7 +526,7 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
                     // would make a healthy shed look like an outage, and under load it is the single
                     // most repeated line there is.
                     _logger.LogWarning("Rate limited (429) getting content for key '{Key}'. Backing off for {RetryAfter}.",
-                        key, RetryAfterOf(response)?.ToString() ?? "the default failure duration");
+                        key, RetryAfterPolicy.Of(response)?.ToString() ?? "the default failure duration");
                 }
                 else
                 {
@@ -510,7 +546,7 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
                 // render — but for the content lifetime when the server answered 404, and only for
                 // the back-off interval when the call actually failed.
                 if (response.StatusCode == HttpStatusCode.NotFound) CacheNotFound(cacheKey, fallbackValue);
-                else CacheFailure(cacheKey, fallbackValue, RetryAfterOf(response));
+                else CacheFailure(cacheKey, fallbackValue, RetryAfterPolicy.Of(response));
 
                 LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Default, stale: true);
                 return Result(fallbackValue, false, ContentSource.Default, true);
@@ -591,7 +627,7 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
                     else if (response.StatusCode == HttpStatusCode.TooManyRequests)
                     {
                         _logger.LogWarning("Background refresh for content '{Key}' was rate limited (429). Backing off for {RetryAfter}.",
-                            key, RetryAfterOf(response)?.ToString() ?? "the default failure duration");
+                            key, RetryAfterPolicy.Of(response)?.ToString() ?? "the default failure duration");
                     }
                     else
                     {
@@ -600,7 +636,7 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
                     }
                     var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
                     if (response.StatusCode == HttpStatusCode.NotFound) CacheNotFound(cacheKey, staleValue);
-                    else CacheFailure(cacheKey, staleValue, RetryAfterOf(response));
+                    else CacheFailure(cacheKey, staleValue, RetryAfterPolicy.Of(response));
                     return;
                 }
 
@@ -696,45 +732,6 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
 
     // Negative cache. IsDefault marks the entry as a fallback rather than server content, so a later
     // hit reports ContentSource.Default instead of masquerading as a cache hit.
-    /// <summary>
-    /// How long to hold off after a <c>429 Too Many Requests</c>, from the server's own
-    /// <c>Retry-After</c> header. Returns null when the response is not a 429 or carries no usable
-    /// header, in which case the caller's normal negative-cache duration applies.
-    /// </summary>
-    /// <remarks>
-    /// The server is telling us when it will be ready. Ignoring that and falling back to the last
-    /// successful TTL — which is a *content freshness* interval and has nothing to do with
-    /// backpressure — either retries far too early and deepens the overload that caused the 429, or
-    /// sits out a multi-minute TTL when the server asked for a few seconds.
-    /// <para>
-    /// RFC 9110 allows either delta-seconds or an HTTP-date; <see cref="HttpResponseHeaders.RetryAfter"/>
-    /// surfaces both, so both are handled. A date in the past yields <see cref="TimeSpan.Zero"/>, which
-    /// is treated as "no advice" rather than "retry immediately".
-    /// </para>
-    /// </remarks>
-    private static TimeSpan? RetryAfterOf(HttpResponseMessage response)
-    {
-        if (response.StatusCode != HttpStatusCode.TooManyRequests) return null;
-
-        var retryAfter = response.Headers.RetryAfter;
-        if (retryAfter == null) return null;
-
-        if (retryAfter.Delta is { } delta && delta > TimeSpan.Zero) return delta;
-
-        if (retryAfter.Date is { } date)
-        {
-            var wait = date - DateTimeOffset.UtcNow;
-            if (wait > TimeSpan.Zero) return wait;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Negative-cache after a <b>failed</b> call, for the back-off interval rather than a full cache
-    /// lifetime. <paramref name="overrideDuration"/> carries a <c>429</c>'s <c>Retry-After</c>, which
-    /// wins because it is the server stating when it will be ready.
-    /// </summary>
     private void CacheFailure(string cacheKey, string value, TimeSpan? overrideDuration = null)
     {
         var duration = overrideDuration

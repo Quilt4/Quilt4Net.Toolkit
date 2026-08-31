@@ -236,8 +236,14 @@ to be read together:
 - **A failed call is held briefly, not for a cache lifetime.** Before, a failure was re-stamped with
   a full TTL, so every expiry landed on one failed call that bought another whole lifetime of the
   fallback value; there was no state in which a key converged while calls kept failing.
-- **A `429` is honoured exactly.** `Retry-After` overrides the local back-off in both directions —
-  the server saying when it will be ready beats any client-side guess.
+- **A `429` is honoured exactly, on every path.** `Retry-After` overrides the local back-off in both
+  directions — the server saying when it will be ready beats any client-side guess. This now covers
+  content, **remote configuration** and the **bulk warm-up**; a shed call is logged at `Warning` as
+  backpressure rather than at `Error` as a fault.
+- **A rate-limited warm-up waits rather than falling back.** Dropping to per-key fetching would turn
+  one shed call into hundreds — the exact burst the server shed it to avoid — so a `429` carrying a
+  short `Retry-After` (up to 30 s) is waited out and retried once. A longer one is left to the next
+  periodic re-warm rather than parked on a background task.
 - **`CacheDuration` sets how often the re-warm runs at all.** The re-warm fires at
   `WarmUpRefreshFraction` of the lifetime the **server** reports, so asking for a longer one retunes it
   automatically: 24 hours at the default 0.8 is one bulk call per language every 19.2 hours instead of

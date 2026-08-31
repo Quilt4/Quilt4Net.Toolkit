@@ -166,9 +166,8 @@ internal class RemoteConfigCallService : IRemoteConfigCallService, IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Unable to get feature toggle for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
-                    key, response.StatusCode, response.ReasonPhrase);
-                CacheFailure(cacheKey, null);
+                LogNonSuccess(key, response, background: false);
+                CacheFailure(cacheKey, null, RetryAfterPolicy.Of(response));
                 return Resolved(key, defaultValue, ConfigurationSource.Fallback, true, sw);
             }
 
@@ -227,9 +226,8 @@ internal class RemoteConfigCallService : IRemoteConfigCallService, IDisposable
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogError("Background refresh for '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
-                        key, response.StatusCode, response.ReasonPhrase);
-                    CacheFailure(cacheKey, _localCache.GetValueOrDefault(cacheKey));
+                    LogNonSuccess(key, response, background: true);
+                    CacheFailure(cacheKey, _localCache.GetValueOrDefault(cacheKey), RetryAfterPolicy.Of(response));
                     return;
                 }
 
@@ -361,9 +359,39 @@ internal class RemoteConfigCallService : IRemoteConfigCallService, IDisposable
     /// minutes of the fallback value, the next expiry landed on another failed call, and the toggle
     /// had no path back to the server's value while the fault lasted.
     /// </remarks>
-    private void CacheFailure(string cacheKey, FeatureToggleResponse stale)
+    /// <summary>
+    /// Logs a non-success response, distinguishing backpressure from a fault.
+    /// </summary>
+    /// <remarks>
+    /// A <c>429</c> is the server applying backpressure — designed behaviour on both sides, not an
+    /// outage — and under load it is the single most repeated line there is. Logging it at Error
+    /// makes a healthy shed look like a failure and buries the errors that are real. The content
+    /// client has drawn this distinction since 1.0.6; configuration had no 429 handling at all until
+    /// the server began shedding per caller.
+    /// </remarks>
+    private void LogNonSuccess(string key, HttpResponseMessage response, bool background)
     {
-        var duration = _failureBackoff.Next(cacheKey, _options.FailureCacheDuration, _options.MaxFailureCacheDuration);
+        var what = background ? "Background refresh for" : "Unable to get feature toggle for key";
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            _logger.LogWarning("{What} '{Key}' was rate limited (429). Backing off for {RetryAfter}.",
+                what, key, RetryAfterPolicy.Of(response)?.ToString() ?? "the configured failure duration");
+            return;
+        }
+
+        _logger.LogError("{What} '{Key}' failed. Response was {StatusCode} {ReasonPhrase}.",
+            what, key, response.StatusCode, response.ReasonPhrase);
+    }
+
+    /// <param name="overrideDuration">
+    /// A <c>429</c>'s <c>Retry-After</c>, which wins over the local back-off: the server stating when
+    /// it will be ready beats any client-side guess, in both directions.
+    /// </param>
+    private void CacheFailure(string cacheKey, FeatureToggleResponse stale, TimeSpan? overrideDuration = null)
+    {
+        var duration = overrideDuration
+                       ?? _failureBackoff.Next(cacheKey, _options.FailureCacheDuration, _options.MaxFailureCacheDuration);
         var failureResponse = new FeatureToggleResponse
         {
             Value = stale?.Value,
