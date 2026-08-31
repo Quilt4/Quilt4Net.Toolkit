@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
@@ -12,9 +13,13 @@ using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.Content;
 
-internal class RemoteContentCallService : IRemoteContentCallService
+internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
 {
     private static readonly TimeSpan FallbackCacheDuration = TimeSpan.FromMinutes(10);
+
+    private readonly Meter _meter;
+    private readonly Counter<long> _resolutions;
+    private readonly Histogram<double> _resolutionDuration;
 
     private readonly EnvironmentName _environmentName;
     private readonly ContentOptions _contentOptions;
@@ -41,7 +46,17 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _contentOptions = contentOptions.Value;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+
+        _meter = new Meter(Quilt4NetMetrics.ContentMeterName);
+        _resolutions = _meter.CreateCounter<long>(Quilt4NetMetrics.ContentResolutions, "{resolution}",
+            "Content resolutions, tagged by where the value came from.");
+        _resolutionDuration = _meter.CreateHistogram<double>(Quilt4NetMetrics.ContentResolutionDuration, "ms",
+            "How long a content resolution took, tagged by where the value came from.");
+        _meter.CreateObservableGauge(Quilt4NetMetrics.ContentBackoffKeys, () => _failureBackoff.ActiveCount, "{key}",
+            "Content keys currently held off by the failure back-off.");
     }
+
+    public void Dispose() => _meter.Dispose();
 
     public async Task<(string Value, bool Success)> GetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
     {
@@ -51,13 +66,21 @@ internal class RemoteContentCallService : IRemoteContentCallService
 
     public async Task<ContentResult> GetContentResultAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
     {
-        if (languageKey == Language.DeveloperLanguageKey) return Result("X", true, ContentSource.Developer, false);
+        // Counted like any other resolution: these two short-circuit before the cache is consulted, so
+        // without them the counter would silently under-report every render in developer mode or on a
+        // host with no API key — the two states where "why is nothing resolving" is most often asked.
+        if (languageKey == Language.DeveloperLanguageKey)
+        {
+            RecordResolution(languageKey, ResolveApplication(application), 0, ContentSource.Developer, stale: false);
+            return Result("X", true, ContentSource.Developer, false);
+        }
 
         defaultValue ??= $"No content for '{key}'.";
 
         if (languageKey == Language.NoApiKeyLanguageKey || string.IsNullOrEmpty(_contentOptions.ApiKey))
         {
             WarnMissingApiKeyOnce();
+            RecordResolution(languageKey, ResolveApplication(application), 0, ContentSource.NoApiKey, stale: true);
             return Result(defaultValue, false, ContentSource.NoApiKey, true);
         }
 
@@ -250,7 +273,10 @@ internal class RemoteContentCallService : IRemoteContentCallService
         {
             using var cts = new CancellationTokenSource(_contentOptions.HttpTimeout);
             using var client = GetHttpClient();
-            var address = $"Api/Content/all/{Uri.EscapeDataString(effectiveApplication)}/{Uri.EscapeDataString(_environmentName.Name ?? "")}/{languageKey}";
+            // The requested lifetime rides as a query parameter here rather than in the body: the bulk
+            // endpoint takes none. A server that predates the parameter ignores it and answers with its
+            // own lifetime, so this stays safe against an older server.
+            var address = $"Api/Content/all/{Uri.EscapeDataString(effectiveApplication)}/{Uri.EscapeDataString(_environmentName.Name ?? "")}/{languageKey}{TtlQuery()}";
             var response = await client.GetAsync(address, cts.Token);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -434,7 +460,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 Instance = null,
                 DefaultValue = contentType == null ? null : $"{defaultValue}",
                 ContentFormat = contentType,
-                Translations = translations
+                Translations = translations,
+                Ttl = _contentOptions.CacheDuration
             };
             var complexKey = BuildKey(request);
 
@@ -543,7 +570,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     Instance = null,
                     DefaultValue = contentType == null ? null : $"{defaultValue}",
                     ContentFormat = contentType,
-                    Translations = translations
+                    Translations = translations,
+                    Ttl = _contentOptions.CacheDuration
                 };
                 var complexKey = BuildKey(request);
 
@@ -624,6 +652,34 @@ internal class RemoteContentCallService : IRemoteContentCallService
         _logger.LogDebug(
             "Content '{Key}' (language {LanguageKey}, application '{Application}') resolved in {Elapsed}ms. Source: {Source}, Stale: {Stale}.",
             key, languageKey, application ?? "", elapsedMs, source, stale);
+
+        RecordResolution(languageKey, application, elapsedMs, source, stale);
+    }
+
+    /// <summary>
+    /// The metric counterpart of <see cref="LogResolved"/>, emitted from the same call sites so the
+    /// two can never disagree about what a resolution was.
+    /// </summary>
+    /// <remarks>
+    /// The content <b>key</b> is deliberately not a tag — it is unbounded (1,283 in one reported
+    /// application) and would blow up cardinality. Per-key volume stays in the Debug log, which
+    /// already carries it. The configuration client tags its key, because a host has a handful of
+    /// toggles rather than hundreds of keys.
+    /// </remarks>
+    private void RecordResolution(Guid languageKey, string application, long elapsedMs, ContentSource source, bool stale)
+    {
+        if (!_contentOptions.MetricsEnabled) return;
+
+        var tags = new TagList
+        {
+            { "source", source.ToString() },
+            { "application", application ?? "" },
+            { "language", languageKey.ToString() },
+            { "stale", stale },
+        };
+
+        _resolutions.Add(1, tags);
+        _resolutionDuration.Record(elapsedMs, tags);
     }
 
     // #132 diagnostics: surface a genuinely slow server round-trip as a single Warning (visible
@@ -705,6 +761,21 @@ internal class RemoteContentCallService : IRemoteContentCallService
             IsDefault = true
         };
         _localCache.AddOrUpdate(cacheKey, failureResponse, (_, _) => failureResponse);
+    }
+
+    /// <summary>
+    /// The <c>?ttl=</c> query for the bulk warm-up, or an empty string when no lifetime is requested.
+    /// </summary>
+    /// <remarks>
+    /// Round-tripped as a constant-format <c>TimeSpan</c> ("c") rather than the current culture's, so
+    /// a host running under a culture with different separators does not send something the server
+    /// cannot parse — a failure that would appear only on some machines.
+    /// </remarks>
+    private string TtlQuery()
+    {
+        var ttl = _contentOptions.CacheDuration;
+        if (ttl == null || ttl <= TimeSpan.Zero) return string.Empty;
+        return $"?ttl={Uri.EscapeDataString(ttl.Value.ToString("c", System.Globalization.CultureInfo.InvariantCulture))}";
     }
 
     private string ResolveApplication(string application)

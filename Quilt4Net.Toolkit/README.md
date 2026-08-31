@@ -96,8 +96,45 @@ back to the entry assembly name — i.e. "this application".
 | `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
 | `FailureCacheDuration` | `5s` | How long to stop calling for a key after a **failed** call. Doubles per consecutive failure up to `MaxFailureCacheDuration`, and resets on the first success. |
 | `MaxFailureCacheDuration` | `5m` | Ceiling for that back-off, so a sustained outage settles into a low request rate instead of retrying every few seconds per key. |
+| `MetricsEnabled` | `true` | Publish configuration resolutions on the `Quilt4Net.Toolkit.Configuration` meter (see *Metrics* below). |
 
 Configuration path: `Quilt4Net:RemoteConfiguration`
+
+### Metrics
+
+Both clients publish resolution metrics, so a host gets **call volume, latency and cache-hit ratio**
+without turning on `Debug` logging. Subscribe by meter name — nothing else is needed:
+
+```csharp
+builder.Services.AddOpenTelemetry().WithMetrics(m => m
+    .AddMeter(Quilt4NetMetrics.ContentMeterName)
+    .AddMeter(Quilt4NetMetrics.ConfigurationMeterName));
+```
+
+| Instrument | Kind | Tags |
+|---|---|---|
+| `quilt4net.content.resolutions` | counter | `source`, `application`, `language`, `stale` |
+| `quilt4net.content.resolution.duration` | histogram (ms) | same |
+| `quilt4net.content.backoff.keys` | gauge | — |
+| `quilt4net.configuration.resolutions` | counter | `source`, **`key`**, `application`, `environment`, `stale` |
+| `quilt4net.configuration.resolution.duration` | histogram (ms) | same |
+| `quilt4net.configuration.backoff.keys` | gauge | — |
+
+**The cache-hit ratio is the number these exist for**, and it cannot be computed outside the library:
+the public reads return a bare value, so a wrapper can time a call and never learn whether it came
+from cache, stale cache, the server or a fallback. Group the counter by `source` and the ratio falls
+out. A key stuck on `Fallback` is the shape of a client pinned to its default by a fault.
+
+**The content key is deliberately not a tag** — it is unbounded (over 1,200 in one reported
+application) and would blow up cardinality; per-key volume stays in the `Debug` log, which already
+carries it. The **configuration key is** a tag, because a host has a handful of toggles and "which
+toggle is falling back" is the question actually asked.
+
+The two gauges report how many keys are currently held off by the failure back-off, so a client
+backing off is visible directly rather than inferred from gaps between attempts.
+
+Cost is near zero when nobody subscribes; set `MetricsEnabled` to `false` on either options type to
+opt out entirely.
 
 #### Knowing whether a value is real
 
@@ -181,6 +218,8 @@ if (result.Source == ContentSource.Default)
 | `MinimumWarmUpInterval` | `30s` | Floor for that interval, so a very short server lifetime cannot turn the re-warm into its own source of load. |
 | `FailureCacheDuration` | `5s` | How long to stop calling for a key after a **failed** call (timeout, transport error, non-404 error status). Doubles per consecutive failure up to `MaxFailureCacheDuration`, and resets on the first success. |
 | `MaxFailureCacheDuration` | `5m` | Ceiling for that back-off. |
+| `CacheDuration` | `null` | Cache lifetime to **request** from the server. `null` uses the server's own. The server clamps a value above its maximum rather than refusing it. |
+| `MetricsEnabled` | `true` | Publish content resolutions on the `Quilt4Net.Toolkit.Content` meter (see *Metrics* below). |
 | `NotFoundCacheDuration` | `10m` | How long to remember a `404` — the server was reached and has no override for the key. Deliberately far longer than the failure back-off: a 404 is an answer, and re-asking every few seconds would re-request every unseeded key on nearly every render. |
 
 Configuration path: `Quilt4Net:Content`
@@ -199,6 +238,11 @@ to be read together:
   fallback value; there was no state in which a key converged while calls kept failing.
 - **A `429` is honoured exactly.** `Retry-After` overrides the local back-off in both directions —
   the server saying when it will be ready beats any client-side guess.
+- **`CacheDuration` sets how often the re-warm runs at all.** The re-warm fires at
+  `WarmUpRefreshFraction` of the lifetime the **server** reports, so asking for a longer one retunes it
+  automatically: 24 hours at the default 0.8 is one bulk call per language every 19.2 hours instead of
+  every 8 minutes. Nothing else needs changing. The trade-off is that a content edit takes up to that
+  long to reach a running instance — "Reload Content" in the admin UI remains the immediate path.
 
 #### Diagnostic logging
 

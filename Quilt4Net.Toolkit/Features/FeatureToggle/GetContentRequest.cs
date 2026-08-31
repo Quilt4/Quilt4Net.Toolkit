@@ -23,4 +23,18 @@ public record GetContentRequest : ILanguageKeyContext
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyDictionary<string, string> Translations { get; init; }
+
+    /// <summary>
+    /// Optional client-requested cache lifetime, from <see cref="ContentOptions.CacheDuration"/>. When
+    /// <c>null</c> the server's configured lifetime applies. The server clamps a value above its own
+    /// maximum rather than refusing it.
+    /// </summary>
+    /// <remarks>
+    /// The configuration counterpart, <c>FeatureToggleRequest.Ttl</c>, has existed all along; content
+    /// was the odd one out (issue #163). Omitted from the payload when null, so an older server that
+    /// does not know the field is unaffected — and a server that knows it only honours it once its own
+    /// Toolkit package reference is new enough to deserialize it.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TimeSpan? Ttl { get; init; }
 }

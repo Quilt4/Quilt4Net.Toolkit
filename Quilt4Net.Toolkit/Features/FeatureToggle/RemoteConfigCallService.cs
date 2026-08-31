@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
@@ -11,8 +12,12 @@ using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
-internal class RemoteConfigCallService : IRemoteConfigCallService
+internal class RemoteConfigCallService : IRemoteConfigCallService, IDisposable
 {
+    private readonly Meter _meter;
+    private readonly Counter<long> _resolutions;
+    private readonly Histogram<double> _resolutionDuration;
+
     /// <summary>Named <see cref="IHttpClientFactory"/> client for config/toggle calls to Quilt4Net.Server.</summary>
     public const string HttpClientName = "Quilt4Net.RemoteConfiguration";
 
@@ -30,7 +35,17 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         _environmentName = environmentName;
         _options = options.Value;
         _logger = logger;
+
+        _meter = new Meter(Quilt4NetMetrics.ConfigurationMeterName);
+        _resolutions = _meter.CreateCounter<long>(Quilt4NetMetrics.ConfigurationResolutions, "{resolution}",
+            "Configuration resolutions, tagged by where the value came from and by key.");
+        _resolutionDuration = _meter.CreateHistogram<double>(Quilt4NetMetrics.ConfigurationResolutionDuration, "ms",
+            "How long a configuration resolution took, tagged by where the value came from and by key.");
+        _meter.CreateObservableGauge(Quilt4NetMetrics.ConfigurationBackoffKeys, () => _failureBackoff.ActiveCount, "{key}",
+            "Configuration keys currently held off by the failure back-off.");
     }
+
+    public void Dispose() => _meter.Dispose();
 
     public async Task<T> MakeCallAsync<T>(string key, T defaultValue, TimeSpan? ttl, string application = null)
     {
@@ -105,6 +120,24 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
     {
         _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: {Stale}, Value: '{Value}'.",
             key, sw.ElapsedMilliseconds, source, stale, value);
+
+        if (_options.MetricsEnabled)
+        {
+            // The key IS a tag here, unlike content: a host has a handful of toggles rather than
+            // hundreds of keys, and "which toggle is falling back" is the question an operator asks.
+            var tags = new TagList
+            {
+                { "source", source.ToString() },
+                { "key", key },
+                { "application", _options.Application ?? "" },
+                { "environment", _environmentName.Name ?? "" },
+                { "stale", stale },
+            };
+
+            _resolutions.Add(1, tags);
+            _resolutionDuration.Record(sw.ElapsedMilliseconds, tags);
+        }
+
         return new ConfigurationResult<T> { Value = value, Source = source, Stale = stale };
     }
 
