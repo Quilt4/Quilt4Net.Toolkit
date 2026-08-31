@@ -62,12 +62,16 @@ jobs:
           fi
 
       - name: Test with coverage
-        run: dotnet test -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+        # xunit.v3 4.x runs on Microsoft.Testing.Platform (selected by global.json), so the VSTest
+        # collector this step used is gone. Options after `--` go to the test app itself, and
+        # --coverage only works because every test project references
+        # Microsoft.Testing.Extensions.CodeCoverage — a missing extension reports "Zero tests ran"
+        # rather than an unknown option, so read the counts below, not just the step's colour.
+        run: dotnet test -c Release --no-build -- --coverage --coverage-output-format cobertura
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          directory: ./coverage
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 

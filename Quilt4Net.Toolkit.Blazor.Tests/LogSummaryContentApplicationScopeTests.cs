@@ -19,6 +19,8 @@ public class LogSummaryContentApplicationScopeTests : BunitContext
     [Fact]
     public void Drilldown_forwards_selected_application_to_GetSummary()
     {
+        JSInterop.Mode = JSRuntimeMode.Loose;
+
         string capturedApplication = "NOT-CALLED";
         var mock = new Mock<IApplicationInsightsService>();
         mock.Setup(x => x.GetSummary(
