@@ -32,6 +32,18 @@ public interface IRemoteContentCallService
     Task WarmConfiguredLanguagesAsync(string application = null);
 
     /// <summary>
+    /// The content lifetime the server most recently reported on a successful bulk warm-up, or
+    /// <c>null</c> when none has succeeded yet. Drives the periodic re-warm interval, so the client
+    /// follows the server's TTL instead of guessing at it.
+    /// </summary>
+    /// <remarks>
+    /// A default implementation returning <c>null</c> is provided so adding this member does not
+    /// break existing implementers of this public interface; a caller that gets <c>null</c> falls
+    /// back to its own interval.
+    /// </remarks>
+    TimeSpan? ObservedContentTtl => null;
+
+    /// <summary>
     /// Number of currently-cached content entries grouped by language key — i.e. how much content
     /// has been loaded so far per language (warm-up + lazy loads). For diagnostics/admin display.
     /// </summary>

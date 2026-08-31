@@ -5,6 +5,27 @@ public record RemoteConfigurationOptions
     public TimeSpan? Ttl { get; set; }
 
     /// <summary>
+    /// How long to stop calling for a key after a <b>failed</b> call — a timeout, a transport error
+    /// or a non-success status. Doubles per consecutive failure up to
+    /// <see cref="MaxFailureCacheDuration"/> and resets on the first success.
+    /// Default is 5 seconds.
+    /// </summary>
+    /// <remarks>
+    /// There was no such setting before: configuration hard-coded a private 10-minute constant and
+    /// then shadowed even that with the last successful response's TTL, so a toggle whose refreshes
+    /// kept timing out was pinned to its fallback for a full lifetime per attempt — two days, in the
+    /// case that produced issue #174. A caller reading the toggle could not tell that apart from a
+    /// server that genuinely returned the fallback value.
+    /// </remarks>
+    public TimeSpan FailureCacheDuration { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Ceiling for the consecutive-failure back-off described on <see cref="FailureCacheDuration"/>.
+    /// Default is 5 minutes.
+    /// </summary>
+    public TimeSpan MaxFailureCacheDuration { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
     /// Address to the Quilt4Net server.
     /// Default is https://quilt4net.com/. Defaulted on the type so an unbound
     /// <c>IOptions&lt;RemoteConfigurationOptions&gt;</c> still carries a usable URL.

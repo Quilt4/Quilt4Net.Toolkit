@@ -1,3 +1,5 @@
+using Quilt4Net.Toolkit.Features.FeatureToggle;
+
 namespace Quilt4Net.Toolkit.Framework;
 
 /// <summary>
@@ -20,4 +22,28 @@ public interface IFeatureToggleService
     /// name); a specific name reads that named application's value.
     /// </param>
     ValueTask<bool> GetToggleAsync(string key, bool fallback = false, TimeSpan? ttl = null, string application = "");
+
+    /// <summary>
+    /// As <see cref="GetToggleAsync"/>, but also reports where the value came from
+    /// (<see cref="ConfigurationSource"/>) — server, cache, stale cache or the caller's fallback.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="GetToggleAsync"/> cannot express the difference between "the server says this
+    /// feature is off" and "nothing has answered, so you are holding your own fallback". Under a
+    /// sustained fault those are the same <c>false</c>, which is how a toggle stayed pinned to its
+    /// fallback for two days without the application being able to say so (issue #174).
+    /// </para>
+    /// <para>
+    /// A default implementation is provided so adding this member does not break existing
+    /// implementers of this public interface. It delegates to <see cref="GetToggleAsync"/> and
+    /// reports <see cref="ConfigurationSource.Unknown"/> rather than inventing a provenance it
+    /// cannot know. The built-in implementation overrides it with the real source.
+    /// </para>
+    /// </remarks>
+    async ValueTask<ConfigurationResult<bool>> GetToggleResultAsync(string key, bool fallback = false, TimeSpan? ttl = null, string application = "")
+    {
+        var value = await GetToggleAsync(key, fallback, ttl, application);
+        return new ConfigurationResult<bool> { Value = value, Source = ConfigurationSource.Unknown, Stale = false };
+    }
 }

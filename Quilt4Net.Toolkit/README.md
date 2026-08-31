@@ -94,8 +94,34 @@ back to the entry assembly name — i.e. "this application".
 | `Ttl` | `null` | Client-requested time-to-live for cached values. When `null`, the team/server-configured default applies. |
 | `HttpTimeout` | `5s` | Timeout for HTTP calls to the server. |
 | `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
+| `FailureCacheDuration` | `5s` | How long to stop calling for a key after a **failed** call. Doubles per consecutive failure up to `MaxFailureCacheDuration`, and resets on the first success. |
+| `MaxFailureCacheDuration` | `5m` | Ceiling for that back-off, so a sustained outage settles into a low request rate instead of retrying every few seconds per key. |
 
 Configuration path: `Quilt4Net:RemoteConfiguration`
+
+#### Knowing whether a value is real
+
+`GetToggleAsync("X", false)` returning `false` cannot be told apart from a server that says `false`,
+so an application pinned to its fallback by a network fault looks exactly like one deliberately
+switched off. `GetToggleResultAsync` returns the value together with its provenance:
+
+```csharp
+var result = await featureToggleService.GetToggleResultAsync("AssistantPanel.Enabled", fallback: false);
+
+if (result.Source == ConfigurationSource.Fallback)
+    logger.LogWarning("Assistant panel state is the local fallback, not the server's answer.");
+```
+
+| `ConfigurationSource` | Meaning |
+|---|---|
+| `Server` | Fetched from Quilt4Net.Server on this call. |
+| `Cache` | Served from the local cache, within its lifetime. |
+| `StaleCache` | Served past its lifetime while a background refresh runs. |
+| `Fallback` | The caller's fallback — nothing was reached, or the server has no value for the key. |
+| `Unknown` | The implementation does not report provenance (the default interface implementation). |
+
+A failed call is held only for `FailureCacheDuration` (widening per consecutive failure), so a
+recovered server is picked up in seconds rather than at the end of a full cache lifetime.
 
 ## Content management
 
@@ -150,8 +176,29 @@ if (result.Source == ContentSource.Default)
 | `SlowLogThreshold` | `3s` | When a content fetch or language-list load from the server takes at least this long, a single `Warning` is logged (endpoint, elapsed, HTTP status) — so slow loads surface even with `Debug` off. Set `TimeSpan.Zero` to disable. |
 | `WarmUpEnabled` | `true` | Pre-fill the cache at startup with one bulk call per language (Blazor). Set `false` for lazy per-key loading only. |
 | `WarmUpLanguages` | `[]` | Extra languages to warm at startup and on "Reload Content", by **name** (e.g. `["English", "Svenska"]`), on top of the always-warmed default. Empty = only the default warms at startup; others warm per-circuit on first selection. |
+| `PeriodicWarmUpEnabled` | `true` | Repeat the bulk warm-up on a timer instead of once per process, so entries are replaced shortly **before** they expire and the per-key path is never reached in steady state. |
+| `WarmUpRefreshFraction` | `0.8` | Where in the server's observed content lifetime the re-warm runs. `0.8` of a 10-minute lifetime re-warms every 8 minutes. |
+| `MinimumWarmUpInterval` | `30s` | Floor for that interval, so a very short server lifetime cannot turn the re-warm into its own source of load. |
+| `FailureCacheDuration` | `5s` | How long to stop calling for a key after a **failed** call (timeout, transport error, non-404 error status). Doubles per consecutive failure up to `MaxFailureCacheDuration`, and resets on the first success. |
+| `MaxFailureCacheDuration` | `5m` | Ceiling for that back-off. |
+| `NotFoundCacheDuration` | `10m` | How long to remember a `404` — the server was reached and has no override for the key. Deliberately far longer than the failure back-off: a 404 is an answer, and re-asking every few seconds would re-request every unseeded key on nearly every render. |
 
 Configuration path: `Quilt4Net:Content`
+
+#### Request volume under load
+
+Three behaviours decide how much traffic a content-heavy application generates, and they are meant
+to be read together:
+
+- **The bulk warm-up replaces the per-key fan-out.** Every warmed key shares one expiry, so without
+  a repeat the whole set goes stale at the same instant and the next render issues one HTTP call per
+  key. `PeriodicWarmUpEnabled` re-warms before that happens, and covers every language actually in
+  use — configured ones plus any a user selected at runtime.
+- **A failed call is held briefly, not for a cache lifetime.** Before, a failure was re-stamped with
+  a full TTL, so every expiry landed on one failed call that bought another whole lifetime of the
+  fallback value; there was no state in which a key converged while calls kept failing.
+- **A `429` is honoured exactly.** `Retry-After` overrides the local back-off in both directions —
+  the server saying when it will be ready beats any client-side guess.
 
 #### Diagnostic logging
 
