@@ -24,6 +24,12 @@ internal sealed class FailureBackoff
     private readonly ConcurrentDictionary<string, int> _consecutiveFailures = new();
 
     /// <summary>
+    /// How many keys are currently in a failure streak, i.e. being held off. Published as a metric so
+    /// a client backing off is visible directly rather than inferred from gaps between attempts.
+    /// </summary>
+    public int ActiveCount => _consecutiveFailures.Count;
+
+    /// <summary>
     /// Records a failure for <paramref name="key"/> and returns how long to hold off before the
     /// next attempt: <paramref name="baseDuration"/> doubled per consecutive failure, capped at
     /// <paramref name="maxDuration"/>.

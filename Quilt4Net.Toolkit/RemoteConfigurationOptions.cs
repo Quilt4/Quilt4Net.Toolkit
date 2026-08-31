@@ -26,6 +26,18 @@ public record RemoteConfigurationOptions
     public TimeSpan MaxFailureCacheDuration { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// When true (default), configuration resolutions are published as metrics on the
+    /// <c>Quilt4Net.Toolkit.Configuration</c> meter — a resolution counter and a duration histogram,
+    /// both tagged by source <b>and key</b>, so "which toggle is falling back" is one query.
+    /// </summary>
+    /// <remarks>
+    /// The key is a tag here where it deliberately is not for content: a host has a handful of
+    /// toggles, not hundreds of content keys, so the cardinality is bounded and the question is
+    /// exactly the one an operator asks.
+    /// </remarks>
+    public bool MetricsEnabled { get; set; } = true;
+
+    /// <summary>
     /// Address to the Quilt4Net server.
     /// Default is https://quilt4net.com/. Defaulted on the type so an unbound
     /// <c>IOptions&lt;RemoteConfigurationOptions&gt;</c> still carries a usable URL.
