@@ -218,6 +218,7 @@ if (result.Source == ContentSource.Default)
 | `MinimumWarmUpInterval` | `30s` | Floor for that interval, so a very short server lifetime cannot turn the re-warm into its own source of load. |
 | `FailureCacheDuration` | `5s` | How long to stop calling for a key after a **failed** call (timeout, transport error, non-404 error status). Doubles per consecutive failure up to `MaxFailureCacheDuration`, and resets on the first success. |
 | `MaxFailureCacheDuration` | `5m` | Ceiling for that back-off. |
+| `CacheDuration` | `null` | Cache lifetime to **request** from the server. `null` uses the server's own. The server clamps a value above its maximum rather than refusing it. |
 | `MetricsEnabled` | `true` | Publish content resolutions on the `Quilt4Net.Toolkit.Content` meter (see *Metrics* below). |
 | `NotFoundCacheDuration` | `10m` | How long to remember a `404` — the server was reached and has no override for the key. Deliberately far longer than the failure back-off: a 404 is an answer, and re-asking every few seconds would re-request every unseeded key on nearly every render. |
 
@@ -237,6 +238,11 @@ to be read together:
   fallback value; there was no state in which a key converged while calls kept failing.
 - **A `429` is honoured exactly.** `Retry-After` overrides the local back-off in both directions —
   the server saying when it will be ready beats any client-side guess.
+- **`CacheDuration` sets how often the re-warm runs at all.** The re-warm fires at
+  `WarmUpRefreshFraction` of the lifetime the **server** reports, so asking for a longer one retunes it
+  automatically: 24 hours at the default 0.8 is one bulk call per language every 19.2 hours instead of
+  every 8 minutes. Nothing else needs changing. The trade-off is that a content edit takes up to that
+  long to reach a running instance — "Reload Content" in the admin UI remains the immediate path.
 
 #### Diagnostic logging
 

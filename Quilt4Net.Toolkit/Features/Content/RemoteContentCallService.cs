@@ -273,7 +273,10 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
         {
             using var cts = new CancellationTokenSource(_contentOptions.HttpTimeout);
             using var client = GetHttpClient();
-            var address = $"Api/Content/all/{Uri.EscapeDataString(effectiveApplication)}/{Uri.EscapeDataString(_environmentName.Name ?? "")}/{languageKey}";
+            // The requested lifetime rides as a query parameter here rather than in the body: the bulk
+            // endpoint takes none. A server that predates the parameter ignores it and answers with its
+            // own lifetime, so this stays safe against an older server.
+            var address = $"Api/Content/all/{Uri.EscapeDataString(effectiveApplication)}/{Uri.EscapeDataString(_environmentName.Name ?? "")}/{languageKey}{TtlQuery()}";
             var response = await client.GetAsync(address, cts.Token);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -457,7 +460,8 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
                 Instance = null,
                 DefaultValue = contentType == null ? null : $"{defaultValue}",
                 ContentFormat = contentType,
-                Translations = translations
+                Translations = translations,
+                Ttl = _contentOptions.CacheDuration
             };
             var complexKey = BuildKey(request);
 
@@ -566,7 +570,8 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
                     Instance = null,
                     DefaultValue = contentType == null ? null : $"{defaultValue}",
                     ContentFormat = contentType,
-                    Translations = translations
+                    Translations = translations,
+                    Ttl = _contentOptions.CacheDuration
                 };
                 var complexKey = BuildKey(request);
 
@@ -756,6 +761,21 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
             IsDefault = true
         };
         _localCache.AddOrUpdate(cacheKey, failureResponse, (_, _) => failureResponse);
+    }
+
+    /// <summary>
+    /// The <c>?ttl=</c> query for the bulk warm-up, or an empty string when no lifetime is requested.
+    /// </summary>
+    /// <remarks>
+    /// Round-tripped as a constant-format <c>TimeSpan</c> ("c") rather than the current culture's, so
+    /// a host running under a culture with different separators does not send something the server
+    /// cannot parse — a failure that would appear only on some machines.
+    /// </remarks>
+    private string TtlQuery()
+    {
+        var ttl = _contentOptions.CacheDuration;
+        if (ttl == null || ttl <= TimeSpan.Zero) return string.Empty;
+        return $"?ttl={Uri.EscapeDataString(ttl.Value.ToString("c", System.Globalization.CultureInfo.InvariantCulture))}";
     }
 
     private string ResolveApplication(string application)
