@@ -130,6 +130,20 @@ public record ContentOptions
     public IReadOnlyList<string> WarmUpLanguages { get; set; } = [];
 
     /// <summary>
+    /// When true (default), content resolutions are published as metrics on the
+    /// <c>Quilt4Net.Toolkit.Content</c> meter — a resolution counter and a duration histogram, both
+    /// tagged by source, so a host gets call volume, latency and cache-hit ratio without enabling
+    /// <c>Debug</c> logging.
+    /// </summary>
+    /// <remarks>
+    /// Defaults on because the cost is near zero when nobody subscribes to the meter, and because the
+    /// number that matters most — the cache-hit ratio — cannot be computed outside this library: the
+    /// public read returns a bare string, so a wrapper can time a call and never learn whether it was
+    /// served from cache, stale cache, the server or a fallback.
+    /// </remarks>
+    public bool MetricsEnabled { get; set; } = true;
+
+    /// <summary>
     /// Roles that grant content admin access (edit, debug, reload).
     /// Checked against the authenticated user's claim roles (e.g. Entra ID).
     /// Default is ["ContentAdmin", "Developer"].
