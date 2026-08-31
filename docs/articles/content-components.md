@@ -311,6 +311,38 @@ call per language**:
   on a language pays the one bulk call and everyone after hits the warm cache.
 - Warming is **best-effort and backward-compatible**: against a server that doesn't expose the bulk
   endpoint (404), or on any failure/timeout, it silently falls back to the existing per-key fetching.
+- The warm-up **repeats before the cache expires**, so the bulk path stays in use for the life of the
+  process rather than only its first cache lifetime — see below.
+
+### The warm-up repeats, and that is the point
+
+A bulk warm writes one shared expiry across every key it loads. Warming only at startup therefore
+buys one cache lifetime: at the end of it the entire set goes stale at the same instant, and the next
+render fans out **one HTTP call per key** — hundreds at once for a content-heavy application. That
+burst is what trips a server's per-caller limit; the queued requests then outlive the client's
+timeout, each timeout is cached, and the cache expires into the next burst.
+
+So the warm-up runs again at `WarmUpRefreshFraction` (default `0.8`) of the lifetime the **server**
+reported, never faster than `MinimumWarmUpInterval` (default 30 seconds):
+
+```json
+{
+  "Quilt4Net": {
+    "Content": {
+      "PeriodicWarmUpEnabled": true,
+      "WarmUpRefreshFraction": 0.8,
+      "MinimumWarmUpInterval": "00:00:30"
+    }
+  }
+}
+```
+
+With a 10-minute server lifetime that is one bulk call per language every 8 minutes, and no per-key
+refresh traffic at all in steady state. The re-warm covers **every language in use** — the default,
+anything in `WarmUpLanguages`, and any language a user selected at runtime — because a language
+somebody is actually reading is exactly the one that must not fall back to per-key fetching.
+
+Set `PeriodicWarmUpEnabled` to `false` to keep only the startup warm-up.
 
 ### Warming specific languages at startup
 
