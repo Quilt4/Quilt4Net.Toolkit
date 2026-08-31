@@ -92,6 +92,33 @@ public record ContentOptions
     public bool WarmUpEnabled { get; set; } = true;
 
     /// <summary>
+    /// When true (default), the bulk warm-up repeats on a timer rather than running once per
+    /// process, so warmed entries are replaced shortly <i>before</i> they expire and the per-key
+    /// path is never reached in steady state. Ignored when <see cref="WarmUpEnabled"/> is false.
+    /// </summary>
+    /// <remarks>
+    /// Without this the bulk endpoint effectively serves the first cache lifetime of a process's
+    /// life and little else: every warmed key shares one <c>ValidTo</c>, so the whole set expires at
+    /// the same instant and the next render fans out one HTTP call per key — hundreds at once, which
+    /// is what trips a server's per-caller limit and starts the timeout loop described in issue #163.
+    /// </remarks>
+    public bool PeriodicWarmUpEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Where in the observed cache lifetime the periodic re-warm runs, as a fraction. Default is
+    /// <c>0.8</c> — a re-warm at 80% of the lifetime, leaving headroom for a slow or failed pass
+    /// before anything expires. Clamped to a sane range, and never faster than 30 seconds.
+    /// </summary>
+    public double WarmUpRefreshFraction { get; set; } = 0.8;
+
+    /// <summary>
+    /// Floor for the periodic re-warm interval, whatever <see cref="WarmUpRefreshFraction"/> and the
+    /// server's lifetime work out to. Default is 30 seconds — a bulk call is cheap, but a server
+    /// reporting a very short lifetime must not turn the re-warm into its own source of load.
+    /// </summary>
+    public TimeSpan MinimumWarmUpInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
     /// Additional languages to warm at startup (and on "Reload Content"), on top of the default
     /// language which is always warmed. Identified by <b>language name</b> exactly as entered on the
     /// server (e.g. <c>["English", "Svenska"]</c>), matching the naming convention used elsewhere in

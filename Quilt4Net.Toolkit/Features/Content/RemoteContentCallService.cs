@@ -23,6 +23,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
     private readonly ConcurrentDictionary<string, bool> _refreshInProgress = new();
     private readonly FailureBackoff _failureBackoff = new();
+    private readonly ConcurrentDictionary<Guid, byte> _warmedLanguages = new();
+    private long _observedContentTtlTicks;
     private int _missingApiKeyWarned;
     private Language[] _languages;
     private DateTime _languagesValidTo;
@@ -296,6 +298,13 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 _failureBackoff.Reset(cacheKey);
             }
 
+            // Remembered so the periodic re-warm covers this language too, and so its interval can
+            // follow the server's own lifetime rather than a guess. A language warmed once at
+            // runtime — the user switching to Swedish — must keep being re-warmed, or it is exactly
+            // the per-key fan-out this removes, just narrower.
+            _warmedLanguages[languageKey] = 0;
+            if (ttl > TimeSpan.Zero) Interlocked.Exchange(ref _observedContentTtlTicks, ttl.Ticks);
+
             _logger.LogInformation("Content warm-up loaded {Count} item(s) in {Elapsed}ms for application '{Application}', language '{LanguageKey}'. ValidTo: {ValidTo}. Kept {Kept} newer cached value(s).",
                 result.Items.Length, sw.ElapsedMilliseconds, effectiveApplication, languageKey, result.ValidTo, kept);
         }
@@ -372,22 +381,43 @@ internal class RemoteContentCallService : IRemoteContentCallService
         // The default language (Guid.Empty) is always warmed — this is the pre-existing behaviour.
         await WarmCacheAsync(Guid.Empty, application);
 
-        if (_contentOptions.WarmUpLanguages is not { Count: > 0 }) return;
-
-        // Configured languages are named; resolve names -> keys against the server's language list.
-        var languages = await GetLanguagesAsync(forceReload: false);
         var warmed = new HashSet<Guid> { Guid.Empty };
-        foreach (var name in _contentOptions.WarmUpLanguages)
+
+        if (_contentOptions.WarmUpLanguages is { Count: > 0 })
         {
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            var language = languages.FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
-            if (language == null)
+            // Configured languages are named; resolve names -> keys against the server's language list.
+            var languages = await GetLanguagesAsync(forceReload: false);
+            foreach (var name in _contentOptions.WarmUpLanguages)
             {
-                _logger.LogWarning("WarmUpLanguages: no language named '{Name}' on the server; skipping.", name);
-                continue;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var language = languages.FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (language == null)
+                {
+                    _logger.LogWarning("WarmUpLanguages: no language named '{Name}' on the server; skipping.", name);
+                    continue;
+                }
+                if (!warmed.Add(language.Key)) continue; // already warmed (e.g. the default) — don't double-fetch
+                await WarmCacheAsync(language.Key, application);
             }
-            if (!warmed.Add(language.Key)) continue; // already warmed (e.g. the default) — don't double-fetch
-            await WarmCacheAsync(language.Key, application);
+        }
+
+        // Languages nobody configured but somebody is actually using: warmed once by
+        // LanguageStateService when selected, and left to expire into per-key fetching from then on.
+        // Snapshotted first because WarmCacheAsync adds to the same collection.
+        foreach (var languageKey in _warmedLanguages.Keys.ToArray())
+        {
+            if (!warmed.Add(languageKey)) continue;
+            await WarmCacheAsync(languageKey, application);
+        }
+    }
+
+    /// <inheritdoc />
+    public TimeSpan? ObservedContentTtl
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _observedContentTtlTicks);
+            return ticks > 0 ? TimeSpan.FromTicks(ticks) : null;
         }
     }
 
