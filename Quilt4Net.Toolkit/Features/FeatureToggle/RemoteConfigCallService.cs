@@ -34,6 +34,12 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
     public async Task<T> MakeCallAsync<T>(string key, T defaultValue, TimeSpan? ttl, string application = null)
     {
+        var result = await MakeCallResultAsync(key, defaultValue, ttl, application);
+        return result.Value;
+    }
+
+    public async Task<ConfigurationResult<T>> MakeCallResultAsync<T>(string key, T defaultValue, TimeSpan? ttl, string application = null)
+    {
         ttl ??= _options.Ttl;
         var sw = Stopwatch.StartNew();
 
@@ -57,10 +63,11 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             // Errors / warnings / actual value changes still log at their original levels.
             if (!needRefresh)
             {
-                var cachedValue = GetCachedOrDefault(cached, defaultValue);
-                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Cache, Stale: false, Value: '{Value}'.",
-                    key, sw.ElapsedMilliseconds, cachedValue);
-                return cachedValue;
+                // A negative-cache entry carries no server value, so it resolves to the caller's
+                // fallback — reported as Fallback rather than Cache, or a pinned value would read as
+                // a genuine cache hit from the second call onwards.
+                var source = cached.Value == null ? ConfigurationSource.Fallback : ConfigurationSource.Cache;
+                return Resolved(key, GetCachedOrDefault(cached, defaultValue), source, source == ConfigurationSource.Fallback, sw);
             }
 
             // Stale-while-revalidate: if we have a stale cached value, return it immediately
@@ -69,10 +76,8 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             if (cached != null && _options.StaleWhileRevalidate)
             {
                 StartBackgroundRefresh(key, cacheKey, defaultValue, ttl, effectiveApplication);
-                var staleValue = GetCachedOrDefault(cached, defaultValue);
-                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
-                    key, sw.ElapsedMilliseconds, staleValue);
-                return staleValue;
+                var source = cached.Value == null ? ConfigurationSource.Fallback : ConfigurationSource.StaleCache;
+                return Resolved(key, GetCachedOrDefault(cached, defaultValue), source, true, sw);
             }
 
             // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
@@ -85,18 +90,25 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             if (_localCache.TryGetValue(cacheKey, out var stale))
             {
                 CacheFailure(cacheKey, stale);
-                var staleValue = GetCachedOrDefault(stale, defaultValue);
-                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: StaleCache, Stale: true, Value: '{Value}'.",
-                    key, sw.ElapsedMilliseconds, staleValue);
-                return staleValue;
+                var source = stale.Value == null ? ConfigurationSource.Fallback : ConfigurationSource.StaleCache;
+                return Resolved(key, GetCachedOrDefault(stale, defaultValue), source, true, sw);
             }
-            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
-                key, sw.ElapsedMilliseconds, defaultValue);
-            return defaultValue;
+            return Resolved(key, defaultValue, ConfigurationSource.Fallback, true, sw);
         }
     }
 
-    private async Task<T> FetchWithTimeout<T>(string key, string cacheKey, T defaultValue, TimeSpan? ttl, Stopwatch sw, string effectiveApplication)
+    /// <summary>
+    /// One place that both logs a resolution and states its provenance, so the two cannot disagree —
+    /// the source used to be baked into each log template by hand and reported to no caller at all.
+    /// </summary>
+    private ConfigurationResult<T> Resolved<T>(string key, T value, ConfigurationSource source, bool stale, Stopwatch sw)
+    {
+        _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: {Source}, Stale: {Stale}, Value: '{Value}'.",
+            key, sw.ElapsedMilliseconds, source, stale, value);
+        return new ConfigurationResult<T> { Value = value, Source = source, Stale = stale };
+    }
+
+    private async Task<ConfigurationResult<T>> FetchWithTimeout<T>(string key, string cacheKey, T defaultValue, TimeSpan? ttl, Stopwatch sw, string effectiveApplication)
     {
         try
         {
@@ -124,9 +136,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
                 _logger.LogError("Unable to get feature toggle for key '{Key}'. Response was {StatusCode} {ReasonPhrase}.",
                     key, response.StatusCode, response.ReasonPhrase);
                 CacheFailure(cacheKey, null);
-                _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
-                    key, sw.ElapsedMilliseconds, defaultValue);
-                return defaultValue;
+                return Resolved(key, defaultValue, ConfigurationSource.Fallback, true, sw);
             }
 
             var result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>(cancellationToken: cts.Token);
@@ -134,27 +144,24 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
             _failureBackoff.Reset(cacheKey);
             _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
 
-            var serverValue = GetCachedOrDefault(result, defaultValue);
-            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Server, Stale: false, Value: '{Value}'.",
-                key, sw.ElapsedMilliseconds, serverValue);
-            return serverValue;
+            // The server answering with no value for the key is still the caller's fallback being
+            // used, and that is what a caller asking about provenance needs to know. Not stale
+            // though — this is a current answer, it just isn't a value.
+            var served = result?.Value == null ? ConfigurationSource.Fallback : ConfigurationSource.Server;
+            return Resolved(key, GetCachedOrDefault(result, defaultValue), served, false, sw);
         }
         catch (OperationCanceledException)
         {
             _logger.LogWarning("HTTP request timed out for configuration '{Key}' after {Timeout}ms. Using default value.",
                 key, _options.HttpTimeout.TotalMilliseconds);
             CacheFailure(cacheKey, null);
-            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
-                key, sw.ElapsedMilliseconds, defaultValue);
-            return defaultValue;
+            return Resolved(key, defaultValue, ConfigurationSource.Fallback, true, sw);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "{Message} Using default for key {Key}.", e.Message, key);
             CacheFailure(cacheKey, null);
-            _logger.LogDebug("Configuration '{Key}' resolved in {Elapsed}ms. Source: Default, Stale: true, Value: '{Value}'.",
-                key, sw.ElapsedMilliseconds, defaultValue);
-            return defaultValue;
+            return Resolved(key, defaultValue, ConfigurationSource.Fallback, true, sw);
         }
     }
 
