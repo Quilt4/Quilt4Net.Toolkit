@@ -7,6 +7,7 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.FeatureToggle;
 
@@ -15,15 +16,13 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
     /// <summary>Named <see cref="IHttpClientFactory"/> client for config/toggle calls to Quilt4Net.Server.</summary>
     public const string HttpClientName = "Quilt4Net.RemoteConfiguration";
 
-    private static readonly TimeSpan FallbackFailureCacheDuration = TimeSpan.FromMinutes(10);
-
     private readonly IServiceProvider _serviceProvider;
     private readonly EnvironmentName _environmentName;
     private readonly RemoteConfigurationOptions _options;
     private readonly ILogger<RemoteConfigCallService> _logger;
     private readonly ConcurrentDictionary<string, FeatureToggleResponse> _localCache = new();
-    private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
     private readonly ConcurrentDictionary<string, bool> _refreshInProgress = new();
+    private readonly FailureBackoff _failureBackoff = new();
 
     public RemoteConfigCallService(IServiceProvider serviceProvider, EnvironmentName environmentName, IOptions<RemoteConfigurationOptions> options, ILogger<RemoteConfigCallService> logger)
     {
@@ -132,10 +131,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
             var result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>(cancellationToken: cts.Token);
 
-            var interval = result.ValidTo - DateTime.UtcNow;
-            if (interval > TimeSpan.Zero)
-                _lastKnownTtl[cacheKey] = interval;
-
+            _failureBackoff.Reset(cacheKey);
             _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
 
             var serverValue = GetCachedOrDefault(result, defaultValue);
@@ -199,10 +195,7 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
 
                 var result = await response.Content.ReadFromJsonAsync<FeatureToggleResponse>(cancellationToken: cts.Token);
 
-                var interval = result.ValidTo - DateTime.UtcNow;
-                if (interval > TimeSpan.Zero)
-                    _lastKnownTtl[cacheKey] = interval;
-
+                _failureBackoff.Reset(cacheKey);
                 _localCache.AddOrUpdate(cacheKey, result, (_, _) => result);
                 _logger.LogInformation("Background refresh for '{Key}' completed. New value: '{Value}', ValidTo: {ValidTo}.",
                     key, result.Value, result.ValidTo);
@@ -317,9 +310,20 @@ internal class RemoteConfigCallService : IRemoteConfigCallService
         }
     }
 
+    /// <summary>
+    /// Negative-cache after a failed call, for the back-off interval rather than a full cache
+    /// lifetime.
+    /// </summary>
+    /// <remarks>
+    /// This method is the whole of issue #174. It used to stamp <c>ValidTo</c> a complete TTL into
+    /// the future — the last <b>successful</b> response's TTL at that, so the configured duration
+    /// was unreachable for any key that had ever worked. One failed call therefore bought ten
+    /// minutes of the fallback value, the next expiry landed on another failed call, and the toggle
+    /// had no path back to the server's value while the fault lasted.
+    /// </remarks>
     private void CacheFailure(string cacheKey, FeatureToggleResponse stale)
     {
-        var duration = _lastKnownTtl.GetValueOrDefault(cacheKey, FallbackFailureCacheDuration);
+        var duration = _failureBackoff.Next(cacheKey, _options.FailureCacheDuration, _options.MaxFailureCacheDuration);
         var failureResponse = new FeatureToggleResponse
         {
             Value = stale?.Value,

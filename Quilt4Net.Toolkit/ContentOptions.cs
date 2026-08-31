@@ -27,11 +27,43 @@ public record ContentOptions
     public string ApiKey { get; set; }
 
     /// <summary>
-    /// Duration to cache the stale or default value when an API call fails (e.g. server unreachable, invalid API key).
-    /// Only used when no prior successful response TTL is available.
-    /// Default is 10 minutes (matching the server's default content TTL).
+    /// How long to stop calling for a key after a <b>failed</b> call — a timeout, a transport error
+    /// or a non-success status other than 404. Doubles per consecutive failure up to
+    /// <see cref="MaxFailureCacheDuration"/> and resets on the first success.
+    /// Default is 5 seconds.
     /// </summary>
-    public TimeSpan FailureCacheDuration { get; set; } = TimeSpan.FromMinutes(10);
+    /// <remarks>
+    /// This option previously had no effect for any key that had ever succeeded: the failure path
+    /// preferred the last successful response's TTL, which is a content-freshness interval and has
+    /// nothing to do with how long a fault should be believed. That is what pinned a value to its
+    /// fallback for a full cache lifetime per failed attempt (issue #174), so the preference is
+    /// gone and this value now governs the failure hold-off outright.
+    /// <para>
+    /// A <c>429</c> carrying <c>Retry-After</c> still wins over both this and the back-off — the
+    /// server saying when it will be ready beats any local guess.
+    /// </para>
+    /// </remarks>
+    public TimeSpan FailureCacheDuration { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Ceiling for the consecutive-failure back-off described on <see cref="FailureCacheDuration"/>.
+    /// A sustained outage settles here instead of retrying every few seconds per key.
+    /// Default is 5 minutes.
+    /// </summary>
+    public TimeSpan MaxFailureCacheDuration { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// How long to remember that the server answered <c>404</c> for a key — i.e. there is no content
+    /// override and the caller's default stands.
+    /// Default is 10 minutes.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the failure back-off: a 404 is an <b>answer</b>, not a fault. The server was
+    /// reached and replied. Holding it for seconds rather than minutes would re-request every
+    /// unseeded key on nearly every render, which is the request flood this feature exists to
+    /// remove. Where a previous successful response TTL is known for the key, that is used instead.
+    /// </remarks>
+    public TimeSpan NotFoundCacheDuration { get; set; } = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// Timeout for HTTP calls to the Quilt4Net server.

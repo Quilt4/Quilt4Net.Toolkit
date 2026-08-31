@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.FeatureToggle;
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.Content;
 
@@ -21,6 +22,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
     private readonly ConcurrentDictionary<string, CachedContent> _localCache = new();
     private readonly ConcurrentDictionary<string, TimeSpan> _lastKnownTtl = new();
     private readonly ConcurrentDictionary<string, bool> _refreshInProgress = new();
+    private readonly FailureBackoff _failureBackoff = new();
     private int _missingApiKeyWarned;
     private Language[] _languages;
     private DateTime _languagesValidTo;
@@ -291,6 +293,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     return existing;
                 });
                 if (ttl > TimeSpan.Zero) _lastKnownTtl[cacheKey] = ttl;
+                _failureBackoff.Reset(cacheKey);
             }
 
             _logger.LogInformation("Content warm-up loaded {Count} item(s) in {Elapsed}ms for application '{Application}', language '{LanguageKey}'. ValidTo: {ValidTo}. Kept {Kept} newer cached value(s).",
@@ -446,8 +449,12 @@ internal class RemoteContentCallService : IRemoteContentCallService
                     ? cachedOnFailure.Value
                     : defaultValue;
 
-                // Negative-cache either way so the key isn't re-requested (and re-logged) every render.
-                CacheFailure(cacheKey, fallbackValue, RetryAfterOf(response));
+                // Negative-cache either way so the key isn't re-requested (and re-logged) every
+                // render — but for the content lifetime when the server answered 404, and only for
+                // the back-off interval when the call actually failed.
+                if (response.StatusCode == HttpStatusCode.NotFound) CacheNotFound(cacheKey, fallbackValue);
+                else CacheFailure(cacheKey, fallbackValue, RetryAfterOf(response));
+
                 LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Default, stale: true);
                 return Result(fallbackValue, false, ContentSource.Default, true);
             }
@@ -457,6 +464,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
             var interval = result.ValidTo - DateTime.UtcNow;
             if (interval > TimeSpan.Zero)
                 _lastKnownTtl[cacheKey] = interval;
+            _failureBackoff.Reset(cacheKey);
 
             var cached = new CachedContent
             {
@@ -533,7 +541,8 @@ internal class RemoteContentCallService : IRemoteContentCallService
                             key, response.StatusCode, response.ReasonPhrase);
                     }
                     var staleValue = _localCache.TryGetValue(cacheKey, out var s) ? s.Value : defaultValue;
-                    CacheFailure(cacheKey, staleValue, RetryAfterOf(response));
+                    if (response.StatusCode == HttpStatusCode.NotFound) CacheNotFound(cacheKey, staleValue);
+                    else CacheFailure(cacheKey, staleValue, RetryAfterOf(response));
                     return;
                 }
 
@@ -542,6 +551,7 @@ internal class RemoteContentCallService : IRemoteContentCallService
                 var interval = result.ValidTo - DateTime.UtcNow;
                 if (interval > TimeSpan.Zero)
                     _lastKnownTtl[cacheKey] = interval;
+                _failureBackoff.Reset(cacheKey);
 
                 var refreshed = new CachedContent
                 {
@@ -634,10 +644,30 @@ internal class RemoteContentCallService : IRemoteContentCallService
         return null;
     }
 
+    /// <summary>
+    /// Negative-cache after a <b>failed</b> call, for the back-off interval rather than a full cache
+    /// lifetime. <paramref name="overrideDuration"/> carries a <c>429</c>'s <c>Retry-After</c>, which
+    /// wins because it is the server stating when it will be ready.
+    /// </summary>
     private void CacheFailure(string cacheKey, string value, TimeSpan? overrideDuration = null)
     {
         var duration = overrideDuration
-                       ?? _lastKnownTtl.GetValueOrDefault(cacheKey, _contentOptions.FailureCacheDuration);
+                       ?? _failureBackoff.Next(cacheKey, _contentOptions.FailureCacheDuration, _contentOptions.MaxFailureCacheDuration);
+        WriteNegative(cacheKey, value, duration);
+    }
+
+    /// <summary>
+    /// Negative-cache after the server answered <c>404</c>. Held for the content lifetime, not the
+    /// failure back-off — the key was resolved, and the answer is that no override exists.
+    /// </summary>
+    private void CacheNotFound(string cacheKey, string value)
+    {
+        _failureBackoff.Reset(cacheKey);
+        WriteNegative(cacheKey, value, _lastKnownTtl.GetValueOrDefault(cacheKey, _contentOptions.NotFoundCacheDuration));
+    }
+
+    private void WriteNegative(string cacheKey, string value, TimeSpan duration)
+    {
         var failureResponse = new CachedContent
         {
             Value = value,
