@@ -781,11 +781,21 @@ never matches a language with no code.
 
 ### Developer mode
 
-When developer mode is enabled, a special "X" language is added for discovering unmanaged content. Enable it from `ContentAdmin` or from code.
+When developer mode is enabled, **two** extra languages appear in the selector. Enable it from
+`ContentAdmin`, from the language menu ("Debug mode"), or from code.
 
 ```csharp
 LanguageState.DeveloperMode = true;
 ```
+
+| Language | Every key renders as | Answers |
+|---|---|---|
+| `X` | the literal `X` | Is this string managed content at all, or hardcoded? |
+| `Key` | the content key itself, e.g. `Home.Title` | *Which* key produced this string — the one you need to change the text. |
+
+Both are client-side only: they resolve before the cache and before any HTTP call, so selecting one
+generates no content traffic, cannot pollute the cache, and needs nothing of the server. Switching
+back to a real language restores content without a reload.
 
 ## Environment promotion
 

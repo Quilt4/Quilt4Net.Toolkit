@@ -6,8 +6,9 @@ namespace Quilt4Net.Toolkit.Blazor;
 /// </summary>
 /// <remarks>
 /// Distinct from <c>ILanguageStateService.DeveloperMode</c>, which the language selector labels
-/// "Debug mode" — that one swaps in the developer pseudo-language so every key renders as a
-/// placeholder. This one leaves the rendered text alone and only annotates its provenance.
+/// "Debug mode" — that one offers the developer pseudo-languages, where every key renders as the
+/// placeholder "X" or as the key itself. This one leaves the rendered text alone and only annotates
+/// its provenance.
 /// </remarks>
 public interface IContentSourceService
 {

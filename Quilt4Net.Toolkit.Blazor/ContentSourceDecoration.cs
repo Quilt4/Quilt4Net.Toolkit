@@ -29,7 +29,7 @@ internal static class ContentSourceDecoration
             ContentSource.Cache => "#1565c0",      // blue — cached server value
             ContentSource.StaleCache => "#ef6c00", // amber — cached but past TTL
             ContentSource.Default => "#c62828",    // red — fallback, server has no value
-            ContentSource.Developer => "#6a1b9a",  // purple — developer language active
+            ContentSource.Developer => "#6a1b9a",  // purple — a developer language is active ("X" or "Key")
             ContentSource.NoApiKey => "#546e7a",   // grey — no lookup attempted
             _ => "#546e7a"                         // grey — provenance not reported
         };
@@ -56,7 +56,7 @@ internal static class ContentSourceDecoration
             ContentSource.Cache => "Source: local cache (value from the server)",
             ContentSource.StaleCache => "Source: local cache, past its TTL (refreshing in the background)",
             ContentSource.Default => "Source: fallback default — the server has no value for this key",
-            ContentSource.Developer => "Source: developer language placeholder",
+            ContentSource.Developer => "Source: developer language — the placeholder 'X', or the key itself",
             ContentSource.NoApiKey => "Source: fallback default — no API key configured, no lookup attempted",
             _ => "Source: not reported by this IContentService implementation"
         };

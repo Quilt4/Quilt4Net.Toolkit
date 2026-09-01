@@ -81,11 +81,20 @@ internal class LanguageStateService : ILanguageStateService
         var languages = await _languageService.GetLanguagesAsync(forceReload);
         if (DeveloperMode)
         {
+            // Two pseudo-languages, deliberately separate: "X" answers "is this string managed content
+            // at all?", "Key" answers "which key produced it?" — the question you have immediately
+            // afterwards, when you want to change the text.
             languages = languages.Union([
                 new Language
                 {
                     Name = "X",
                     Key = Language.DeveloperLanguageKey,
+                    Developer = true
+                },
+                new Language
+                {
+                    Name = "Key",
+                    Key = Language.KeyLanguageKey,
                     Developer = true
                 }
             ]).ToArray();
@@ -149,7 +158,7 @@ internal class LanguageStateService : ILanguageStateService
     private void WarmSelected(Language language)
     {
         var key = language?.Key ?? Guid.Empty;
-        if (key == Guid.Empty || key == Language.DeveloperLanguageKey || key == Language.NoApiKeyLanguageKey) return;
+        if (key == Guid.Empty || Language.IsPseudo(key)) return;
 
         _ = Task.Run(async () =>
         {
