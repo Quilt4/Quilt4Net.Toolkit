@@ -73,13 +73,22 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
 
     public async Task<ContentResult> GetContentResultAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null)
     {
-        // Counted like any other resolution: these two short-circuit before the cache is consulted, so
-        // without them the counter would silently under-report every render in developer mode or on a
-        // host with no API key — the two states where "why is nothing resolving" is most often asked.
+        // Counted like any other resolution: these three short-circuit before the cache is consulted,
+        // so without them the counter would silently under-report every render in developer mode or on
+        // a host with no API key — the states where "why is nothing resolving" is most often asked.
         if (languageKey == Language.DeveloperLanguageKey)
         {
             RecordResolution(languageKey, ResolveApplication(application), 0, ContentSource.Developer, stale: false);
             return Result("X", true, ContentSource.Developer, false);
+        }
+
+        // The key language renders the key itself. Reported as Developer for the same reason it sits
+        // here rather than deeper: it is the developer pseudo-language mechanism, and the overlay's
+        // "this text is not real content" already says everything a distinct source could.
+        if (languageKey == Language.KeyLanguageKey)
+        {
+            RecordResolution(languageKey, ResolveApplication(application), 0, ContentSource.Developer, stale: false);
+            return Result(key, true, ContentSource.Developer, false);
         }
 
         defaultValue ??= $"No content for '{key}'.";
@@ -277,7 +286,7 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
     private async Task WarmCacheAsync(Guid languageKey, string application, bool isRetry)
     {
         if (string.IsNullOrEmpty(_contentOptions.ApiKey)) return;
-        if (languageKey == Language.DeveloperLanguageKey || languageKey == Language.NoApiKeyLanguageKey) return;
+        if (Language.IsPseudo(languageKey)) return;
 
         var effectiveApplication = ResolveApplication(application);
         if (string.IsNullOrEmpty(effectiveApplication)) return;

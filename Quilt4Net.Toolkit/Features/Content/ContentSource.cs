@@ -26,7 +26,12 @@ public enum ContentSource
     /// <summary>Fetched from Quilt4Net.Server on this call.</summary>
     Server,
 
-    /// <summary>Developer language is active — every key resolves to the placeholder text.</summary>
+    /// <summary>
+    /// A developer pseudo-language is active, so the value is not real content: either the
+    /// placeholder "X" (<see cref="Language.DeveloperLanguageKey"/>) or the content key itself
+    /// (<see cref="Language.KeyLanguageKey"/>). One source covers both — what a consumer needs to
+    /// know is that the text on screen did not come from the server.
+    /// </summary>
     Developer,
 
     /// <summary>No API key is configured, so no lookup was attempted and the default was used.</summary>

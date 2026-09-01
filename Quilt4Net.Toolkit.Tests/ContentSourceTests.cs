@@ -98,6 +98,34 @@ public class ContentSourceTests
         var result = await service.GetContentResultAsync("Some.Key", "the-default", Language.DeveloperLanguageKey, ContentFormat.String, application: "App");
 
         result.Source.Should().Be(ContentSource.Developer);
+        result.Value.Should().Be("X");
+    }
+
+    [Fact]
+    public async Task Key_language_resolves_to_the_key_itself()
+    {
+        using var listener = StartListener(out var prefix, found: true);
+        var service = BuildContentService(prefix);
+
+        var result = await service.GetContentResultAsync("Some.Key", "the-default", Language.KeyLanguageKey, ContentFormat.String, application: "App");
+
+        result.Value.Should().Be("Some.Key");
+        result.Source.Should().Be(ContentSource.Developer);
+        result.Success.Should().BeTrue();
+    }
+
+    // Acceptance: the key language must generate no content traffic. Pointed at a port with nothing
+    // listening — a call would fail to connect and fall back to "the-default", so the key coming back
+    // is the proof that the short-circuit ran ahead of the cache and the HTTP path.
+    [Fact]
+    public async Task Key_language_makes_no_http_call()
+    {
+        var service = BuildContentService($"http://127.0.0.1:{GetFreePort()}/");
+
+        var result = await service.GetContentResultAsync("Some.Key", "the-default", Language.KeyLanguageKey, ContentFormat.String, application: "App");
+
+        result.Value.Should().Be("Some.Key");
+        result.Source.Should().Be(ContentSource.Developer);
     }
 
     // Regression guard: the legacy tuple must keep its exact behaviour. A cached default previously
