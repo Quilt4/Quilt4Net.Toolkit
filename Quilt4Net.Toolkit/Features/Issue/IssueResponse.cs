@@ -39,6 +39,12 @@ public record IssueResponse
     public required IssueEffort? Effort { get; init; }
 
     /// <summary>
+    /// How much this matters, or <c>null</c> when nobody has graded it yet. Paired with
+    /// <see cref="Effort"/> for the importance-then-effort ordering.
+    /// </summary>
+    public required IssueImportance? Importance { get; init; }
+
+    /// <summary>
     /// Dependencies declared <b>from</b> this issue. An issue does not carry its inbound links;
     /// read the whole set, or the roadmap projection, to see those.
     /// </summary>

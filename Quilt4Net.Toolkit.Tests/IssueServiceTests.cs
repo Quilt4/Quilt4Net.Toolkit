@@ -152,11 +152,17 @@ public class IssueServiceTests
         Enum.GetNames<IssueLinkKind>().Should().BeEquivalentTo("Blocks", "Cheapens", "Overlaps");
         Enum.GetNames<RoadmapBand>().Should().BeEquivalentTo("Now", "Next", "Later");
         Enum.GetNames<IssueEffort>().Should().BeEquivalentTo("S", "M", "L");
+        // These three are the backlog's own vocabulary. Renaming one silently decouples the tracker
+        // from every backlog row that uses the old word.
+        Enum.GetNames<IssueImportance>().Should().BeEquivalentTo("Critical", "Important", "Nice");
     }
 
+    // Carries every field, because IssueResponse declares them all `required`: a payload missing one
+    // fails to deserialize. That is the intended strictness, but it does mean adding a field to this
+    // response is a wire break for any server still sending the older shape.
     private const string SampleIssue = """
         {"number":1,"title":"t","content":"","route":"","band":"Later","state":"Todo",
-         "assignedUserKey":"","effort":null,"links":[],
+         "assignedUserKey":"","effort":null,"importance":null,"links":[],
          "createdUtc":"2026-09-03T00:00:00Z","updatedUtc":"2026-09-03T00:00:00Z"}
         """;
 

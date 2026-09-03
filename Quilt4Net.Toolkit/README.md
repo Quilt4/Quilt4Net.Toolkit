@@ -448,7 +448,7 @@ In the Quilt4Net.Server admin UI under **Value Groups**: select the group → AP
 
 ## Issue tracker
 
-A per-team issue tracker, meant to be driven by an agent over REST or MCP rather than by hand. Each issue carries a title, body text, a **route** (the roadmap lane it belongs to), a Now/Next/Later band, a workflow state, an optional assignee and an optional S/M/L effort. Issues are linked to each other with typed dependencies.
+A per-team issue tracker, meant to be driven by an agent over REST or MCP rather than by hand. Each issue carries a title, body text, a **route** (the roadmap lane it belongs to), a Now/Next/Later band, a workflow state, an optional assignee, an optional S/M/L effort and an optional Critical/Important/Nice importance. Issues are linked to each other with typed dependencies.
 
 ```csharp
 builder.AddQuilt4NetIssues(o =>
@@ -481,6 +481,14 @@ public class MyAgent(IIssueService issues)
     }
 }
 ```
+
+### Importance and effort
+
+`Importance` (`Critical` / `Important` / `Nice`) and `Effort` (`S` / `M` / `L`) are the backlog's own vocabulary, so a tracker issue and a backlog row can be compared without translating between them. Together they give the house ordering rule: **importance first, then effort ascending** — highest impact for least work.
+
+Both are **optional**. An issue with no importance means nobody has graded it yet, which is worth seeing; defaulting it to `Nice` would assert a judgement no one made and hide what still needs triage. Ungraded issues sort after everything graded.
+
+Importance is deliberately **not** drawn on the roadmap. A map restates effort only — quick wins are invisible without it — while status, priority and ownership are read from the source rather than copied onto the figure.
 
 ### The three link kinds
 

@@ -38,4 +38,7 @@ public record UpdateIssueRequest
 
     /// <summary>Rough size. Cleared when omitted.</summary>
     public IssueEffort? Effort { get; init; }
+
+    /// <summary>How much this matters. Cleared when omitted.</summary>
+    public IssueImportance? Importance { get; init; }
 }

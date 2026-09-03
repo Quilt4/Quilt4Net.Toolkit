@@ -34,4 +34,7 @@ public record CreateIssueRequest
 
     /// <summary>Rough size. Optional.</summary>
     public IssueEffort? Effort { get; init; }
+
+    /// <summary>How much this matters. Optional — leaving it unset means it still needs triage.</summary>
+    public IssueImportance? Importance { get; init; }
 }
