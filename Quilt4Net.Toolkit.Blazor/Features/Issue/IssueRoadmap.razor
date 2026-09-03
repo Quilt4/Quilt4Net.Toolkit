@@ -1,0 +1,218 @@
+@using System.Globalization
+@using Quilt4Net.Toolkit.Blazor.Framework
+@using Quilt4Net.Toolkit.Features.Issue
+@using Quilt4Net.Toolkit.Framework
+@inject IIssueService IssueService
+
+<ConnectionWrapper Service="Service.Issue">
+    @if (_loadFailure != null)
+    {
+        <RadzenText>The roadmap could not be loaded. @_loadFailure</RadzenText>
+    }
+    else if (_figure == null)
+    {
+        <Loading Size="ProgressBarCircularSize.Small"/>
+    }
+    else if (_figure.Lanes.Length == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Body1">Nothing to map yet.</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+            A roadmap is drawn from issues that name a <b>route</b>. @UnroutedNote()
+        </RadzenText>
+    }
+    else
+    {
+        @if (ShowHowToRead)
+        {
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+                <div>
+                    <RadzenText TextStyle="TextStyle.Overline">Lanes are routes</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">Each row is one theme of work, not one person and not one release.</RadzenText>
+                </div>
+                <div>
+                    <RadzenText TextStyle="TextStyle.Overline">Left to right suggests</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">Now, Next and Later are a suggestion you may disagree with.</RadzenText>
+                </div>
+                <div>
+                    <RadzenText TextStyle="TextStyle.Overline">Arrows constrain</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">An edge is a real dependency, and each one states its reason.</RadzenText>
+                </div>
+                <div>
+                    <RadzenText TextStyle="TextStyle.Overline">Effort rides along</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">S, M and L sit on the item. A ring marks a quick win.</RadzenText>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; margin-bottom: 1rem;">
+                @foreach (var kind in new[] { IssueLinkKind.Blocks, IssueLinkKind.Cheapens, IssueLinkKind.Overlaps })
+                {
+                    <span style="display: inline-flex; align-items: center; gap: 0.4rem;">
+                        <svg width="42" height="10" role="presentation">
+                            <line x1="1" y1="5" x2="41" y2="5"
+                                  stroke="var(--rz-text-color)" stroke-width="2"
+                                  stroke-dasharray="@DashFor(kind)"/>
+                        </svg>
+                        <RadzenText TextStyle="TextStyle.Body2" Style="margin: 0;">@LegendFor(kind)</RadzenText>
+                    </span>
+                }
+            </div>
+        }
+
+        <div style="overflow-x: auto; max-width: 100%;">
+            <svg width="@N(_figure.Width)" height="@N(_figure.Height)"
+                 viewBox="0 0 @N(_figure.Width) @N(_figure.Height)"
+                 role="img" aria-label="Issue roadmap"
+                 style="min-width: @N(_figure.Width)px; font-family: inherit;">
+                <defs>
+                    <marker id="@($"{_id}-arrow")" viewBox="0 0 10 10" refX="9" refY="5"
+                            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--rz-text-color)"/>
+                    </marker>
+                </defs>
+
+                @for (var i = 0; i < _figure.Lanes.Length; i++)
+                {
+                    var lane = _figure.Lanes[i];
+                    @* Wrapped in <g> because Razor claims a bare <text> as its own control keyword
+                       when it is the direct child of a code block, and SVG text is not that. *@
+                    <g>
+                        <rect x="0" y="@N(lane.Top)" width="@N(_figure.Width)" height="@N(lane.Height)"
+                              fill="currentColor" opacity="@(i % 2 == 0 ? "0.03" : "0.06")"/>
+                        <text x="12" y="@N(lane.Top + 22)" fill="var(--rz-text-color)"
+                              font-size="13" font-weight="600">@Truncate(lane.Name, 20)</text>
+                    </g>
+                }
+
+                @for (var band = 0; band < 3; band++)
+                {
+                    var x = RoadmapLayout.GutterWidth + band * RoadmapLayout.BandWidth;
+                    <g>
+                        <line x1="@N(x)" y1="0" x2="@N(x)" y2="@N(_figure.Height)"
+                              stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+                        <text x="@N(x + 12)" y="22" fill="var(--rz-text-secondary-color)"
+                              font-size="12" letter-spacing="0.08em">@BandName(band).ToUpperInvariant()</text>
+                    </g>
+                }
+
+                @foreach (var edge in _figure.Edges)
+                {
+                    <path d="@edge.Path()" fill="none"
+                          stroke="var(--rz-text-color)" stroke-opacity="0.65" stroke-width="2"
+                          stroke-dasharray="@DashFor(edge.Edge.Kind)"
+                          marker-end="@(edge.Edge.Kind == IssueLinkKind.Overlaps ? null : $"url(#{_id}-arrow)")">
+                        <title>@edge.From.Item.Number → @edge.To.Item.Number (@edge.Edge.Kind.ToString().ToLowerInvariant()): @edge.Edge.Reason</title>
+                    </path>
+                }
+
+                @foreach (var placed in _figure.Items)
+                {
+                    var item = placed.Item;
+                    <g opacity="@(item.IsTerminal ? "0.45" : "1")">
+                        <title>@TitleFor(item)</title>
+                        <rect x="@N(placed.X)" y="@N(placed.Y)"
+                              width="@N(RoadmapLayout.ItemWidth)" height="@N(RoadmapLayout.ItemHeight)"
+                              rx="6" fill="var(--rz-base)" stroke="currentColor"
+                              stroke-opacity="0.35" stroke-width="1"/>
+                        @if (item.IsQuickWin)
+                        {
+                            <circle cx="@N(placed.X + RoadmapLayout.ItemWidth - 14)" cy="@N(placed.Y + 14)"
+                                    r="5" fill="none" stroke="var(--rz-text-color)" stroke-width="2"/>
+                        }
+                        <text x="@N(placed.X + 12)" y="@N(placed.Y + 22)" font-size="12" font-weight="700"
+                              fill="var(--rz-text-secondary-color)">#@item.Number</text>
+                        <text x="@N(placed.X + 12)" y="@N(placed.Y + 40)" font-size="13"
+                              fill="var(--rz-text-color)">@Truncate(item.Title, 30)</text>
+                        <text x="@N(placed.X + RoadmapLayout.ItemWidth - 30)" y="@N(placed.Y + 40)"
+                              font-size="12" text-anchor="end" fill="var(--rz-text-tertiary-color)">@item.State</text>
+                        @if (item.Effort.HasValue)
+                        {
+                            <g>
+                                <text x="@N(placed.X + RoadmapLayout.ItemWidth - 12)" y="@N(placed.Y + 22)"
+                                      font-size="12" text-anchor="end"
+                                      fill="var(--rz-text-secondary-color)">· @item.Effort.Value</text>
+                            </g>
+                        }
+                    </g>
+                }
+            </svg>
+        </div>
+
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); margin-top: 0.5rem;">
+            @_figure.Items.Length item(s) across @_figure.Lanes.Length route(s), @_figure.Edges.Length edge(s).
+            Snapshot @_generatedUtc.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) UTC. @UnroutedNote()
+        </RadzenText>
+    }
+</ConnectionWrapper>
+
+@code {
+    private readonly string _id = $"q4n-roadmap-{Guid.NewGuid():N}";
+    private RoadmapFigure _figure;
+    private DateTime _generatedUtc;
+    private int _unroutedCount;
+    private string _loadFailure;
+
+    /// <summary>
+    /// Whether to render the legend and the "how to read it" cells above the figure. Leave this on
+    /// unless the surrounding page already explains the notation — a map a reader cannot decode is
+    /// just a diagram.
+    /// </summary>
+    [Parameter]
+    public bool ShowHowToRead { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var roadmap = await IssueService.GetRoadmapAsync();
+            _generatedUtc = roadmap.GeneratedUtc;
+            _unroutedCount = roadmap.UnroutedCount;
+            _figure = RoadmapLayout.Build(roadmap);
+        }
+        catch (IssueServiceException e)
+        {
+            _loadFailure = e.Message;
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    private string UnroutedNote() =>
+        _unroutedCount == 0
+            ? string.Empty
+            : $"{_unroutedCount} issue(s) carry no route and are not shown.";
+
+    private static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string BandName(int band) => band switch
+    {
+        0 => nameof(RoadmapBand.Now),
+        1 => nameof(RoadmapBand.Next),
+        _ => nameof(RoadmapBand.Later)
+    };
+
+    private static string DashFor(IssueLinkKind kind) => kind switch
+    {
+        IssueLinkKind.Blocks => "none",
+        IssueLinkKind.Cheapens => "7 5",
+        _ => "2 5"
+    };
+
+    private static string LegendFor(IssueLinkKind kind) => kind switch
+    {
+        IssueLinkKind.Blocks => "Blocks — cannot start until the source ships",
+        IssueLinkKind.Cheapens => "Cheapens — cheaper or safer afterwards",
+        _ => "Overlaps — same surface, give both to one owner"
+    };
+
+    private static string TitleFor(RoadmapItemResponse item)
+    {
+        var parts = new List<string> { $"#{item.Number} {item.Title}", item.State };
+        if (item.Effort.HasValue) parts.Add(item.Effort.Value.ToString());
+        if (!string.IsNullOrEmpty(item.AssignedUserKey)) parts.Add(item.AssignedUserKey);
+        if (item.IsQuickWin) parts.Add("quick win");
+        return string.Join(" · ", parts);
+    }
+
+    private static string Truncate(string value, int max) =>
+        string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..(max - 1)] + "…";
+}
