@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Quilt4Net.Toolkit.Features.Issue;
 
 /// <summary>
@@ -5,6 +7,7 @@ namespace Quilt4Net.Toolkit.Features.Issue;
 /// ignore, which is why it is drawn as a soft background band rather than as an arrow — ordering
 /// suggests, while <see cref="IssueLinkKind"/> edges constrain.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum RoadmapBand
 {
     /// <summary>Being worked on, or the next thing to pick up.</summary>

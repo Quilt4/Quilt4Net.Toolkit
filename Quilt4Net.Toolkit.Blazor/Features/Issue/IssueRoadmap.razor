@@ -4,7 +4,7 @@
 @using Quilt4Net.Toolkit.Framework
 @inject IIssueService IssueService
 
-<ConnectionWrapper Service="Service.Issue">
+<ConnectionWrapper Service="Service.Issue" Ready="Ready">
     @if (_loadFailure != null)
     {
         <RadzenText>The roadmap could not be loaded. @_loadFailure</RadzenText>
@@ -158,6 +158,18 @@
     /// </summary>
     [Parameter]
     public bool ShowHowToRead { get; set; } = true;
+
+    /// <summary>
+    /// Set by a host that resolves <see cref="IIssueService"/> in-process rather than over HTTP, so
+    /// there is no remote endpoint to probe. The connectivity check answers "can this host reach
+    /// Quilt4Net", which is not a question an in-process implementation has.
+    /// </summary>
+    /// <remarks>
+    /// Leave this alone in a remote project: the probe is what turns an unreachable server or a
+    /// missing API key into "Not connected to Quilt4Net" instead of a bare failure.
+    /// </remarks>
+    [Parameter]
+    public bool Ready { get; set; }
 
     protected override async Task OnInitializedAsync()
     {

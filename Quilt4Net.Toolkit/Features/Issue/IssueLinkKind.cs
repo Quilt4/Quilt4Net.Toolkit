@@ -1,9 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace Quilt4Net.Toolkit.Features.Issue;
 
 /// <summary>
 /// The kind of dependency one issue declares on another. These are the three edge kinds a roadmap
 /// may draw; an edge that is none of them is not an edge, and is left off the map.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum IssueLinkKind
 {
     /// <summary>
