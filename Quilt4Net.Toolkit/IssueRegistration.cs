@@ -42,9 +42,14 @@ public static class IssueRegistration
         o.ApiKey = config?.ApiKey ?? apiKey;
         o.Quilt4NetAddress = config?.Quilt4NetAddress ?? address ?? "https://quilt4net.com/";
 
+        options?.Invoke(o);
+
+        // Validated after the callback, not before: the callback is what a host most often sets the
+        // address from, and validating the pre-callback value lets a bad one through to
+        // `new Uri(...)` in the client factory below — which then throws on the first call instead
+        // of at startup, far from the line that caused it.
         if (!Uri.TryCreate(o.Quilt4NetAddress, UriKind.Absolute, out _)) throw new InvalidOperationException($"Configuration {nameof(o.Quilt4NetAddress)} with value '{o.Quilt4NetAddress}' cannot be parsed to an absolute uri.");
 
-        options?.Invoke(o);
         services.AddSingleton(Options.Create(o));
 
         services.AddQuilt4NetCorrelationId();
