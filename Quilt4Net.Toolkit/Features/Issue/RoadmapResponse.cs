@@ -19,10 +19,21 @@ public record RoadmapResponse
     public required RoadmapEdgeResponse[] Edges { get; init; }
 
     /// <summary>
-    /// Issues that are tracked but carry no route, and so appear in no lane. Surfaced as a count so
-    /// the map can say what it is not showing rather than quietly omitting it.
+    /// Issues that carry no route at all, and so belong in no lane.
     /// </summary>
     public required int UnroutedCount { get; init; }
+
+    /// <summary>
+    /// Issues that <b>do</b> carry a route but are still not drawn — their route fell outside the
+    /// lane cap, or they are finished and explain no edge.
+    /// </summary>
+    /// <remarks>
+    /// Counted separately from <see cref="UnroutedCount"/> because the two have different fixes and
+    /// conflating them produces a false statement. The first version reported both as "carry no
+    /// route", which was wrong the first time a real import exceeded the lane cap: three parked
+    /// issues with a perfectly good route were described as having none.
+    /// </remarks>
+    public required int HiddenCount { get; init; }
 
     /// <summary>When this projection was built (UTC).</summary>
     public required DateTime GeneratedUtc { get; init; }

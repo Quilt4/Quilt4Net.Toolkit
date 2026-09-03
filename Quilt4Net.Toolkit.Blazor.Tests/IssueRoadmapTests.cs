@@ -192,6 +192,7 @@ public class IssueRoadmapTests : BunitContext
         Routes = routes,
         Edges = edges,
         UnroutedCount = 0,
+        HiddenCount = 0,
         GeneratedUtc = new DateTime(2026, 9, 3, 0, 0, 0, DateTimeKind.Utc)
     };
 

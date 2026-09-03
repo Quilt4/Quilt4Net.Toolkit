@@ -79,7 +79,7 @@
                         <rect x="0" y="@N(lane.Top)" width="@N(_figure.Width)" height="@N(lane.Height)"
                               fill="currentColor" opacity="@(i % 2 == 0 ? "0.03" : "0.06")"/>
                         <text x="12" y="@N(lane.Top + 22)" fill="var(--rz-text-color)"
-                              font-size="13" font-weight="600">@Truncate(lane.Name, 20)</text>
+                              font-size="13" font-weight="600">@Truncate(lane.Name, 26)</text>
                     </g>
                 }
 
@@ -149,6 +149,7 @@
     private RoadmapFigure _figure;
     private DateTime _generatedUtc;
     private int _unroutedCount;
+    private int _hiddenCount;
     private string _loadFailure;
 
     /// <summary>
@@ -178,6 +179,7 @@
             var roadmap = await IssueService.GetRoadmapAsync();
             _generatedUtc = roadmap.GeneratedUtc;
             _unroutedCount = roadmap.UnroutedCount;
+        _hiddenCount = roadmap.HiddenCount;
             _figure = RoadmapLayout.Build(roadmap);
         }
         catch (IssueServiceException e)
@@ -188,10 +190,17 @@
         await base.OnInitializedAsync();
     }
 
-    private string UnroutedNote() =>
-        _unroutedCount == 0
-            ? string.Empty
-            : $"{_unroutedCount} issue(s) carry no route and are not shown.";
+    /// <summary>
+    /// Says what the figure is not showing, and why, in the reader's terms. A map that omits work
+    /// silently is worse than one that admits it.
+    /// </summary>
+    private string UnroutedNote()
+    {
+        var parts = new List<string>();
+        if (_unroutedCount > 0) parts.Add($"{_unroutedCount} issue(s) carry no route");
+        if (_hiddenCount > 0) parts.Add($"{_hiddenCount} are routed but outside the drawn lanes, or finished and explaining no edge");
+        return parts.Count == 0 ? string.Empty : $"Not shown: {string.Join("; ", parts)}.";
+    }
 
     private static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 

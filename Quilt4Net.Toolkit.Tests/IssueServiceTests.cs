@@ -50,7 +50,7 @@ public class IssueServiceTests
     [Fact]
     public async Task GetRoadmapAsync_calls_the_roadmap_endpoint()
     {
-        var handler = new RecordingHandler(_ => Json("""{"routes":[],"edges":[],"unroutedCount":0,"generatedUtc":"2026-09-03T00:00:00Z"}"""));
+        var handler = new RecordingHandler(_ => Json("""{"routes":[],"edges":[],"unroutedCount":0,"hiddenCount":0,"generatedUtc":"2026-09-03T00:00:00Z"}"""));
         var sut = CreateSut(handler);
 
         var roadmap = await sut.GetRoadmapAsync();
