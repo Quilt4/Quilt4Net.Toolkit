@@ -22,6 +22,7 @@ internal class ConnectionService : IConnectionService
 
     private readonly ContentOptions _contentOptions;
     private readonly RemoteConfigurationOptions _configurationOptions;
+    private readonly IssueOptions _issueOptions;
     private readonly IHttpClientFactory _httpClientFactory;
 
     /// <summary>
@@ -31,10 +32,11 @@ internal class ConnectionService : IConnectionService
     /// </summary>
     private readonly ConcurrentDictionary<Service, CacheEntry> _cache = new();
 
-    public ConnectionService(IOptions<ContentOptions> contentOptions, IOptions<RemoteConfigurationOptions> configurationOptions, IHttpClientFactory httpClientFactory)
+    public ConnectionService(IOptions<ContentOptions> contentOptions, IOptions<RemoteConfigurationOptions> configurationOptions, IOptions<IssueOptions> issueOptions, IHttpClientFactory httpClientFactory)
     {
         _contentOptions = contentOptions.Value;
         _configurationOptions = configurationOptions.Value;
+        _issueOptions = issueOptions.Value;
         _httpClientFactory = httpClientFactory;
     }
 
@@ -113,6 +115,7 @@ internal class ConnectionService : IConnectionService
         {
             Service.Content => Features.Content.RemoteContentCallService.HttpClientName,
             Service.Configuration => Features.FeatureToggle.RemoteConfigCallService.HttpClientName,
+            Service.Issue => Features.Issue.IssueService.HttpClientName,
             _ => throw new ArgumentOutOfRangeException(nameof(service), service, null)
         };
 
@@ -140,6 +143,7 @@ internal class ConnectionService : IConnectionService
         {
             Service.Content => (_contentOptions?.Quilt4NetAddress, _contentOptions?.ApiKey, nameof(ContentOptions), "AddQuilt4NetContent"),
             Service.Configuration => (_configurationOptions?.Quilt4NetAddress, _configurationOptions?.ApiKey, nameof(RemoteConfigurationOptions), "AddQuilt4NetRemoteConfiguration"),
+            Service.Issue => (_issueOptions?.Quilt4NetAddress, _issueOptions?.ApiKey, nameof(IssueOptions), "AddQuilt4NetIssues"),
             _ => throw new ArgumentOutOfRangeException(nameof(service), service, null)
         };
 
