@@ -19,7 +19,7 @@ public class IssueServiceTests
         var handler = new RecordingHandler(_ => Json("[]"));
         var sut = CreateSut(handler);
 
-        await sut.GetAsync();
+        await sut.GetAsync(TestContext.Current.CancellationToken);
 
         handler.LastRequest.Method.Should().Be(HttpMethod.Get);
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/Api/Issue");
@@ -31,7 +31,7 @@ public class IssueServiceTests
         var handler = new RecordingHandler(_ => Json("null"));
         var sut = CreateSut(handler);
 
-        await sut.GetAsync(12);
+        await sut.GetAsync(12, TestContext.Current.CancellationToken);
 
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/Api/Issue/12");
     }
@@ -42,7 +42,7 @@ public class IssueServiceTests
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         var sut = CreateSut(handler);
 
-        var result = await sut.GetAsync(404);
+        var result = await sut.GetAsync(404, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }
@@ -53,7 +53,7 @@ public class IssueServiceTests
         var handler = new RecordingHandler(_ => Json("""{"routes":[],"edges":[],"unroutedCount":0,"hiddenCount":0,"generatedUtc":"2026-09-03T00:00:00Z"}"""));
         var sut = CreateSut(handler);
 
-        var roadmap = await sut.GetRoadmapAsync();
+        var roadmap = await sut.GetRoadmapAsync(TestContext.Current.CancellationToken);
 
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/Api/Issue/roadmap");
         roadmap.Routes.Should().BeEmpty();
@@ -65,7 +65,7 @@ public class IssueServiceTests
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
         var sut = CreateSut(handler);
 
-        await sut.DeleteAsync(7);
+        await sut.DeleteAsync(7, TestContext.Current.CancellationToken);
 
         handler.LastRequest.Method.Should().Be(HttpMethod.Delete);
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/Api/Issue/7");
@@ -77,7 +77,7 @@ public class IssueServiceTests
         var handler = new RecordingHandler(_ => Json(SampleIssue));
         var sut = CreateSut(handler);
 
-        await sut.RemoveLinkAsync(3, 9);
+        await sut.RemoveLinkAsync(3, 9, TestContext.Current.CancellationToken);
 
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/Api/Issue/3/link/9");
     }
@@ -98,7 +98,7 @@ public class IssueServiceTests
             TargetNumber = 2,
             Kind = IssueLinkKind.Cheapens,
             Reason = "the schema settles first"
-        });
+        }, TestContext.Current.CancellationToken);
 
         body.Should().Contain("Cheapens");
         body.Should().NotContain("\"kind\":1");
