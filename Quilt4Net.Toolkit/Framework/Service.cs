@@ -3,5 +3,6 @@
 public enum Service
 {
     Content,
-    Configuration
+    Configuration,
+    Issue
 }

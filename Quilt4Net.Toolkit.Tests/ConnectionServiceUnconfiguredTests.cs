@@ -120,11 +120,12 @@ public class ConnectionServiceUnconfiguredTests
         handler.Calls.Should().Be(1);
     }
 
-    private static ConnectionService CreateSut(string contentAddress, string configurationAddress, HttpMessageHandler handler = null)
+    private static ConnectionService CreateSut(string contentAddress, string configurationAddress, HttpMessageHandler handler = null, string issueAddress = null)
     {
         var content = Options.Create(new ContentOptions { Quilt4NetAddress = contentAddress });
         var configuration = Options.Create(new RemoteConfigurationOptions { Quilt4NetAddress = configurationAddress });
-        return new ConnectionService(content, configuration, new StubHttpClientFactory(handler ?? new CountingHandler(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") })));
+        var issue = Options.Create(new IssueOptions { Quilt4NetAddress = issueAddress });
+        return new ConnectionService(content, configuration, issue, new StubHttpClientFactory(handler ?? new CountingHandler(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") })));
     }
 
     private sealed class CountingHandler(Func<HttpResponseMessage> respond) : HttpMessageHandler

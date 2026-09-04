@@ -446,6 +446,86 @@ Configuration path: `Quilt4Net:ValueGroup` (or top-level `Quilt4Net:ApiKey` + `Q
 
 In the Quilt4Net.Server admin UI under **Value Groups**: select the group → API Keys panel → **Mint new key**. The raw key is shown exactly once — save it immediately. The key carries only the `valuegroup:read` scope and is tag-bound on the server side to this one group; it cannot reach any other team data.
 
+## Issue tracker
+
+A per-team issue tracker, meant to be driven by an agent over REST or MCP rather than by hand. Each issue carries a title, body text, a **route** (the roadmap lane it belongs to), a Now/Next/Later band, a workflow state, an optional assignee, an optional S/M/L effort and an optional Critical/Important/Nice importance. Issues are linked to each other with typed dependencies.
+
+```csharp
+builder.AddQuilt4NetIssues(o =>
+{
+    o.ApiKey = builder.Configuration["Quilt4Net:Issue:ApiKey"];
+});
+```
+
+Then inject and call:
+
+```csharp
+public class MyAgent(IIssueService issues)
+{
+    public async Task TriageAsync(CancellationToken ct)
+    {
+        var created = await issues.CreateAsync(new CreateIssueRequest
+        {
+            Title = "Bulk warm-up fans out on a shed call",
+            Route = "read path",
+            Band = RoadmapBand.Now,
+            Effort = IssueEffort.M
+        }, ct);
+
+        await issues.AddLinkAsync(created.Number, new AddIssueLinkRequest
+        {
+            TargetNumber = 12,
+            Kind = IssueLinkKind.Blocks,
+            Reason = "the limiter has to ship before the client can honour it"
+        }, ct);
+    }
+}
+```
+
+### Importance and effort
+
+`Importance` (`Critical` / `Important` / `Nice`) and `Effort` (`S` / `M` / `L`) are the backlog's own vocabulary, so a tracker issue and a backlog row can be compared without translating between them. Together they give the house ordering rule: **importance first, then effort ascending** — highest impact for least work.
+
+Both are **optional**. An issue with no importance means nobody has graded it yet, which is worth seeing; defaulting it to `Nice` would assert a judgement no one made and hide what still needs triage. Ungraded issues sort after everything graded.
+
+Importance is deliberately **not** drawn on the roadmap. A map restates effort only — quick wins are invisible without it — while status, priority and ownership are read from the source rather than copied onto the figure.
+
+### The three link kinds
+
+| Kind | Drawn | Means |
+|------|-------|-------|
+| `Blocks` | solid | The target genuinely cannot start until the source ships. A hard constraint, and rare. |
+| `Cheapens` | dashed | The target is cheaper, safer or better-informed afterwards, but is not prevented from starting. Most real edges are these. |
+| `Overlaps` | dotted | Both touch the same surface, so doing them independently causes rework. Not an ordering — a warning to pick one owner. |
+
+**Every link requires a `Reason`, and the server rejects an empty one.** Most items people assume are ordered turn out to be merely related; making the reason mandatory is what keeps the graph from filling up with dependencies nobody can justify. `Blocks` links may not form a cycle.
+
+### Workflow
+
+Each team has one workflow — a list of states plus the transitions allowed between them — seeded as `Todo → Doing → Done`. Read it with `GetWorkflowAsync`, replace it with `SetWorkflowAsync`. A state change goes through `SetStateAsync` rather than `UpdateAsync` so the move can be checked; a transition the workflow does not permit is rejected, and the error names the states the issue can actually reach.
+
+A replacement workflow that would leave issues stranded in a state it no longer defines is rejected rather than applied.
+
+### IssueOptions
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Quilt4NetAddress` | `https://quilt4net.com/` | Server base URL. |
+| `ApiKey` | — *(required)* | Team API key. Reading needs `issue:read`; writing needs `issue:write`. |
+
+Configuration path: `Quilt4Net:Issue` (or top-level `Quilt4Net:ApiKey` + `Quilt4Net:Quilt4NetAddress` for shared keys).
+
+### Behaviour and contract
+
+- **Calls throw rather than degrade.** Unlike `IRemoteConfigurationService`, which serves a fallback when the server is unreachable, a tracker read that quietly returned an empty set would be indistinguishable from a team with no issues. Failures surface as `IssueServiceException` carrying the status code.
+- **A 429 carries the server's `Retry-After`** on `IssueServiceException.RetryAfter`. Honour it; do not retry immediately.
+- **`UpdateAsync` replaces, it does not merge.** Read the issue, change what you mean to change, and send the whole thing back. An omitted optional field is cleared.
+- **Enums travel as names**, not numbers, so inserting a member never re-grades values already in flight.
+
+### Minting a key
+
+In the Quilt4Net.Server admin UI under **Api → Api Key**. `issue:read` comes with any key at Viewer level or above. **`issue:write` is not granted by access level** and must be added to the key explicitly as a scope override — otherwise every application key that already holds `content:write` would be able to edit the tracker. For MCP access the key also needs `mcp:discover`.
+
 ## Universal telemetry identity
 
 `AddQuilt4NetLogging()` configures OpenTelemetry resource attributes **and** registers two `BaseProcessor`s — one for `LogRecord`, one for `Activity` — that copy a fixed set of identity attributes onto every per-record Properties bag. Works for all app types; the Azure Monitor exporter forwards the per-record attributes into `customDimensions`, where KQL can read them.

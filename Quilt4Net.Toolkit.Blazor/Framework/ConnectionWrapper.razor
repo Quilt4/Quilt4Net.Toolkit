@@ -1,5 +1,9 @@
+@using Microsoft.Extensions.DependencyInjection
 @using Quilt4Net.Toolkit.Framework
-@inject IConnectionService ConnectionService
+@* Resolved from the provider rather than @inject'ed, because a Ready host has no endpoint to probe
+   and so has no reason to register a probe service. A required injection is resolved at render time
+   whether or not it is used, which turned "I already hold my data" into a broken page. *@
+@inject IServiceProvider ServiceProvider
 
 @if (Ready)
 {
@@ -16,7 +20,17 @@ else if (_result == null)
 }
 else if (!_result.Success)
 {
-    <RadzenText>Not connected to <RadzenLink Text="Quilt4Net" Path="@(_result.Address.AbsoluteUri)" Target="Quilt4Net" />.</RadzenText>
+    @* Address is null when the failure is configuration rather than connectivity — an unconfigured
+       address, or no probe service at all. Rendering the link unconditionally threw a
+       NullReferenceException over the top of the message that would have explained the problem. *@
+    @if (_result.Address == null)
+    {
+        <RadzenText>Not connected to Quilt4Net.</RadzenText>
+    }
+    else
+    {
+        <RadzenText>Not connected to <RadzenLink Text="Quilt4Net" Path="@(_result.Address.AbsoluteUri)" Target="Quilt4Net" />.</RadzenText>
+    }
     <RadzenText>@_result.Message</RadzenText>
 }
 else
@@ -52,7 +66,18 @@ else
         // already settled that.
         if (!Ready)
         {
-            _result = await ConnectionService.CanConnectAsync(Service.Value);
+            var connectionService = ServiceProvider.GetService<IConnectionService>();
+
+            // Named rather than thrown: an unregistered probe service is a wiring mistake, and a
+            // sentence saying which registration is missing is worth more than a DI exception
+            // rendered as a blank page.
+            _result = connectionService == null
+                ? new ConnectionResult
+                {
+                    Success = false,
+                    Message = $"No {nameof(IConnectionService)} is registered. Call AddQuilt4NetContent(), AddQuilt4NetRemoteConfiguration() or AddQuilt4NetIssues() during startup, or set Ready on this component if it already holds what it renders."
+                }
+                : await connectionService.CanConnectAsync(Service.Value);
         }
 
         await base.OnParametersSetAsync();

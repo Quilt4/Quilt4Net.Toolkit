@@ -844,6 +844,43 @@ The dropdown is not rendered at all when every entry is shared, since there woul
 
 > The row actions (edit, reset, delete) have always acted on the row's own application/environment/instance. The columns exist so the operator can see which scope that is before acting on it.
 
+## Issue roadmap
+
+`IssueRoadmap` draws a team's issues as a roadmap. It is a self-contained component, so a project that is not Quilt4Net can show its own roadmap by referencing this package and holding an API key.
+
+```razor
+<IssueRoadmap />
+```
+
+Register the client during startup:
+
+```csharp
+builder.AddQuilt4NetIssues(o =>
+{
+    o.ApiKey = builder.Configuration["Quilt4Net:Issue:ApiKey"];
+});
+```
+
+The key needs the `issue:read` scope. See the issue tracker section of the [Quilt4Net.Toolkit README](../Quilt4Net.Toolkit/README.md) for the data model and for how to mint a key.
+
+### What it draws
+
+One scrollable SVG figure, not a list of cards with the dependencies described underneath — if a reader would get the same thing from a sorted list, it is not a map.
+
+- **Lanes are routes.** Each row is one theme of work. An issue with no route is not drawn, and the caption says how many were left out rather than omitting them silently.
+- **Left to right suggests.** `Now`, `Next` and `Later` are banded columns behind the lanes — a suggestion the reader may ignore, which is why they are soft bands rather than arrows.
+- **Arrows constrain.** `Blocks` is solid, `Cheapens` dashed, `Overlaps` dotted, and hovering an edge shows its reason. Order suggests; edges constrain, and the two are drawn differently so a reader can disagree with the sequence without losing the constraints.
+- **Effort rides on the item** as `· S`, `· M` or `· L`. A ring marks a quick win — small, with nothing pointing at it.
+- Issues in a terminal state are dimmed: they are on the map to explain an edge, as context rather than as work.
+
+Set `ShowHowToRead="false"` to drop the legend and the four explanatory cells when the surrounding page already explains the notation.
+
+```razor
+<IssueRoadmap ShowHowToRead="false" />
+```
+
+> Unlike a published roadmap artifact — which is a *derived* view over a backlog, and stale whenever the two disagree — this component reads the tracker directly, so the tracker is its source. The two look alike on purpose; do not try to reconcile them.
+
 ## Log viewer
 
 View and search Application Insights logs with the `LogView` component. Requires the Application Insights client to be configured in one of two modes (mutually exclusive):
