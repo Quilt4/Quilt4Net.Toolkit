@@ -185,6 +185,69 @@ public class IssueRoadmapTests : BunitContext
         cut.Markup.Should().Contain("issue:read");
     }
 
+    [Fact]
+    public void A_card_offers_one_hit_target_covering_the_whole_box()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(7)]));
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.OnItemSelected, n => { }));
+
+        // A <g> has no geometry of its own, so the click cannot live on the group: a press landing
+        // between the child shapes would fall through to the lane behind the card. One transparent
+        // rect over the finished card is what makes the whole thing clickable, text included.
+        var target = cut.Find("rect[data-issue='7']");
+        target.GetAttribute("width").Should().Be(RoadmapLayout.ItemWidth.ToString(CultureInfo.InvariantCulture));
+        target.GetAttribute("height").Should().Be(RoadmapLayout.ItemHeight.ToString(CultureInfo.InvariantCulture));
+        target.GetAttribute("style").Should().Contain("cursor: pointer");
+
+        // NOTE: the dispatch itself is not asserted here. bUnit resolves handlers through the render
+        // tree and finds none for an element inside the <svg> foreign-content subtree, so
+        // target.Click() throws MissingEventHandlerException regardless of whether the handler is
+        // wired. What the callback does once raised is covered by the host page instead.
+    }
+
+    [Fact]
+    public void Cards_are_not_offered_as_controls_when_the_host_handles_no_click()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(7)]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.Markup.Should().NotContain("cursor: pointer",
+            "a pointer over something that does nothing is a worse answer than a plain box");
+    }
+
+    [Fact]
+    public void The_assignee_is_drawn_by_name()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, assignedUserKey: "u1", assignedUserName: "Daniel")]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.Markup.Should().Contain("Daniel").And.NotContain("u1");
+    }
+
+    [Fact]
+    public void A_host_roster_overrides_the_projections_name()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, assignedUserKey: "u1", assignedUserName: "stale")]));
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.MemberNames, new Dictionary<string, string> { ["u1"] = "Fresh" }));
+
+        cut.Markup.Should().Contain("Fresh").And.NotContain("stale");
+    }
+
+    [Fact]
+    public void An_assignee_the_server_could_not_name_still_shows_the_key()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, assignedUserKey: "gone")]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.Markup.Should().Contain("gone",
+            "an issue parked on somebody who will never see it should look wrong, not unassigned");
+    }
+
     private static RoadmapResponse Roadmap(params RoadmapRouteResponse[] routes) => Roadmap([], routes);
 
     private static RoadmapResponse Roadmap(RoadmapEdgeResponse[] edges, params RoadmapRouteResponse[] routes) => new()
@@ -204,12 +267,13 @@ public class IssueRoadmapTests : BunitContext
         Later = later ?? []
     };
 
-    private static RoadmapItemResponse Item(int number, bool terminal = false, bool quickWin = false) => new()
+    private static RoadmapItemResponse Item(int number, bool terminal = false, bool quickWin = false, string assignedUserKey = null, string assignedUserName = null) => new()
     {
         Number = number,
         Title = $"issue {number}",
         State = "Todo",
-        AssignedUserKey = string.Empty,
+        AssignedUserKey = assignedUserKey ?? string.Empty,
+        AssignedUserName = assignedUserName ?? string.Empty,
         Effort = IssueEffort.S,
         IsTerminal = terminal,
         IsQuickWin = quickWin

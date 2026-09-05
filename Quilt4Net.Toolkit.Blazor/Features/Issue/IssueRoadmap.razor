@@ -56,6 +56,20 @@
                     </span>
                 }
             </div>
+
+            @* Without this the status bar is a colour nobody can decode. Named by shape rather than
+               by state name, because the names belong to the team's own workflow. *@
+            <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; margin-bottom: 1rem;">
+                @foreach (var kind in new[] { RoadmapStateKind.NotStarted, RoadmapStateKind.InProgress, RoadmapStateKind.Done })
+                {
+                    <span style="display: inline-flex; align-items: center; gap: 0.4rem;">
+                        <svg width="10" height="10" role="presentation">
+                            <circle cx="5" cy="5" r="4" fill="@StatusColour(kind)"/>
+                        </svg>
+                        <RadzenText TextStyle="TextStyle.Body2" Style="margin: 0;">@StatusLegendFor(kind)</RadzenText>
+                    </span>
+                }
+            </div>
         }
 
         <div style="overflow-x: auto; max-width: 100%;">
@@ -113,25 +127,58 @@
                               width="@N(RoadmapLayout.ItemWidth)" height="@N(RoadmapLayout.ItemHeight)"
                               rx="6" fill="var(--rz-base)" stroke="currentColor"
                               stroke-opacity="0.35" stroke-width="1"/>
+
+                        @* Status as a bar down the leading edge rather than a word: it reads at a
+                           glance across a whole lane, which a right-aligned label never did. The
+                           state name stays on the card beside it, because a colour nobody has a
+                           legend for is decoration. *@
+                        <rect x="@N(placed.X)" y="@N(placed.Y + 8)" width="3" height="@N(RoadmapLayout.ItemHeight - 16)"
+                              rx="1.5" fill="@StatusColour(item.StateKind)"/>
+
                         @if (item.IsQuickWin)
                         {
                             <circle cx="@N(placed.X + RoadmapLayout.ItemWidth - 14)" cy="@N(placed.Y + 14)"
                                     r="5" fill="none" stroke="var(--rz-text-color)" stroke-width="2"/>
                         }
-                        <text x="@N(placed.X + 12)" y="@N(placed.Y + 22)" font-size="12" font-weight="700"
+                        <text x="@N(placed.X + 12)" y="@N(placed.Y + 20)" font-size="12" font-weight="700"
                               fill="var(--rz-text-secondary-color)">#@item.Number</text>
-                        <text x="@N(placed.X + 12)" y="@N(placed.Y + 40)" font-size="13"
+                        <text x="@N(placed.X + 12)" y="@N(placed.Y + 38)" font-size="13"
                               fill="var(--rz-text-color)">@Truncate(item.Title, 30)</text>
-                        <text x="@N(placed.X + RoadmapLayout.ItemWidth - 30)" y="@N(placed.Y + 40)"
-                              font-size="12" text-anchor="end" fill="var(--rz-text-tertiary-color)">@item.State</text>
+
+                        <g>
+                            <circle cx="@N(placed.X + 16)" cy="@N(placed.Y + 57)" r="4" fill="@StatusColour(item.StateKind)"/>
+                            <text x="@N(placed.X + 26)" y="@N(placed.Y + 61)" font-size="11"
+                                  fill="var(--rz-text-secondary-color)">@Truncate(item.State, 14)</text>
+                        </g>
+
+                        @if (!string.IsNullOrEmpty(AssigneeFor(item)))
+                        {
+                            <g>
+                                <text x="@N(placed.X + RoadmapLayout.ItemWidth - 12)" y="@N(placed.Y + 61)"
+                                      font-size="11" text-anchor="end"
+                                      fill="var(--rz-text-tertiary-color)">@Truncate(AssigneeFor(item), 18)</text>
+                            </g>
+                        }
+
                         @if (item.Effort.HasValue)
                         {
                             <g>
-                                <text x="@N(placed.X + RoadmapLayout.ItemWidth - 12)" y="@N(placed.Y + 22)"
+                                <text x="@N(placed.X + RoadmapLayout.ItemWidth - 12)" y="@N(placed.Y + 20)"
                                       font-size="12" text-anchor="end"
                                       fill="var(--rz-text-secondary-color)">· @item.Effort.Value</text>
                             </g>
                         }
+
+                        @* A transparent target laid over the finished card, last so it is on top.
+                           The click cannot go on the <g>: a group has no geometry of its own, so a
+                           press landing between the child shapes would fall straight through to the
+                           lane behind it. One rect makes the whole card clickable, text included. *@
+                        <rect x="@N(placed.X)" y="@N(placed.Y)"
+                              width="@N(RoadmapLayout.ItemWidth)" height="@N(RoadmapLayout.ItemHeight)"
+                              rx="6" fill="transparent"
+                              data-issue="@item.Number"
+                              style="@(Selectable ? "cursor: pointer;" : null)"
+                              @onclick="@(() => OnItemClickAsync(item.Number))"/>
                     </g>
                 }
             </svg>
@@ -172,14 +219,48 @@
     [Parameter]
     public bool Ready { get; set; }
 
+    /// <summary>
+    /// Raised with an issue number when its card is clicked. Leave unset in a host that has nothing
+    /// to open — the cards then render as a figure rather than as controls, because a pointer cursor
+    /// over something that does nothing is a worse answer than a plain box.
+    /// </summary>
+    /// <remarks>
+    /// An <c>EventCallback</c> rather than the component opening an editor itself: this component is
+    /// embedded by remote projects that have no issue dialog, and many of them hold a read-only key.
+    /// The host decides what a click means.
+    /// </remarks>
+    [Parameter]
+    public EventCallback<int> OnItemSelected { get; set; }
+
+    /// <summary>
+    /// Names for assignee keys, supplied by a host that knows its roster. Optional — the server
+    /// already resolves <see cref="RoadmapItemResponse.AssignedUserName"/>, and this only overrides
+    /// it.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string> MemberNames { get; set; }
+
+    private bool Selectable => OnItemSelected.HasDelegate;
+
     protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        await base.OnInitializedAsync();
+    }
+
+    /// <summary>
+    /// Re-reads the projection and re-lays out the figure. Public so a host that edits an issue can
+    /// show the result without a full page navigation.
+    /// </summary>
+    public async Task ReloadAsync()
     {
         try
         {
+            _loadFailure = null;
             var roadmap = await IssueService.GetRoadmapAsync();
             _generatedUtc = roadmap.GeneratedUtc;
             _unroutedCount = roadmap.UnroutedCount;
-        _hiddenCount = roadmap.HiddenCount;
+            _hiddenCount = roadmap.HiddenCount;
             _figure = RoadmapLayout.Build(roadmap);
         }
         catch (IssueServiceException e)
@@ -187,8 +268,11 @@
             _loadFailure = e.Message;
         }
 
-        await base.OnInitializedAsync();
+        StateHasChanged();
     }
+
+    private Task OnItemClickAsync(int number) =>
+        Selectable ? OnItemSelected.InvokeAsync(number) : Task.CompletedTask;
 
     /// <summary>
     /// Says what the figure is not showing, and why, in the reader's terms. A map that omits work
@@ -225,11 +309,52 @@
         _ => "Overlaps — same surface, give both to one owner"
     };
 
-    private static string TitleFor(RoadmapItemResponse item)
+    /// <summary>
+    /// Theme variables rather than literal colours, so the map stays legible in both light and dark
+    /// and picks up a host's palette. <c>InProgress</c> is the only one given an accent — it is the
+    /// state a reader scans for.
+    /// </summary>
+    private static string StatusColour(RoadmapStateKind kind) => kind switch
+    {
+        RoadmapStateKind.InProgress => "var(--rz-primary)",
+        RoadmapStateKind.Done => "var(--rz-success)",
+        _ => "var(--rz-text-disabled-color)"
+    };
+
+    private static string StatusLegendFor(RoadmapStateKind kind) => kind switch
+    {
+        RoadmapStateKind.InProgress => "In progress — somebody is on it",
+        RoadmapStateKind.Done => "Done — drawn only where it explains an edge",
+        _ => "Not started — the workflow's entry state"
+    };
+
+    /// <summary>
+    /// The host's roster wins over the server's, then the server's resolved name, then the raw key.
+    /// The key is deliberately the last resort rather than blank: an issue assigned to somebody who
+    /// has left the team should look wrong, not unassigned.
+    /// </summary>
+    private string AssigneeFor(RoadmapItemResponse item)
+    {
+        if (string.IsNullOrEmpty(item.AssignedUserKey)) return string.Empty;
+
+        if (MemberNames != null && MemberNames.TryGetValue(item.AssignedUserKey, out var name) && !string.IsNullOrWhiteSpace(name))
+            return name;
+
+        return string.IsNullOrWhiteSpace(item.AssignedUserName) ? item.AssignedUserKey : item.AssignedUserName;
+    }
+
+    /// <summary>
+    /// Deliberately an instance method: it has to resolve the assignee the same way the card does,
+    /// or a host roster would leave the tooltip naming one person and the card another.
+    /// </summary>
+    private string TitleFor(RoadmapItemResponse item)
     {
         var parts = new List<string> { $"#{item.Number} {item.Title}", item.State };
         if (item.Effort.HasValue) parts.Add(item.Effort.Value.ToString());
-        if (!string.IsNullOrEmpty(item.AssignedUserKey)) parts.Add(item.AssignedUserKey);
+
+        var assignee = AssigneeFor(item);
+        if (!string.IsNullOrEmpty(assignee)) parts.Add(assignee);
+
         if (item.IsQuickWin) parts.Add("quick win");
         return string.Join(" · ", parts);
     }

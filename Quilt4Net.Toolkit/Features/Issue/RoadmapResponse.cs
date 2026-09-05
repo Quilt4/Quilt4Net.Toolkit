@@ -64,11 +64,34 @@ public record RoadmapItemResponse
     /// <summary>Short one-line summary.</summary>
     public required string Title { get; init; }
 
-    /// <summary>Current workflow state.</summary>
+    /// <summary>Current workflow state, by its team-defined name.</summary>
     public required string State { get; init; }
+
+    /// <summary>
+    /// Where <see cref="State"/> sits in the workflow, for a map that cannot know a team's state
+    /// names. See <see cref="RoadmapStateKind"/>.
+    /// </summary>
+    /// <remarks>
+    /// Not <c>required</c>: against a server that predates this field every item reads
+    /// <see cref="RoadmapStateKind.NotStarted"/>, which asserts no progress rather than inventing
+    /// any, and <see cref="IsTerminal"/> still fades finished items correctly.
+    /// </remarks>
+    public RoadmapStateKind StateKind { get; init; } = RoadmapStateKind.NotStarted;
 
     /// <summary>Assigned team member key, or empty when unassigned.</summary>
     public required string AssignedUserKey { get; init; }
+
+    /// <summary>
+    /// The assignee's display name, or empty when unassigned.
+    /// </summary>
+    /// <remarks>
+    /// Resolved on the server, because the roster lives there. The component is embeddable by a
+    /// remote project that holds no team membership at all, so a key is the only thing it could
+    /// otherwise render — and <c>VdvTrH-RnYRCXeg1OoFB8i…</c> on a card tells a reader nothing.
+    /// Falls back to the key rather than to blank when a member has since left, for the same reason
+    /// the board does: an issue parked on somebody who will never see it should look wrong.
+    /// </remarks>
+    public string AssignedUserName { get; init; } = string.Empty;
 
     /// <summary>Rough size, rendered on the item as <c>· S</c>, <c>· M</c> or <c>· L</c>.</summary>
     public required IssueEffort? Effort { get; init; }

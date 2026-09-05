@@ -15,7 +15,11 @@ internal static class RoadmapLayout
     internal const double GutterWidth = 176;
     internal const double BandWidth = 288;
     internal const double ItemWidth = 256;
-    internal const double ItemHeight = 56;
+
+    // Three rows: number + effort, title, then status and assignee. The third row was added rather
+    // than crammed into the second — the state used to share that line with the title, which left no
+    // room for an assignee and truncated both.
+    internal const double ItemHeight = 74;
     internal const double ItemGap = 12;
     internal const double LanePadding = 16;
     internal const double HeaderHeight = 36;
