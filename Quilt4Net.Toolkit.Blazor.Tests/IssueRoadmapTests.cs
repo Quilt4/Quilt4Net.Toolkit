@@ -186,24 +186,29 @@ public class IssueRoadmapTests : BunitContext
     }
 
     [Fact]
-    public void A_card_offers_one_hit_target_covering_the_whole_box()
+    public void Clicking_a_card_reports_its_number()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(7)]));
+        var clicked = 0;
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.OnItemSelected, n => clicked = n));
+        cut.Find("button[data-issue='7']").Click();
+
+        clicked.Should().Be(7);
+    }
+
+    [Fact]
+    public void The_hit_target_covers_the_whole_card()
     {
         _issueService.Roadmap = Roadmap(Route("r", now: [Item(7)]));
 
         var cut = Render<IssueRoadmap>(p => p.Add(x => x.OnItemSelected, n => { }));
 
-        // A <g> has no geometry of its own, so the click cannot live on the group: a press landing
-        // between the child shapes would fall through to the lane behind the card. One transparent
-        // rect over the finished card is what makes the whole thing clickable, text included.
-        var target = cut.Find("rect[data-issue='7']");
-        target.GetAttribute("width").Should().Be(RoadmapLayout.ItemWidth.ToString(CultureInfo.InvariantCulture));
-        target.GetAttribute("height").Should().Be(RoadmapLayout.ItemHeight.ToString(CultureInfo.InvariantCulture));
-        target.GetAttribute("style").Should().Contain("cursor: pointer");
-
-        // NOTE: the dispatch itself is not asserted here. bUnit resolves handlers through the render
-        // tree and finds none for an element inside the <svg> foreign-content subtree, so
-        // target.Click() throws MissingEventHandlerException regardless of whether the handler is
-        // wired. What the callback does once raised is covered by the host page instead.
+        // A real button rather than an SVG shape: Blazor does not attach handlers to
+        // SVG-namespaced elements, so an @onclick on a <rect> draws the shape and wires nothing.
+        var style = cut.Find("button[data-issue='7']").GetAttribute("style")!;
+        style.Should().Contain($"width: {RoadmapLayout.ItemWidth.ToString(CultureInfo.InvariantCulture)}px");
+        style.Should().Contain($"height: {RoadmapLayout.ItemHeight.ToString(CultureInfo.InvariantCulture)}px");
     }
 
     [Fact]
@@ -213,8 +218,8 @@ public class IssueRoadmapTests : BunitContext
 
         var cut = Render<IssueRoadmap>();
 
-        cut.Markup.Should().NotContain("cursor: pointer",
-            "a pointer over something that does nothing is a worse answer than a plain box");
+        cut.FindAll("button[data-issue]").Should().BeEmpty(
+            "a control over something that does nothing is a worse answer than a plain figure");
     }
 
     [Fact]

@@ -72,7 +72,13 @@
             </div>
         }
 
+        @* The figure is wrapped so the click targets can sit over it as HTML. They cannot be SVG:
+           Blazor does not attach event handlers to SVG-namespaced elements, so an @@onclick on a
+           <rect> renders the shape and silently wires nothing - verified in the browser, where 83
+           elements on the page carried a handler attribute and the rect carried none. Overlaying
+           real buttons also makes the cards keyboard-reachable, which a drawing never was. *@
         <div style="overflow-x: auto; max-width: 100%;">
+          <div style="position: relative; width: @N(_figure.Width)px; height: @N(_figure.Height)px;">
             <svg width="@N(_figure.Width)" height="@N(_figure.Height)"
                  viewBox="0 0 @N(_figure.Width) @N(_figure.Height)"
                  role="img" aria-label="Issue roadmap"
@@ -168,20 +174,24 @@
                                       fill="var(--rz-text-secondary-color)">· @item.Effort.Value</text>
                             </g>
                         }
-
-                        @* A transparent target laid over the finished card, last so it is on top.
-                           The click cannot go on the <g>: a group has no geometry of its own, so a
-                           press landing between the child shapes would fall straight through to the
-                           lane behind it. One rect makes the whole card clickable, text included. *@
-                        <rect x="@N(placed.X)" y="@N(placed.Y)"
-                              width="@N(RoadmapLayout.ItemWidth)" height="@N(RoadmapLayout.ItemHeight)"
-                              rx="6" fill="transparent"
-                              data-issue="@item.Number"
-                              style="@(Selectable ? "cursor: pointer;" : null)"
-                              @onclick="@(() => OnItemClickAsync(item.Number))"/>
                     </g>
                 }
             </svg>
+
+            @if (Selectable)
+            {
+                @foreach (var placed in _figure.Items)
+                {
+                    var number = placed.Item.Number;
+                    <button type="button"
+                            data-issue="@number"
+                            title="@TitleFor(placed.Item)"
+                            aria-label="@($"Issue #{number}: {placed.Item.Title}")"
+                            @onclick="@(() => OnItemClickAsync(number))"
+                            style="position: absolute; left: @N(placed.X)px; top: @N(placed.Y)px; width: @N(RoadmapLayout.ItemWidth)px; height: @N(RoadmapLayout.ItemHeight)px; padding: 0; margin: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer;"></button>
+                }
+            }
+          </div>
         </div>
 
         <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); margin-top: 0.5rem;">

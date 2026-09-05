@@ -1,4 +1,9 @@
-﻿@using Radzen
+﻿@* Blazor's event-handler attributes (@onclick and friends) are defined here. Without this a
+   component's @onclick compiles to an ordinary attribute and silently wires nothing: the button
+   renders, the cursor changes, and clicking does absolutely nothing. IssueRoadmap and
+   LogSearchView both shipped that way, which is what this import exists to stop. *@
+@using Microsoft.AspNetCore.Components.Web
+@using Radzen
 @using Radzen.Blazor
 @using Tharga.Blazor
 @using Tharga.Blazor.Framework.Buttons
