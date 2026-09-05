@@ -50,6 +50,19 @@ public record IssueResponse
     /// </summary>
     public required IssueLinkResponse[] Links { get; init; }
 
+    /// <summary>
+    /// Where this issue came from, and the tickets it is. Empty when nothing was recorded.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately <b>not</b> <c>required</c>, unlike every other property here. The Toolkit
+    /// publishes before the Server that populates it — the csproj comment in <c>Quilt4Net.Server</c>
+    /// spells out why that order cannot be reversed — so for the length of that window a client on
+    /// this version talks to a server that sends no <c>references</c> at all. A required member would
+    /// turn that window into a deserialization failure on every read; defaulting to empty makes it a
+    /// non-event.
+    /// </remarks>
+    public IssueReferenceResponse[] References { get; init; } = [];
+
     /// <summary>When the issue was created (UTC).</summary>
     public required DateTime CreatedUtc { get; init; }
 

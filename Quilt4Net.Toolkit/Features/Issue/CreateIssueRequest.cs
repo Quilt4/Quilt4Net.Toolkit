@@ -37,4 +37,15 @@ public record CreateIssueRequest
 
     /// <summary>How much this matters. Optional — leaving it unset means it still needs triage.</summary>
     public IssueImportance? Importance { get; init; }
+
+    /// <summary>
+    /// Where this issue came from, and the tickets it is. Optional.
+    /// </summary>
+    /// <remarks>
+    /// An importer should set an <see cref="IssueReferenceRole.Identity"/> reference here for the
+    /// ticket it is importing. That is what makes a second run of the same import an update rather
+    /// than a duplicate — the server refuses a second issue claiming an identity another already
+    /// holds, and names the issue that holds it.
+    /// </remarks>
+    public IssueReferenceRequest[] References { get; init; } = [];
 }
