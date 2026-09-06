@@ -21,61 +21,50 @@ permissions:
 
 jobs:
   stalled-gate:
-    name: No recent run parked awaiting approval
+    name: The release that would publish master is not parked
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if a recent run has been waiting over an hour
+      - name: Fail if the newest master CI run is stuck awaiting approval
         env:
           GH_TOKEN: ${{ github.token }}
           THRESHOLD_MINUTES: '60'
-          # Only recent stalls are actionable. The first real run of this check found 27 parked runs
-          # going back to 2026-08-09; failing on those forever would leave this permanently red,
-          # which is the same "nobody notices" failure #2 is about wearing a different hat. Old
-          # parked runs want cancelling once, not alerting on every hour.
-          LOOKBACK_DAYS: '7'
         run: |
           set -euo pipefail
 
-          # `waiting` is a run parked on a protected environment's required reviewer. It reports no
-          # failure, notifies nobody, and is visually indistinguishable from a slow run - which is
-          # how four master merges once sat unapproved for 17 days while nuget.org stayed on 1.0.4.
-          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=waiting&per_page=100" \
-            --jq '.workflow_runs[] | [.id, .created_at, .head_branch, .html_url] | @tsv' > waiting.tsv
+          # Only the NEWEST master run matters, and only master runs matter at all.
+          #
+          # PR builds park at the `prerelease` gate and are deliberately never approved - only the
+          # last one is ever published - so a parked PR run is normal here, not a fault. An earlier
+          # cut of this check failed on them and found 27, which would have left it permanently red:
+          # a check that is always red is ignored, which is the very blindness this exists to cure.
+          #
+          # Superseded master runs do not matter either, because a release publishes everything up to
+          # it - so a later approved release already carried their commits. What is actionable is
+          # exactly one thing: the release that would publish master as it stands is sitting unapproved.
+          run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?branch=master&per_page=1" \
+                  --jq '.workflow_runs[0] | [.id, .status, .created_at, .html_url] | @tsv')
 
-          if [ ! -s waiting.tsv ]; then
-            echo "No runs awaiting approval."
+          if [ -z "$run" ]; then
+            echo "No master CI run found."
             exit 0
           fi
 
-          now=$(date -u +%s)
-          stalled=0
-          stale=0
+          IFS=$'\t' read -r id status created url <<< "$run"
+          minutes=$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 60 ))
+          echo "newest master CI run: $id status=$status age=${minutes}m"
 
-          while IFS=$'\t' read -r id created branch url; do
-            [ -z "${id:-}" ] && continue
-            minutes=$(( (now - $(date -u -d "$created" +%s)) / 60 ))
-
-            if [ "$minutes" -gt $(( LOOKBACK_DAYS * 1440 )) ]; then
-              stale=$(( stale + 1 ))
-              continue
-            fi
-
-            if [ "$minutes" -gt "$THRESHOLD_MINUTES" ]; then
-              echo "::error::Run $id ($branch) has been awaiting approval for ${minutes}m - $url"
-              stalled=1
-            else
-              echo "Run $id ($branch) waiting ${minutes}m - under threshold."
-            fi
-          done < waiting.tsv
-
-          # Reported, never failed on. Whether master actually shipped is answered authoritatively by
-          # the commit comparison in the other job - and because a release publishes everything up to
-          # it, an old parked run usually means stale bookkeeping rather than unpublished code.
-          if [ "$stale" -gt 0 ]; then
-            echo "::notice::$stale run(s) have been waiting longer than ${LOOKBACK_DAYS}d and are not failed on here. Cancel them to clear the noise; whether master shipped is answered by the nuget.org comparison."
+          if [ "$status" != "waiting" ]; then
+            echo "Not parked."
+            exit 0
           fi
 
-          exit "$stalled"
+          if [ "$minutes" -le "$THRESHOLD_MINUTES" ]; then
+            echo "Parked for ${minutes}m - under threshold, the approval may still be coming."
+            exit 0
+          fi
+
+          echo "::error::The newest master CI run has been awaiting approval for ${minutes}m, so nothing has published master. $url"
+          exit 1
 
   published-matches-master:
     name: nuget.org matches origin/master
