@@ -66,54 +66,57 @@ jobs:
           echo "::error::The newest master CI run has been awaiting approval for ${minutes}m, so nothing has published master. $url"
           exit 1
 
-  published-matches-master:
-    name: nuget.org matches origin/master
+  every-master-push-has-a-run:
+    name: Every push to master produced a run
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Compare the published package's source commit with master
+      - name: Fail if a master push has no CI run
         env:
-          PACKAGE: quilt4net.toolkit
-          # A publish is not instant, and a merge must not alarm while its release is still running.
-          GRACE_MINUTES: '90'
+          GH_TOKEN: ${{ github.token }}
+          WINDOW_DAYS: '14'
+          # A push seconds old may legitimately have no run recorded yet.
+          SETTLE_MINUTES: '10'
         run: |
           set -euo pipefail
 
-          master=$(git rev-parse origin/master)
-          merged_at=$(git show -s --format=%ct "$master")
-          age=$(( ( $(date -u +%s) - merged_at ) / 60 ))
+          # This replaces an earlier check that compared master against the published package, which
+          # was wrong: it asserted "nuget.org == master", and that is not an invariant of this system.
+          # Releases are batched and features are held back deliberately, so master sitting ahead is
+          # a decision, not a defect - and a check that fails on a correct state is noise, which is
+          # the blindness this whole workflow exists to cure.
+          #
+          # What the pipeline actually promises is narrower and real: every push to master gets a run.
+          # That holds whether or not anyone approves the release, so it has no false positive on a
+          # deliberate hold - and it is exactly the 2026-08-26 failure, a merge that queued no run at
+          # all with the trigger intact.
+          #
+          # First-parent only: a merge brings in branch commits that never were master's HEAD and
+          # never get their own master run. Checking every reachable commit would report those as
+          # missing, which is how an approximately-right assertion becomes noise.
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?branch=master&per_page=100" \
+            --jq '.workflow_runs[].head_sha' | sort -u > runs.txt
 
-          # SourceLink stamps the producing commit into the nuspec, so this compares commits rather
-          # than guessing from version numbers - a version says nothing about what is in it.
-          latest=$(curl -sf "https://api.nuget.org/v3-flatcontainer/${PACKAGE}/index.json" \
-                     | jq -r '.versions[-1]')
-          curl -sfL -o pkg.nupkg \
-            "https://api.nuget.org/v3-flatcontainer/${PACKAGE}/${latest}/${PACKAGE}.${latest}.nupkg"
-          unzip -p pkg.nupkg "*.nuspec" > pkg.nuspec
-          published=$(grep -o 'commit="[0-9a-f]*"' pkg.nuspec | head -1 | cut -d'"' -f2)
+          missing=0
+          now=$(date -u +%s)
 
-          echo "origin/master        : $master (${age}m old)"
-          echo "$PACKAGE $latest : $published"
+          for sha in $(git rev-list --first-parent origin/master --since="${WINDOW_DAYS} days ago"); do
+            committed=$(git show -s --format=%ct "$sha")
+            minutes=$(( (now - committed) / 60 ))
+            [ "$minutes" -lt "$SETTLE_MINUTES" ] && continue
 
-          if [ "$master" = "$published" ]; then
-            echo "Published package was built from master."
-            exit 0
-          fi
-
-          # An ancestor means master moved on and nothing shipped it. A non-ancestor means something
-          # stranger - a package built from a branch, or a force-push - and is worth its own message.
-          if git merge-base --is-ancestor "$published" "$master" 2>/dev/null; then
-            behind=$(git rev-list --count "$published..$master")
-            if [ "$age" -lt "$GRACE_MINUTES" ]; then
-              echo "master is $behind commit(s) ahead but only ${age}m old - within the grace period."
-              exit 0
+            if ! grep -q "^${sha}$" runs.txt; then
+              subject=$(git show -s --format=%s "$sha")
+              echo "::error::No CI run for master commit ${sha:0:8} (${minutes}m old): $subject"
+              missing=1
             fi
-            echo "::error::nuget.org is $behind commit(s) behind master, and master has been there for ${age}m. The release did not ship."
-            exit 1
+          done
+
+          if [ "$missing" -eq 0 ]; then
+            echo "Every master push in the last ${WINDOW_DAYS}d has a run."
           fi
 
-          echo "::error::The published package was built from $published, which is not an ancestor of master."
-          exit 1
+          exit "$missing"
