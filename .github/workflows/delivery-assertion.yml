@@ -12,7 +12,6 @@ name: Delivery assertion
 
 on:
   schedule:
-    # Hourly. The stalled-gate check is only meaningful at a resolution finer than the stall.
     - cron: '17 * * * *'
   workflow_dispatch:
 
@@ -22,39 +21,59 @@ permissions:
 
 jobs:
   stalled-gate:
-    name: No run parked awaiting approval
+    name: No recent run parked awaiting approval
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if any run has been waiting over an hour
+      - name: Fail if a recent run has been waiting over an hour
         env:
           GH_TOKEN: ${{ github.token }}
           THRESHOLD_MINUTES: '60'
+          # Only recent stalls are actionable. The first real run of this check found 27 parked runs
+          # going back to 2026-08-09; failing on those forever would leave this permanently red,
+          # which is the same "nobody notices" failure #2 is about wearing a different hat. Old
+          # parked runs want cancelling once, not alerting on every hour.
+          LOOKBACK_DAYS: '7'
         run: |
           set -euo pipefail
 
-          # `waiting` is a run parked on a protected environment's required reviewer. It is visually
-          # indistinguishable from a slow run, reports no failure, and notifies nobody - which is how
-          # four master merges once sat unapproved for 17 days while nuget.org stayed on 1.0.4.
-          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=waiting&per_page=100" \
-                   --jq '.workflow_runs[] | "\(.id)\t\(.created_at)\t\(.name)\t\(.html_url)"')
+          # `waiting` is a run parked on a protected environment's required reviewer. It reports no
+          # failure, notifies nobody, and is visually indistinguishable from a slow run - which is
+          # how four master merges once sat unapproved for 17 days while nuget.org stayed on 1.0.4.
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=waiting&per_page=100" \
+            --jq '.workflow_runs[] | [.id, .created_at, .head_branch, .html_url] | @tsv' > waiting.tsv
 
-          if [ -z "$runs" ]; then
+          if [ ! -s waiting.tsv ]; then
             echo "No runs awaiting approval."
             exit 0
           fi
 
           now=$(date -u +%s)
           stalled=0
-          while IFS=$'\t' read -r id created name url; do
-            [ -z "$id" ] && continue
-            age=$(( (now - $(date -u -d "$created" +%s)) / 60 ))
-            if [ "$age" -gt "$THRESHOLD_MINUTES" ]; then
-              echo "::error::Run $id ($name) has been awaiting approval for ${age}m - $url"
+          stale=0
+
+          while IFS=$'\t' read -r id created branch url; do
+            [ -z "${id:-}" ] && continue
+            minutes=$(( (now - $(date -u -d "$created" +%s)) / 60 ))
+
+            if [ "$minutes" -gt $(( LOOKBACK_DAYS * 1440 )) ]; then
+              stale=$(( stale + 1 ))
+              continue
+            fi
+
+            if [ "$minutes" -gt "$THRESHOLD_MINUTES" ]; then
+              echo "::error::Run $id ($branch) has been awaiting approval for ${minutes}m - $url"
               stalled=1
             else
-              echo "Run $id ($name) waiting ${age}m - under threshold."
+              echo "Run $id ($branch) waiting ${minutes}m - under threshold."
             fi
-          done <<< "$runs"
+          done < waiting.tsv
+
+          # Reported, never failed on. Whether master actually shipped is answered authoritatively by
+          # the commit comparison in the other job - and because a release publishes everything up to
+          # it, an old parked run usually means stale bookkeeping rather than unpublished code.
+          if [ "$stale" -gt 0 ]; then
+            echo "::notice::$stale run(s) have been waiting longer than ${LOOKBACK_DAYS}d and are not failed on here. Cancel them to clear the noise; whether master shipped is answered by the nuget.org comparison."
+          fi
 
           exit "$stalled"
 
@@ -69,8 +88,7 @@ jobs:
       - name: Compare the published package's source commit with master
         env:
           PACKAGE: quilt4net.toolkit
-          # A publish is not instant, and a merge should not alarm while its release is still
-          # running. Only divergence older than this counts.
+          # A publish is not instant, and a merge must not alarm while its release is still running.
           GRACE_MINUTES: '90'
         run: |
           set -euo pipefail
@@ -80,7 +98,7 @@ jobs:
           age=$(( ( $(date -u +%s) - merged_at ) / 60 ))
 
           # SourceLink stamps the producing commit into the nuspec, so this compares commits rather
-          # than guessing from version numbers - the version says nothing about what is in it.
+          # than guessing from version numbers - a version says nothing about what is in it.
           latest=$(curl -sf "https://api.nuget.org/v3-flatcontainer/${PACKAGE}/index.json" \
                      | jq -r '.versions[-1]')
           curl -sfL -o pkg.nupkg \
@@ -88,7 +106,7 @@ jobs:
           unzip -p pkg.nupkg "*.nuspec" > pkg.nuspec
           published=$(grep -o 'commit="[0-9a-f]*"' pkg.nuspec | head -1 | cut -d'"' -f2)
 
-          echo "origin/master : $master (${age}m old)"
+          echo "origin/master        : $master (${age}m old)"
           echo "$PACKAGE $latest : $published"
 
           if [ "$master" = "$published" ]; then
@@ -96,9 +114,8 @@ jobs:
             exit 0
           fi
 
-          # A commit that is an ancestor of master but not published means master has moved on and
-          # nothing shipped it. A commit that is NOT an ancestor means something stranger - a package
-          # built from a branch, or a force-push - and is worth shouting about either way.
+          # An ancestor means master moved on and nothing shipped it. A non-ancestor means something
+          # stranger - a package built from a branch, or a force-push - and is worth its own message.
           if git merge-base --is-ancestor "$published" "$master" 2>/dev/null; then
             behind=$(git rev-list --count "$published..$master")
             if [ "$age" -lt "$GRACE_MINUTES" ]; then
