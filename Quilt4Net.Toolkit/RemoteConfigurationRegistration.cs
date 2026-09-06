@@ -59,6 +59,8 @@ public static class RemoteConfigurationRegistration
                     // rejects a doubled header value as "Invalid API key" (401). (Idempotent across reruns.)
                     client.DefaultRequestHeaders.Remove("X-API-KEY");
                     client.DefaultRequestHeaders.Add("X-API-KEY", o.ApiKey);
+                    client.DefaultRequestHeaders.Remove(Quilt4NetClient.HeaderName);
+                    client.DefaultRequestHeaders.Add(Quilt4NetClient.HeaderName, Quilt4NetClient.Value);
                 }
             })
             .AddQuilt4NetCorrelationId();

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 
@@ -127,6 +127,8 @@ internal class ConnectionService : IConnectionService
         {
             client.DefaultRequestHeaders.Remove("X-API-KEY");
             client.DefaultRequestHeaders.Add("X-API-KEY", config.ApiKey);
+            client.DefaultRequestHeaders.Remove(Quilt4NetClient.HeaderName);
+            client.DefaultRequestHeaders.Add(Quilt4NetClient.HeaderName, Quilt4NetClient.Value);
         }
         return client;
     }

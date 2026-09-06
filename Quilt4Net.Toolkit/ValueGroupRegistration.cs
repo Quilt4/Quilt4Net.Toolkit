@@ -1,8 +1,10 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Quilt4Net.Toolkit.Features.ValueGroup;
+
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit;
 
@@ -42,6 +44,8 @@ public static class ValueGroupRegistration
             {
                 client.BaseAddress = new Uri(o.Quilt4NetAddress);
                 if (!string.IsNullOrEmpty(o.ApiKey)) client.DefaultRequestHeaders.Add("X-API-KEY", o.ApiKey);
+ client.DefaultRequestHeaders.Remove(Quilt4NetClient.HeaderName);
+ client.DefaultRequestHeaders.Add(Quilt4NetClient.HeaderName, Quilt4NetClient.Value);
             })
             .AddQuilt4NetCorrelationId();
 

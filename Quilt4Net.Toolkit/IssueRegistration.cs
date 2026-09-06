@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -60,6 +60,8 @@ public static class IssueRegistration
                 {
                     client.DefaultRequestHeaders.Remove("X-API-KEY");
                     client.DefaultRequestHeaders.Add("X-API-KEY", o.ApiKey);
+                    client.DefaultRequestHeaders.Remove(Quilt4NetClient.HeaderName);
+                    client.DefaultRequestHeaders.Add(Quilt4NetClient.HeaderName, Quilt4NetClient.Value);
                 }
             })
             .AddQuilt4NetCorrelationId();
