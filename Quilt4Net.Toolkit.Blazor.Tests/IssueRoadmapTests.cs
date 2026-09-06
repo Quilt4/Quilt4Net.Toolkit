@@ -1,4 +1,5 @@
 using System.Globalization;
+using AngleSharp.Dom;
 using Bunit;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -258,6 +259,80 @@ public class IssueRoadmapTests : BunitContext
             "an issue parked on somebody who will never see it should look wrong, not unassigned");
     }
 
+    [Fact]
+    public void An_ending_that_did_not_deliver_is_not_drawn_as_a_delivery()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now:
+        [
+            Item(1, terminal: true, state: "Closed", kind: RoadmapStateKind.Done, resolution: "Done", resolutionIsSuccess: true),
+            Item(2, terminal: true, state: "Closed", kind: RoadmapStateKind.Done, resolution: "Won't do", resolutionIsSuccess: false)
+        ]));
+
+        var cut = Render<IssueRoadmap>();
+
+        // Both are RoadmapStateKind.Done — the kind cannot separate them, which is exactly why the
+        // resolution is carried alongside it rather than as a fourth kind.
+        Bar(cut, 1).GetAttribute("fill").Should().Be("var(--rz-success)");
+        Bar(cut, 2).GetAttribute("fill").Should().Be("var(--rz-text-disabled-color)");
+    }
+
+    [Fact]
+    public void A_terminal_item_from_a_server_that_predates_resolutions_still_reads_as_delivered()
+    {
+        // The upgrade window this has to survive: the component ships before the server populates
+        // the field, so every closed issue arrives with ResolutionIsSuccess null. Treating null as
+        // "did not deliver" would repaint the entire finished backlog grey on that server.
+        _issueService.Roadmap = Roadmap(Route("r", now:
+            [Item(1, terminal: true, state: "Done", kind: RoadmapStateKind.Done)]));
+
+        var cut = Render<IssueRoadmap>();
+
+        Bar(cut, 1).GetAttribute("fill").Should().Be("var(--rz-success)");
+        cut.Find("[data-state]").TextContent.Should().Be("Done", "there is no resolution to append");
+    }
+
+    [Fact]
+    public void The_card_names_the_reason_it_closed()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now:
+            [Item(1, terminal: true, state: "Closed", kind: RoadmapStateKind.Done, resolution: "Won't do", resolutionIsSuccess: false)]));
+
+        var cut = Render<IssueRoadmap>();
+
+        // A colour alone says "not delivered" but never why, and "Closed" alone leaves the reader
+        // guessing which kind of ending it was.
+        cut.Find("[data-state]").TextContent.Should().Be("Closed · Won't do");
+    }
+
+    [Fact]
+    public void The_legend_explains_a_dropped_ending_only_when_one_is_drawn()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1)]));
+        Render<IssueRoadmap>().Markup.Should().NotContain("Closed without delivering",
+            "explaining a colour that cannot appear on this map is clutter");
+
+        _issueService.Roadmap = Roadmap(Route("r", now:
+            [Item(2, terminal: true, state: "Closed", kind: RoadmapStateKind.Done, resolution: "Won't do", resolutionIsSuccess: false)]));
+        Render<IssueRoadmap>().Markup.Should().Contain("Closed without delivering");
+    }
+
+    /// <summary>The status bar down an item's leading edge, found by the item's own hit-target row.</summary>
+    private static IElement Bar(IRenderedComponent<IssueRoadmap> cut, int number) =>
+        cut.FindAll("rect[rx='1.5']")[Index(cut, number)];
+
+    /// <summary>
+    /// Items are drawn in the order the projection lists them, so the nth status bar belongs to the
+    /// nth item. Derived from the rendered state labels rather than assumed, so this does not
+    /// silently pick the wrong bar if the draw order ever changes.
+    /// </summary>
+    private static int Index(IRenderedComponent<IssueRoadmap> cut, int number)
+    {
+        var titles = cut.FindAll("text").Select(x => x.TextContent).ToList();
+        var at = titles.IndexOf($"issue {number}");
+        at.Should().BeGreaterThanOrEqualTo(0, $"issue {number} should be drawn");
+        return titles.Take(at).Count(x => x.StartsWith("issue ", StringComparison.Ordinal));
+    }
+
     private static RoadmapResponse Roadmap(params RoadmapRouteResponse[] routes) => Roadmap([], routes);
 
     private static RoadmapResponse Roadmap(RoadmapEdgeResponse[] edges, params RoadmapRouteResponse[] routes) => new()
@@ -277,11 +352,15 @@ public class IssueRoadmapTests : BunitContext
         Later = later ?? []
     };
 
-    private static RoadmapItemResponse Item(int number, bool terminal = false, bool quickWin = false, string assignedUserKey = null, string assignedUserName = null) => new()
+    private static RoadmapItemResponse Item(int number, bool terminal = false, bool quickWin = false, string assignedUserKey = null, string assignedUserName = null,
+        string state = "Todo", RoadmapStateKind kind = RoadmapStateKind.NotStarted, string resolution = null, bool? resolutionIsSuccess = null) => new()
     {
         Number = number,
         Title = $"issue {number}",
-        State = "Todo",
+        State = state,
+        StateKind = kind,
+        Resolution = resolution ?? string.Empty,
+        ResolutionIsSuccess = resolutionIsSuccess,
         AssignedUserKey = assignedUserKey ?? string.Empty,
         AssignedUserName = assignedUserName ?? string.Empty,
         Effort = IssueEffort.S,

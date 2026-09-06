@@ -11,6 +11,18 @@ public record IssueWorkflowResponse
 
     /// <summary>The permitted moves. A move not listed here is rejected.</summary>
     public required IssueWorkflowTransitionResponse[] Transitions { get; init; }
+
+    /// <summary>
+    /// The ways an issue may end, in display order. A move into a terminal state names one of these.
+    /// </summary>
+    /// <remarks>
+    /// Not <c>required</c>, for the same reason as <see cref="IssueResponse.References"/>: the
+    /// Toolkit publishes before the Server that populates it, so for the length of that window a
+    /// client on this version talks to a server that sends no <c>resolutions</c> at all. Empty means
+    /// "this server does not do resolutions", which a caller should read as *do not offer a choice*
+    /// rather than as *this team has no way to close an issue*.
+    /// </remarks>
+    public IssueWorkflowResolutionResponse[] Resolutions { get; init; } = [];
 }
 
 /// <summary>One state in an <see cref="IssueWorkflowResponse"/>.</summary>

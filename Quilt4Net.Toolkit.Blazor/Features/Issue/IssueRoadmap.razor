@@ -69,6 +69,21 @@
                         <RadzenText TextStyle="TextStyle.Body2" Style="margin: 0;">@StatusLegendFor(kind)</RadzenText>
                     </span>
                 }
+                @* Only when one is actually drawn. The three above are shapes every workflow has, so
+                   they are unconditional; a resolution that does not count as a delivery is
+                   something a team opts into, and explaining a colour that cannot appear on this
+                   map is the same mistake as a colour with no legend, in the other direction. *@
+                @if (_figure.Items.Any(x => x.Item.ResolutionIsSuccess == false))
+                {
+                    <span style="display: inline-flex; align-items: center; gap: 0.4rem;">
+                        <svg width="10" height="10" role="presentation">
+                            <circle cx="5" cy="5" r="4" fill="var(--rz-text-disabled-color)"/>
+                        </svg>
+                        <RadzenText TextStyle="TextStyle.Body2" Style="margin: 0;">
+                            Closed without delivering — faded, and the card names the reason
+                        </RadzenText>
+                    </span>
+                }
             </div>
         }
 
@@ -139,7 +154,7 @@
                            state name stays on the card beside it, because a colour nobody has a
                            legend for is decoration. *@
                         <rect x="@N(placed.X)" y="@N(placed.Y + 8)" width="3" height="@N(RoadmapLayout.ItemHeight - 16)"
-                              rx="1.5" fill="@StatusColour(item.StateKind)"/>
+                              rx="1.5" fill="@StatusColour(item)"/>
 
                         @if (item.IsQuickWin)
                         {
@@ -152,9 +167,9 @@
                               fill="var(--rz-text-color)">@Truncate(item.Title, 30)</text>
 
                         <g>
-                            <circle cx="@N(placed.X + 16)" cy="@N(placed.Y + 57)" r="4" fill="@StatusColour(item.StateKind)"/>
-                            <text x="@N(placed.X + 26)" y="@N(placed.Y + 61)" font-size="11"
-                                  fill="var(--rz-text-secondary-color)">@Truncate(item.State, 14)</text>
+                            <circle cx="@N(placed.X + 16)" cy="@N(placed.Y + 57)" r="4" fill="@StatusColour(item)"/>
+                            <text data-state x="@N(placed.X + 26)" y="@N(placed.Y + 61)" font-size="11"
+                                  fill="var(--rz-text-secondary-color)">@Truncate(StateLabel(item), 20)</text>
                         </g>
 
                         @if (!string.IsNullOrEmpty(AssigneeFor(item)))
@@ -335,6 +350,29 @@
         RoadmapStateKind.Done => "var(--rz-success)",
         _ => "var(--rz-text-disabled-color)"
     };
+
+    /// <summary>
+    /// As above, except that an ending which did not deliver is not drawn as a delivery. It needs no
+    /// colour of its own: terminal items are already at 45% opacity, so grey-and-faded reads
+    /// distinctly from the grey-at-full-opacity of the entry state.
+    /// </summary>
+    /// <remarks>
+    /// Tested against <c>== false</c> rather than <c>!= true</c>. <c>null</c> means "no resolution to
+    /// judge" — an open issue, or a server older than the field — and both must keep the behaviour
+    /// they had before this existed. Inferring abandonment from absence would repaint every finished
+    /// issue on every server that has not caught up yet.
+    /// </remarks>
+    private static string StatusColour(RoadmapItemResponse item) =>
+        item.ResolutionIsSuccess == false
+            ? "var(--rz-text-disabled-color)"
+            : StatusColour(item.StateKind);
+
+    /// <summary>
+    /// The state name, plus the resolution when there is one: <c>Closed · Won't do</c> reads as a
+    /// decision, where <c>Closed</c> alone leaves the reader to guess which kind of ending it was.
+    /// </summary>
+    private static string StateLabel(RoadmapItemResponse item) =>
+        string.IsNullOrWhiteSpace(item.Resolution) ? item.State : $"{item.State} · {item.Resolution}";
 
     private static string StatusLegendFor(RoadmapStateKind kind) => kind switch
     {
