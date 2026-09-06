@@ -185,6 +185,74 @@ public class IssueRoadmapTests : BunitContext
         cut.Markup.Should().Contain("issue:read");
     }
 
+    [Fact]
+    public void Clicking_a_card_reports_its_number()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(7)]));
+        var clicked = 0;
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.OnItemSelected, n => clicked = n));
+        cut.Find("button[data-issue='7']").Click();
+
+        clicked.Should().Be(7);
+    }
+
+    [Fact]
+    public void The_hit_target_covers_the_whole_card()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(7)]));
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.OnItemSelected, n => { }));
+
+        // A real button rather than an SVG shape: Blazor does not attach handlers to
+        // SVG-namespaced elements, so an @onclick on a <rect> draws the shape and wires nothing.
+        var style = cut.Find("button[data-issue='7']").GetAttribute("style")!;
+        style.Should().Contain($"width: {RoadmapLayout.ItemWidth.ToString(CultureInfo.InvariantCulture)}px");
+        style.Should().Contain($"height: {RoadmapLayout.ItemHeight.ToString(CultureInfo.InvariantCulture)}px");
+    }
+
+    [Fact]
+    public void Cards_are_not_offered_as_controls_when_the_host_handles_no_click()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(7)]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.FindAll("button[data-issue]").Should().BeEmpty(
+            "a control over something that does nothing is a worse answer than a plain figure");
+    }
+
+    [Fact]
+    public void The_assignee_is_drawn_by_name()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, assignedUserKey: "u1", assignedUserName: "Daniel")]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.Markup.Should().Contain("Daniel").And.NotContain("u1");
+    }
+
+    [Fact]
+    public void A_host_roster_overrides_the_projections_name()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, assignedUserKey: "u1", assignedUserName: "stale")]));
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.MemberNames, new Dictionary<string, string> { ["u1"] = "Fresh" }));
+
+        cut.Markup.Should().Contain("Fresh").And.NotContain("stale");
+    }
+
+    [Fact]
+    public void An_assignee_the_server_could_not_name_still_shows_the_key()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, assignedUserKey: "gone")]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.Markup.Should().Contain("gone",
+            "an issue parked on somebody who will never see it should look wrong, not unassigned");
+    }
+
     private static RoadmapResponse Roadmap(params RoadmapRouteResponse[] routes) => Roadmap([], routes);
 
     private static RoadmapResponse Roadmap(RoadmapEdgeResponse[] edges, params RoadmapRouteResponse[] routes) => new()
@@ -204,12 +272,13 @@ public class IssueRoadmapTests : BunitContext
         Later = later ?? []
     };
 
-    private static RoadmapItemResponse Item(int number, bool terminal = false, bool quickWin = false) => new()
+    private static RoadmapItemResponse Item(int number, bool terminal = false, bool quickWin = false, string assignedUserKey = null, string assignedUserName = null) => new()
     {
         Number = number,
         Title = $"issue {number}",
         State = "Todo",
-        AssignedUserKey = string.Empty,
+        AssignedUserKey = assignedUserKey ?? string.Empty,
+        AssignedUserName = assignedUserName ?? string.Empty,
         Effort = IssueEffort.S,
         IsTerminal = terminal,
         IsQuickWin = quickWin

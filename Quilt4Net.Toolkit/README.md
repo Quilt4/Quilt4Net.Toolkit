@@ -448,7 +448,7 @@ In the Quilt4Net.Server admin UI under **Value Groups**: select the group → AP
 
 ## Issue tracker
 
-A per-team issue tracker, meant to be driven by an agent over REST or MCP rather than by hand. Each issue carries a title, body text, a **route** (the roadmap lane it belongs to), a Now/Next/Later band, a workflow state, an optional assignee, an optional S/M/L effort and an optional Critical/Important/Nice importance. Issues are linked to each other with typed dependencies.
+A per-team issue tracker, meant to be driven by an agent over REST or MCP rather than by hand. Each issue carries a title, body text, a **route** (the roadmap lane it belongs to), a Now/Next/Later band, a workflow state, an optional assignee, an optional S/M/L effort and an optional Critical/Important/Nice importance. Issues are linked to each other with typed dependencies, and carry **references** to where they came from.
 
 ```csharp
 builder.AddQuilt4NetIssues(o =>
@@ -499,6 +499,43 @@ Importance is deliberately **not** drawn on the roadmap. A map restates effort o
 | `Overlaps` | dotted | Both touch the same surface, so doing them independently causes rework. Not an ordering — a warning to pick one owner. |
 
 **Every link requires a `Reason`, and the server rejects an empty one.** Most items people assume are ordered turn out to be merely related; making the reason mandatory is what keeps the graph from filling up with dependencies nobody can justify. `Blocks` links may not form a cycle.
+
+### References — where an issue came from
+
+An issue carries a collection of `IssueReferenceRequest` / `IssueReferenceResponse`, each naming a `Kind` (the source system), a `Value` (what it points at there), an optional `Url` and `Label`, and a `Role`.
+
+```csharp
+await issues.CreateAsync(new CreateIssueRequest
+{
+    Title = "Content resolution times out at 15s",
+    References =
+    [
+        new IssueReferenceRequest
+        {
+            Kind = "github",
+            Value = "Toolkit#172",
+            Role = IssueReferenceRole.Identity,
+            Url = "https://github.com/Quilt4/Quilt4Net.Toolkit/issues/172"
+        },
+        new IssueReferenceRequest { Kind = "code", Value = "ContentService.cs:195" }
+    ]
+}, ct);
+```
+
+**A collection, not a single field**, because one source is often wrong: an issue can be a backlog row *and* GitHub #161 at the same time, and an importer forced to pick one loses the other.
+
+**`Kind` is an open string**, unlike `IssueLinkKind`, `RoadmapBand` and `IssueEffort`. Those are closed because the roadmap format defines them; source systems are an extensibility point, and an enum would force a Toolkit release every time a new tracker appeared. Kinds are lower-cased on write, so `GitHub` and `github` are one kind.
+
+**`Url` is optional.** A code comment and a backlog row genuinely have none, so `Value` carries the meaning and the link is a bonus.
+
+| Role | Means | Unique? |
+|------|-------|---------|
+| `Provenance` *(default)* | A hint about where the issue came from. Allowed to go stale and never load-bearing — `LanguageController.cs:52` is wrong after the next edit, and that is fine. | No. Many issues legitimately share one origin. |
+| `Identity` | This issue **is** that ticket. A key, not a hint. | **Yes.** The server refuses a second issue claiming an identity another already holds, and the error names the issue that holds it. |
+
+That uniqueness is the point of the feature rather than the clickable link: it is what lets an import run twice and update the issue it created the first time, instead of producing a duplicate. `Provenance` is the default because it claims nothing — a wrongly asserted `Identity` would block the issue that really is that ticket.
+
+References travel on `CreateAsync` and `UpdateAsync` rather than through endpoints of their own, unlike links. A link is an edge between two issues and needs checking; a reference is a property of one issue. Note that `UpdateAsync` **replaces**, so omitting `References` clears them.
 
 ### Workflow
 

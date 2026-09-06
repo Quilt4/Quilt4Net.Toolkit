@@ -871,12 +871,32 @@ One scrollable SVG figure, not a list of cards with the dependencies described u
 - **Left to right suggests.** `Now`, `Next` and `Later` are banded columns behind the lanes — a suggestion the reader may ignore, which is why they are soft bands rather than arrows.
 - **Arrows constrain.** `Blocks` is solid, `Cheapens` dashed, `Overlaps` dotted, and hovering an edge shows its reason. Order suggests; edges constrain, and the two are drawn differently so a reader can disagree with the sequence without losing the constraints.
 - **Effort rides on the item** as `· S`, `· M` or `· L`. A ring marks a quick win — small, with nothing pointing at it.
+- **Status is a bar down the item's leading edge**, repeated as a dot beside the state name. Driven by `RoadmapStateKind` — `NotStarted`, `InProgress`, `Done` — which the server derives from the team's workflow. It cannot key off state names: the workflow is editable, so a component that recognised `Todo` and `Doing` would draw a team with any other vocabulary as one flat colour. What is stable across every workflow is the shape — an entry, an exit, and everything in between.
+- **The assignee's name sits on the item**, resolved on the server because this component is embeddable by a project that holds no team roster. An assignee the server could not name falls back to the raw key rather than to blank: an issue parked on somebody who has left should look wrong, not unassigned.
 - Issues in a terminal state are dimmed: they are on the map to explain an edge, as context rather than as work.
 
-Set `ShowHowToRead="false"` to drop the legend and the four explanatory cells when the surrounding page already explains the notation.
+Set `ShowHowToRead="false"` to drop the legend and the explanatory cells when the surrounding page already explains the notation.
 
 ```razor
 <IssueRoadmap ShowHowToRead="false" />
+```
+
+### Acting on an item
+
+`OnItemSelected` is raised with an issue number when its card is clicked.
+
+```razor
+<IssueRoadmap OnItemSelected="EditAsync" />
+```
+
+**Leave it unset in a host that has nothing to open.** With no delegate the cards render as a figure rather than as controls — a pointer cursor over something that does nothing is a worse answer than a plain box, and many hosts hold a read-only key. This is a callback rather than the component opening an editor of its own, because a remote project has no issue dialog and the host is the only thing that knows what a click should mean.
+
+Call `ReloadAsync()` on the component after an edit that could move a card — a band change puts it in another column, so the figure has to be rebuilt rather than re-rendered.
+
+`MemberNames` overrides the assignee names the server resolved, for a host whose roster is fresher than the last projection:
+
+```razor
+<IssueRoadmap MemberNames="@_memberNames" OnItemSelected="EditAsync" />
 ```
 
 > Unlike a published roadmap artifact — which is a *derived* view over a backlog, and stale whenever the two disagree — this component reads the tracker directly, so the tracker is its source. The two look alike on purpose; do not try to reconcile them.

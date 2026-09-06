@@ -41,4 +41,11 @@ public record UpdateIssueRequest
 
     /// <summary>How much this matters. Cleared when omitted.</summary>
     public IssueImportance? Importance { get; init; }
+
+    /// <summary>
+    /// Where this issue came from, and the tickets it is. <b>Cleared when omitted</b>, like every
+    /// other field here — read the issue, change what you mean to change, and send the whole
+    /// collection back.
+    /// </summary>
+    public IssueReferenceRequest[] References { get; init; } = [];
 }
