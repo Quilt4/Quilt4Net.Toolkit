@@ -229,7 +229,12 @@ public class IssueRoadmapTests : BunitContext
 
         var cut = Render<IssueRoadmap>();
 
-        cut.Markup.Should().Contain("Daniel").And.NotContain("u1");
+        // Read the assignee node rather than the whole document. `NotContain("u1")` over cut.Markup
+        // passed locally and failed on CI, because Radzen stamps a random 10-character id on every
+        // RadzenText it renders and one of them came out as "5u1OjIFAi0" — a two-character needle
+        // hits one of those roughly once in forty renders. Asserting the node's own text is both
+        // stable and stricter: it says the key is not shown *here*, which is the actual claim.
+        cut.Find("[data-assignee]").TextContent.Should().Be("Daniel");
     }
 
     [Fact]
@@ -239,7 +244,7 @@ public class IssueRoadmapTests : BunitContext
 
         var cut = Render<IssueRoadmap>(p => p.Add(x => x.MemberNames, new Dictionary<string, string> { ["u1"] = "Fresh" }));
 
-        cut.Markup.Should().Contain("Fresh").And.NotContain("stale");
+        cut.Find("[data-assignee]").TextContent.Should().Be("Fresh");
     }
 
     [Fact]
@@ -249,7 +254,7 @@ public class IssueRoadmapTests : BunitContext
 
         var cut = Render<IssueRoadmap>();
 
-        cut.Markup.Should().Contain("gone",
+        cut.Find("[data-assignee]").TextContent.Should().Be("gone",
             "an issue parked on somebody who will never see it should look wrong, not unassigned");
     }
 

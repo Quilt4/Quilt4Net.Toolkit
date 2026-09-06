@@ -160,7 +160,12 @@
                         @if (!string.IsNullOrEmpty(AssigneeFor(item)))
                         {
                             <g>
-                                <text x="@N(placed.X + RoadmapLayout.ItemWidth - 12)" y="@N(placed.Y + 61)"
+                                @* data-assignee is a selector hook, deliberately valueless: it lets a
+                                   test read this node instead of searching the whole document, which
+                                   is not a nicety — Radzen stamps a random id on every RadzenText it
+                                   renders, so any substring assertion over the markup can match one by
+                                   chance. Same idiom as data-issue on the hit target. *@
+                                <text data-assignee x="@N(placed.X + RoadmapLayout.ItemWidth - 12)" y="@N(placed.Y + 61)"
                                       font-size="11" text-anchor="end"
                                       fill="var(--rz-text-tertiary-color)">@Truncate(AssigneeFor(item), 18)</text>
                             </g>
