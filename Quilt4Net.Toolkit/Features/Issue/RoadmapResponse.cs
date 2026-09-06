@@ -78,6 +78,24 @@ public record RoadmapItemResponse
     /// </remarks>
     public RoadmapStateKind StateKind { get; init; } = RoadmapStateKind.NotStarted;
 
+    /// <summary>
+    /// Why the issue ended, by its team-defined name, or empty when it has not ended.
+    /// </summary>
+    public string Resolution { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Whether <see cref="Resolution"/> counts as having delivered the work, or <c>null</c> when
+    /// there is no resolution to judge.
+    /// </summary>
+    /// <remarks>
+    /// Three-valued on purpose, and the distinction is the whole point of the field. <c>null</c>
+    /// covers both "still open" and "a server that predates resolutions", and a renderer must treat
+    /// it as it treated everything before this existed — a terminal item drawn as delivered. Only an
+    /// explicit <c>false</c> licenses drawing an ending as abandoned, because inferring that from
+    /// absence would repaint every finished issue on every older server.
+    /// </remarks>
+    public bool? ResolutionIsSuccess { get; init; }
+
     /// <summary>Assigned team member key, or empty when unassigned.</summary>
     public required string AssignedUserKey { get; init; }
 

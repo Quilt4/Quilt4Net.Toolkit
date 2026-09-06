@@ -543,6 +543,38 @@ Each team has one workflow — a list of states plus the transitions allowed bet
 
 A replacement workflow that would leave issues stranded in a state it no longer defines is rejected rather than applied.
 
+#### Closing says why
+
+A workflow has **one exit, not one per outcome**. `Todo → Doing → Closed`, with the reason held on the
+issue as a **resolution** — `Done`, `Won't do`, or whatever else a team declares:
+
+```csharp
+await issueService.SetStateAsync(87, new SetIssueStateRequest
+{
+    State = "Closed",
+    Resolution = "Won't do"
+});
+```
+
+`Resolution` is **required moving into a terminal state and rejected moving anywhere else**, and
+reopening clears it — a closed issue with no reason is the ambiguity the field exists to remove, and
+defaulting it to `Done` would quietly record a delivery that never happened.
+
+The available resolutions come from the workflow, as `IssueWorkflowResolutionResponse { Name, Order,
+IsSuccess }`. The **names are the team's own**, like state names; what is not is `IsSuccess`, which
+says whether ending there counts as having delivered. That split is what lets the roadmap draw an
+abandoned issue differently from a shipped one without recognising particular words — a renderer that
+matched on `"Won't do"` would show any team with a different vocabulary as one flat colour. Declaring
+them on the workflow rather than as a fixed enum also means an importer can hold an external
+tracker's own term (GitHub's `not_planned`, Jira's `Won't Fix`) without a Toolkit release per source.
+
+> **Reading these fields against an older server.** `Resolutions`, `IssueResponse.Resolution` and
+> `RoadmapItemResponse.ResolutionIsSuccess` are all optional, because this package publishes before
+> the server populates them. `ResolutionIsSuccess` is deliberately `bool?`: **`null` means there is
+> nothing to judge** — the issue is open, or the server predates the field — and only an explicit
+> `false` licenses drawing an ending as abandoned. Treating `null` as "did not deliver" would repaint
+> every finished issue on every server that has not caught up.
+
 ### IssueOptions
 
 | Property | Default | Description |

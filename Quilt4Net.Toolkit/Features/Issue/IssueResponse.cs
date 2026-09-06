@@ -32,6 +32,18 @@ public record IssueResponse
     /// </summary>
     public required string State { get; init; }
 
+    /// <summary>
+    /// Why the issue ended, naming one of the workflow's resolutions. Empty unless
+    /// <see cref="State"/> is terminal.
+    /// </summary>
+    /// <remarks>
+    /// Not <c>required</c>, for the reason spelled out on <see cref="References"/>: this ships in the
+    /// Toolkit before the Server populates it. Empty against a newer server means the issue is open;
+    /// empty against an older one means the server cannot say. Both read as "no decision recorded",
+    /// which is the safe interpretation of each.
+    /// </remarks>
+    public string Resolution { get; init; } = string.Empty;
+
     /// <summary>Key of the assigned team member, or empty when unassigned.</summary>
     public required string AssignedUserKey { get; init; }
 

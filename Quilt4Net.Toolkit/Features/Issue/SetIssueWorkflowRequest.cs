@@ -16,4 +16,16 @@ public record SetIssueWorkflowRequest
 
     /// <summary>The moves to permit.</summary>
     public required IssueWorkflowTransitionResponse[] Transitions { get; init; }
+
+    /// <summary>
+    /// The ways an issue may end. Validated like the states: names must be unique, and
+    /// <b>a resolution currently held by an issue must still be defined</b>.
+    /// </summary>
+    /// <remarks>
+    /// Optional so a caller that does not care about resolutions can keep sending the old two-field
+    /// payload. Note what that means, because it is a replace rather than a merge: omitting this on a
+    /// team that <i>has</i> resolutions asks to remove them, and will be refused while any issue
+    /// still holds one — the same protection the states already get.
+    /// </remarks>
+    public IssueWorkflowResolutionResponse[] Resolutions { get; init; } = [];
 }
