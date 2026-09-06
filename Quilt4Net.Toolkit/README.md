@@ -563,6 +563,29 @@ Configuration path: `Quilt4Net:Issue` (or top-level `Quilt4Net:ApiKey` + `Quilt4
 
 In the Quilt4Net.Server admin UI under **Api → Api Key**. `issue:read` comes with any key at Viewer level or above. **`issue:write` is not granted by access level** and must be added to the key explicitly as a scope override — otherwise every application key that already holds `content:write` would be able to edit the tracker. For MCP access the key also needs `mcp:discover`.
 
+## What every call sends
+
+Alongside `X-API-KEY`, every request the Toolkit makes to Quilt4Net carries the Toolkit's own
+identity:
+
+```
+X-Quilt4Net-Client: Quilt4Net.Toolkit/1.0.13
+```
+
+Nothing to configure — it is added wherever the API key is. It exists so the server can answer
+**"which consumers are on which Toolkit version"** from data rather than assumption, which is what
+makes it safe to retire an old contract: backward compatibility can be dropped once the record shows
+nobody is still using it, and a consumer below the supported floor can be told so directly instead of
+failing obscurely.
+
+Build metadata is stripped, so the value is the released version rather than the exact commit —
+otherwise the server's record would gain a row per build rather than per release, and the question
+being asked is about released contracts.
+
+> Sent on **every** request rather than through a one-time greeting on purpose. A greeting cannot
+> carry enforcement: a server cannot refuse a call on the strength of a handshake that may never have
+> happened, and a restart, a new process instance or a cached client skips it.
+
 ## Universal telemetry identity
 
 `AddQuilt4NetLogging()` configures OpenTelemetry resource attributes **and** registers two `BaseProcessor`s — one for `LogRecord`, one for `Activity` — that copy a fixed set of identity attributes onto every per-record Properties bag. Works for all app types; the Azure Monitor exporter forwards the per-record attributes into `customDimensions`, where KQL can read them.

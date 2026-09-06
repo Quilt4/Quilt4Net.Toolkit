@@ -1,6 +1,8 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
+using Quilt4Net.Toolkit.Framework;
 
 namespace Quilt4Net.Toolkit.Features.ApplicationInsights;
 
@@ -116,6 +118,8 @@ internal class RemoteApplicationInsightsConfigurationProvider : IApplicationInsi
         {
             client = new HttpClient { BaseAddress = new Uri(_options.Quilt4NetAddress) };
             client.DefaultRequestHeaders.Add("X-API-KEY", _options.ApiKey);
+            client.DefaultRequestHeaders.Remove(Quilt4NetClient.HeaderName);
+            client.DefaultRequestHeaders.Add(Quilt4NetClient.HeaderName, Quilt4NetClient.Value);
             return client;
         }
         catch
