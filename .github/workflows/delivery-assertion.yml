@@ -1,0 +1,113 @@
+# Asserts, from outside the release pipeline, that what consumers can install is what was merged.
+#
+# Issues #1 and #2. The point is stated in #1: a check inside the pipeline cannot detect the absence
+# of the pipeline. A guard is a stage, a stage only evaluates inside a run, and the failure that
+# started this was a merge that queued no run at all. A schedule fires whether or not CI triggered,
+# which is the property that matters.
+#
+# The alert IS this workflow failing. There is no Slack, webhook or mail anywhere in either repo, and
+# a red scheduled run is a channel that already exists and is already watched. Building a notifier
+# would have been a larger job than the check.
+name: Delivery assertion
+
+on:
+  schedule:
+    # Hourly. The stalled-gate check is only meaningful at a resolution finer than the stall.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  stalled-gate:
+    name: No run parked awaiting approval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any run has been waiting over an hour
+        env:
+          GH_TOKEN: ${{ github.token }}
+          THRESHOLD_MINUTES: '60'
+        run: |
+          set -euo pipefail
+
+          # `waiting` is a run parked on a protected environment's required reviewer. It is visually
+          # indistinguishable from a slow run, reports no failure, and notifies nobody - which is how
+          # four master merges once sat unapproved for 17 days while nuget.org stayed on 1.0.4.
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=waiting&per_page=100" \
+                   --jq '.workflow_runs[] | "\(.id)\t\(.created_at)\t\(.name)\t\(.html_url)"')
+
+          if [ -z "$runs" ]; then
+            echo "No runs awaiting approval."
+            exit 0
+          fi
+
+          now=$(date -u +%s)
+          stalled=0
+          while IFS=$'\t' read -r id created name url; do
+            [ -z "$id" ] && continue
+            age=$(( (now - $(date -u -d "$created" +%s)) / 60 ))
+            if [ "$age" -gt "$THRESHOLD_MINUTES" ]; then
+              echo "::error::Run $id ($name) has been awaiting approval for ${age}m - $url"
+              stalled=1
+            else
+              echo "Run $id ($name) waiting ${age}m - under threshold."
+            fi
+          done <<< "$runs"
+
+          exit "$stalled"
+
+  published-matches-master:
+    name: nuget.org matches origin/master
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare the published package's source commit with master
+        env:
+          PACKAGE: quilt4net.toolkit
+          # A publish is not instant, and a merge should not alarm while its release is still
+          # running. Only divergence older than this counts.
+          GRACE_MINUTES: '90'
+        run: |
+          set -euo pipefail
+
+          master=$(git rev-parse origin/master)
+          merged_at=$(git show -s --format=%ct "$master")
+          age=$(( ( $(date -u +%s) - merged_at ) / 60 ))
+
+          # SourceLink stamps the producing commit into the nuspec, so this compares commits rather
+          # than guessing from version numbers - the version says nothing about what is in it.
+          latest=$(curl -sf "https://api.nuget.org/v3-flatcontainer/${PACKAGE}/index.json" \
+                     | jq -r '.versions[-1]')
+          curl -sfL -o pkg.nupkg \
+            "https://api.nuget.org/v3-flatcontainer/${PACKAGE}/${latest}/${PACKAGE}.${latest}.nupkg"
+          unzip -p pkg.nupkg "*.nuspec" > pkg.nuspec
+          published=$(grep -o 'commit="[0-9a-f]*"' pkg.nuspec | head -1 | cut -d'"' -f2)
+
+          echo "origin/master : $master (${age}m old)"
+          echo "$PACKAGE $latest : $published"
+
+          if [ "$master" = "$published" ]; then
+            echo "Published package was built from master."
+            exit 0
+          fi
+
+          # A commit that is an ancestor of master but not published means master has moved on and
+          # nothing shipped it. A commit that is NOT an ancestor means something stranger - a package
+          # built from a branch, or a force-push - and is worth shouting about either way.
+          if git merge-base --is-ancestor "$published" "$master" 2>/dev/null; then
+            behind=$(git rev-list --count "$published..$master")
+            if [ "$age" -lt "$GRACE_MINUTES" ]; then
+              echo "master is $behind commit(s) ahead but only ${age}m old - within the grace period."
+              exit 0
+            fi
+            echo "::error::nuget.org is $behind commit(s) behind master, and master has been there for ${age}m. The release did not ship."
+            exit 1
+          fi
+
+          echo "::error::The published package was built from $published, which is not an ancestor of master."
+          exit 1
