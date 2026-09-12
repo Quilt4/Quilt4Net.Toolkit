@@ -137,7 +137,35 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
 
             // No cache (or stale-while-revalidate disabled) — fetch with timeout; the catch below
             // still falls back to any stale cached value on failure.
-            return await FetchContentWithTimeout(key, cacheKey, defaultValue, languageKey, contentType, sw, effectiveApplication, translations);
+            var fetch = FetchContentWithTimeout(key, cacheKey, defaultValue, languageKey, contentType, sw, effectiveApplication, translations);
+
+            // Bounded wait (#182). The first request for a key the server has never seen is a write:
+            // the caller supplies the text, the server stores it, and the caller waits out the
+            // storing — 1.5-3.3s measured, per key, on the render that first asks. The caller is
+            // holding the correct text already, so past this point waiting buys nothing it does not
+            // already have.
+            var wait = _contentOptions.MaterializationWait;
+            if (wait > TimeSpan.Zero && !fetch.IsCompleted)
+            {
+                var winner = await Task.WhenAny(fetch, Task.Delay(wait));
+                if (winner != fetch)
+                {
+                    // The fetch is deliberately left running: it still materializes the key and fills
+                    // the cache, so the next render is correct. Faults are observed rather than
+                    // dropped, otherwise a failure here surfaces later as an unrelated
+                    // UnobservedTaskException.
+                    _ = fetch.ContinueWith(
+                        t => _logger.LogDebug(t.Exception, "Background materialization of '{Key}' failed after the caller had already been served its default.", key),
+                        CancellationToken.None,
+                        TaskContinuationOptions.OnlyOnFaulted,
+                        TaskScheduler.Default);
+
+                    LogResolved(key, languageKey, effectiveApplication, sw.ElapsedMilliseconds, ContentSource.Default, stale: true);
+                    return Result(defaultValue, true, ContentSource.Default, true);
+                }
+            }
+
+            return await fetch;
         }
         catch (Exception e)
         {
@@ -274,6 +302,71 @@ internal class RemoteContentCallService : IRemoteContentCallService, IDisposable
     public async Task ClearContentCacheAsync()
     {
         _localCache.Clear();
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> GetManyContentAsync(IReadOnlyCollection<ContentRequest> requests, Guid languageKey, ContentFormat? contentType, string application = null)
+    {
+        var result = new Dictionary<string, string>();
+        if (requests == null || requests.Count == 0) return result;
+
+        var effectiveApplication = ResolveApplication(application);
+
+        // One bulk call instead of one per key, when this language has never been warmed. The
+        // warm-up covers the default language plus ContentOptions.WarmUpLanguages; a language the
+        // user picked at runtime is warmed once and then, in the warm-up's own words, "left to
+        // expire into per-key fetching from then on" — which is exactly the case a view resolving
+        // 40 keys lands in. Best-effort: if it fails, every key below simply takes the normal path.
+        if (!_warmedLanguages.ContainsKey(languageKey) && !Language.IsPseudo(languageKey))
+        {
+            await WarmCacheAsync(languageKey, application);
+        }
+
+        // Cache hits first, and they cost nothing. Deliberately read straight from the cache rather
+        // than going through GetContentAsync: that would re-check expiry per key and could kick off
+        // 40 background refreshes at once, turning a fan-out we just removed into a fan-out nobody
+        // can see.
+        var uncached = new List<ContentRequest>();
+        foreach (var request in requests)
+        {
+            if (string.IsNullOrEmpty(request?.Key)) continue;
+
+            var cacheKey = BuildCacheKey(request.Key, languageKey, effectiveApplication);
+            if (_localCache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow <= cached.ValidTo && !cached.IsDefault)
+            {
+                result[request.Key] = cached.Value ?? request.DefaultValue;
+            }
+            else
+            {
+                uncached.Add(request);
+            }
+        }
+
+        // What is left is keys the server has never materialized, or whose cache has expired. They
+        // still cost a call each — there is no bulk resolve-or-create endpoint — but they no longer
+        // block the caller for seconds apiece, and they run together rather than in sequence.
+        if (uncached.Count > 0)
+        {
+            var pending = uncached
+                .Select(async request =>
+                {
+                    var (value, _) = await GetContentAsync(request.Key, request.DefaultValue, languageKey, contentType, application, request.Translations);
+                    return (request.Key, Value: value);
+                })
+                .ToArray();
+
+            foreach (var (key, value) in await Task.WhenAll(pending))
+            {
+                result[key] = value;
+            }
+        }
+
+        // Every requested key is present, resolved or not, so a caller never has to handle a miss.
+        foreach (var request in requests)
+        {
+            if (!string.IsNullOrEmpty(request?.Key)) result.TryAdd(request.Key, request.DefaultValue);
+        }
+
+        return result;
     }
 
     public Task WarmCacheAsync(Guid languageKey, string application = null) => WarmCacheAsync(languageKey, application, isRetry: false);

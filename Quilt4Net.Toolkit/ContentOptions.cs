@@ -84,6 +84,36 @@ public record ContentOptions
     public bool StaleWhileRevalidate { get; set; } = true;
 
     /// <summary>
+    /// How long a caller waits for a key the server has never seen before giving up and rendering
+    /// its own declared default. The materialization still completes in the background, so the next
+    /// render shows the stored value. Default is 200 ms. <see cref="TimeSpan.Zero"/> disables the
+    /// bounded wait, restoring the previous behaviour of waiting up to <see cref="HttpTimeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists because the first request for a new key is a <b>write</b>, not a read: the caller
+    /// supplies the text, the server stores it, and the caller waits out the storing. Measured at
+    /// 1.5–3.3 s per key, which is what turned a dialog declaring thirteen new keys into an
+    /// eighteen-second first open, and 106 ms on every open after (Toolkit issue #182).
+    /// </para>
+    /// <para>
+    /// The caller already holds the correct text — <c>defaultValue</c> and <c>translations</c> are
+    /// literals in its own source — so waiting for the server to write down an answer it was just
+    /// given buys nothing.
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>The trade.</b> This applies to any key not in the cache, not only to genuinely new
+    /// ones, because the client cannot tell the two apart until the server answers. For an existing
+    /// key whose cache is cold, a slow server therefore means one render of the code default before
+    /// the stored value arrives — briefly the wrong language, where previously the render blocked.
+    /// In practice the warm-up has already loaded every existing key, so the cold case is close to
+    /// exclusively new keys. Set this to <see cref="TimeSpan.Zero"/> if a correct first paint
+    /// matters more than a responsive one.
+    /// </para>
+    /// </remarks>
+    public TimeSpan MaterializationWait { get; set; } = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
     /// Cache lifetime to request from the server. When <c>null</c> (the default) the server's own
     /// configured lifetime applies, as before.
     /// </summary>

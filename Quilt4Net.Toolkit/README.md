@@ -174,6 +174,97 @@ Inject `IContentService` to retrieve and manage content.
 var (value, success) = await _contentService.GetContentAsync("welcome-message", "Hello!", languageKey, ContentFormat.String);
 ```
 
+#### Resolving a whole view's keys at once
+
+A view usually knows its keys up front. Resolving them one at a time works, but it is one `await`
+per key — a dialog with 42 call sites plus a few option builders that loop over an enum ends up
+making around seventy sequential calls to open once.
+
+```csharp
+var text = await _contentService.GetManyAsync(
+[
+    new ContentRequest { Key = "dialog.title",  DefaultValue = "Register case" },
+    new ContentRequest { Key = "dialog.submit", DefaultValue = "Submit" },
+    new ContentRequest { Key = "dialog.cancel", DefaultValue = "Cancel" },
+]);
+
+<h2>@text["dialog.title"]</h2>
+```
+
+The returned dictionary **always has an entry for every key you asked for** — the stored value where
+there is one, your own `DefaultValue` where there is not — so there is no missing-key case to
+handle.
+
+What it actually costs:
+
+- **Keys already cached**: nothing. No round trip at all.
+- **A language nobody warmed** (one the user picked at runtime, not listed in `WarmUpLanguages`):
+  one bulk warm for the whole language, rather than a call per key.
+- **Keys the server has genuinely never seen**: still one call each — there is no bulk
+  resolve-or-create — but they run together rather than in sequence, and they no longer block your
+  render (see below).
+
+The per-key `GetAsync` is unchanged and remains right for one-offs.
+
+#### The first request for a new key does not block the render
+
+The first time anyone asks for a key the server has never seen, the call is really a **write**: your
+code supplies the text, the server stores it, and the caller waits for the storing. That was
+measured at 1.5–3.3 seconds *per key* — enough to make a dialog that declares thirteen new keys take
+about eighteen seconds to open the first time after a release, and 106 ms every time after.
+
+Since the caller already holds the correct text, it no longer waits. `MaterializationWait`
+(default 200 ms) bounds the wait; past it you get your own declared default, the key still
+materializes in the background, and the next render shows the stored value.
+
+> ⚠️ This applies to any key not in the cache, not only to new ones — the client cannot tell them
+> apart until the server answers. For an *existing* key whose cache is cold, a slow server therefore
+> means one render of the code default before the stored value arrives. In practice the warm-up has
+> already loaded every existing key, so the cold case is close to exclusively new keys. Set
+> `MaterializationWait` to `TimeSpan.Zero` if a correct first paint matters more than a responsive
+> one.
+
+#### Changing text a key already holds
+
+A key's stored value wins over the default you supply — that is what keeps an administrator's edit
+from being clobbered by a redeploy. The consequence is that **changing the literal in code does
+nothing** once a key exists, and the workarounds are minting `Heading2` or hand-editing every
+environment.
+
+`IContentWriteService` is the supported way to change it:
+
+```csharp
+var result = await _contentWriteService.ImportAsync(
+[
+    new ContentImportItem
+    {
+        Key = "Dashboard.Feature.Add.Heading",
+        Application = "MyApp",
+        Instance = string.Empty,
+        DefaultValue = "Activate {0}",
+        Translations = new Dictionary<string, string> { ["Swedish"] = "Aktivera {0}" },
+    },
+]);
+
+if (result.IgnoredLanguages.Count > 0) throw new InvalidOperationException(
+    $"Unrecognised language name(s): {string.Join(", ", result.IgnoredLanguages)}");
+```
+
+- Needs an API key holding **`content:write`**. Writes land at the lowest stage; a human promotes.
+- **A language you omit is left untouched**, so a Swedish fix cannot blank English. Omit unchanged
+  values rather than resending them — a rewritten value is stamped as human-authored, and rewriting
+  an untouched machine translation would make that output eligible as a translation source.
+- **Always check `IgnoredLanguages`.** A name matching no configured language is skipped, not
+  refused — `"Svenska"` where the server says `"Swedish"` otherwise returns success while the
+  translation never appears.
+- **`Application` and `Instance` are matched exactly.** Naming a coordinate the row was not stored
+  under addresses a different row and creates a second one. If an import reports success and nothing
+  changes, check this first.
+
+> ⚠️ **Do not call this at startup.** Nothing calls it for you, and that is deliberate: every
+> instance asserting its build's strings on boot recreates the problem it solves, and makes a
+> rollback quietly revert tenant content. Call it from a reviewed maintenance action or a CI step.
+
 #### Knowing where a value came from
 
 `GetContentResultAsync` returns the same value plus its provenance, so you can tell a real server
@@ -211,6 +302,7 @@ if (result.Source == ContentSource.Default)
 | `ApiKey` | `null` | API key from [Quilt4Net Web](https://quilt4net.com). |
 | `StaleWhileRevalidate` | `true` | When `true`, an expired value is returned immediately and refreshed in the background. Set `false` to refresh synchronously so callers always get a fresh value (subject to `HttpTimeout`). |
 | `SlowLogThreshold` | `3s` | When a content fetch or language-list load from the server takes at least this long, a single `Warning` is logged (endpoint, elapsed, HTTP status) — so slow loads surface even with `Debug` off. Set `TimeSpan.Zero` to disable. |
+| `MaterializationWait` | `200ms` | How long a caller waits for a key not in the cache before rendering its own declared default. The key still materializes in the background. `TimeSpan.Zero` restores the previous behaviour of waiting up to `HttpTimeout`. |
 | `WarmUpEnabled` | `true` | Pre-fill the cache at startup with one bulk call per language (Blazor). Set `false` for lazy per-key loading only. |
 | `WarmUpLanguages` | `[]` | Extra languages to warm at startup and on "Reload Content", by **name** (e.g. `["English", "Svenska"]`), on top of the always-warmed default. Empty = only the default warms at startup; others warm per-circuit on first selection. |
 | `PeriodicWarmUpEnabled` | `true` | Repeat the bulk warm-up on a timer instead of once per process, so entries are replaced shortly **before** they expire and the per-key path is never reached in steady state. |

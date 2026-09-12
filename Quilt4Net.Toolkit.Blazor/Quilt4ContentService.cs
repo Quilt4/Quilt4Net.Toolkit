@@ -37,4 +37,9 @@ internal class Quilt4ContentService : IQuilt4ContentService
         var result = await _contentService.GetContentAsync(key, defaultValue, _languageStateService.Selected.Key, ContentFormat.String, application, translations);
         return result.Value;
     }
+
+    public Task<IReadOnlyDictionary<string, string>> GetManyAsync(IReadOnlyCollection<ContentRequest> requests, string application = null)
+    {
+        return _contentService.GetManyContentAsync(requests, _languageStateService.Selected.Key, ContentFormat.String, application);
+    }
 }
