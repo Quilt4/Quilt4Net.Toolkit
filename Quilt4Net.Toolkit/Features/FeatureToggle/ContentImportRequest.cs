@@ -45,10 +45,19 @@ public sealed record ContentImportItem
 
     /// <summary>The application the key is stored under. Null or empty targets the shared
     /// bucket.</summary>
+    /// <remarks>
+    /// ⚠️ <b>Matched exactly against what is stored, not folded or normalised.</b> Naming an
+    /// application the row was not stored under does not fail — it addresses a different
+    /// coordinate, so the write creates a second row instead of updating the one you meant. If a
+    /// value does not change after an import that reported success, this is almost always why.
+    /// Read the coordinate back from the key you are changing rather than assuming it.
+    /// </remarks>
     public string Application { get; init; }
 
     /// <summary>The instance the key is stored under. Null or empty targets rows stored without
     /// one.</summary>
+    /// <remarks>Matched exactly, with the same consequence described on
+    /// <see cref="Application"/>.</remarks>
     public string Instance { get; init; }
 
     /// <summary>How the value should be rendered. Leave null to keep what the key already
