@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +23,7 @@ public class ContentWriteServiceTests
             """{"keysWritten":2,"valuesWritten":3,"ignoredLanguages":[]}""");
         var sut = Build(prefix);
 
-        var result = await sut.ImportAsync([Item("a", "Add"), Item("b", "Remove")]);
+        var result = await sut.ImportAsync([Item("a", "Add"), Item("b", "Remove")], TestContext.Current.CancellationToken);
 
         result.KeysWritten.Should().Be(2);
         result.ValuesWritten.Should().Be(3);
@@ -39,7 +39,7 @@ public class ContentWriteServiceTests
             """{"keysWritten":1,"valuesWritten":1,"ignoredLanguages":[]}""");
         var sut = Build(prefix);
 
-        await sut.ImportAsync([Item("a", "Add")]);
+        await sut.ImportAsync([Item("a", "Add")], TestContext.Current.CancellationToken);
 
         state.Requests.Single().Should().Contain("\"environment\":");
     }
@@ -55,7 +55,7 @@ public class ContentWriteServiceTests
         var logs = new CapturingLoggerProvider();
         var sut = Build(prefix, logs);
 
-        var result = await sut.ImportAsync([Item("a", "Add")]);
+        var result = await sut.ImportAsync([Item("a", "Add")], TestContext.Current.CancellationToken);
 
         result.IgnoredLanguages.Should().ContainSingle().Which.Should().Be("Svenska");
         logs.Entries.Should().Contain(x => x.Contains("Svenska") && x.Contains("not written"));
@@ -70,7 +70,7 @@ public class ContentWriteServiceTests
         using var listener = StartListener(out var prefix, out _, responseBody: "nope", status: 403);
         var sut = Build(prefix);
 
-        var act = async () => await sut.ImportAsync([Item("a", "Add")]);
+        var act = async () => await sut.ImportAsync([Item("a", "Add")], TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<HttpRequestException>().WithMessage("*403*");
     }
@@ -81,7 +81,7 @@ public class ContentWriteServiceTests
         using var listener = StartListener(out var prefix, out _, responseBody: "{}");
         var sut = Build(prefix, apiKey: null);
 
-        var act = async () => await sut.ImportAsync([Item("a", "Add")]);
+        var act = async () => await sut.ImportAsync([Item("a", "Add")], TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*content:write*");
     }
@@ -92,7 +92,7 @@ public class ContentWriteServiceTests
         using var listener = StartListener(out var prefix, out var state, responseBody: "{}");
         var sut = Build(prefix);
 
-        var result = await sut.ImportAsync([]);
+        var result = await sut.ImportAsync([], TestContext.Current.CancellationToken);
 
         result.KeysWritten.Should().Be(0);
         state.Requests.Should().BeEmpty("an empty write is a no-op, not a round trip");
