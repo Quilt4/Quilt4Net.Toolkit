@@ -1,3 +1,5 @@
+﻿using Quilt4Net.Toolkit.Features.Content;
+
 namespace Quilt4Net.Toolkit.Blazor;
 
 /// <summary>
@@ -51,4 +53,23 @@ public interface IQuilt4ContentService
     /// </param>
     /// <param name="application">Application scope; see <see cref="GetAsync(string, string, string)"/>.</param>
     Task<string> GetAsync(string key, string defaultValue, IReadOnlyDictionary<string, string> translations, string application = null);
+
+    /// <summary>
+    /// Resolve a whole set of keys in one go, in the currently selected language.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this when a view knows its keys up front — a dialog, a form, a set of enum labels. Keys
+    /// already cached cost nothing; the rest are fetched together rather than one render-blocking
+    /// call at a time.
+    /// </para>
+    /// <para>
+    /// The returned dictionary always contains an entry for every requested key: the stored value
+    /// where there is one, and the caller's own <see cref="ContentRequest.DefaultValue"/> where
+    /// there is not. There is no "missing key" case for a caller to handle.
+    /// </para>
+    /// </remarks>
+    /// <param name="requests">The keys, each with the default (and optional translations) to seed it with.</param>
+    /// <param name="application">Application scope; see <see cref="GetAsync(string, string, string)"/>.</param>
+    Task<IReadOnlyDictionary<string, string>> GetManyAsync(IReadOnlyCollection<ContentRequest> requests, string application = null);
 }

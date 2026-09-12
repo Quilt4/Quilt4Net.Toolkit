@@ -11,6 +11,27 @@ public interface IRemoteContentCallService
     /// when the caller needs to tell a server value apart from a cached one or a fallback default.
     /// </summary>
     Task<ContentResult> GetContentResultAsync(string key, string defaultValue, Guid languageKey, ContentFormat? contentType, string application = null, IReadOnlyDictionary<string, string> translations = null);
+    /// <summary>
+    /// Resolve a set of keys together. Anything already cached is served from there; a cold
+    /// language is warmed once in bulk rather than a call per key; only keys the server has genuinely
+    /// never seen still cost a round trip each, and those no longer block the caller (see
+    /// <see cref="ContentOptions.MaterializationWait"/>).
+    /// </summary>
+    /// <remarks>
+    /// A default implementation is provided so adding this member does not break existing
+    /// implementers; it loops the single-key path.
+    /// </remarks>
+    async Task<IReadOnlyDictionary<string, string>> GetManyContentAsync(IReadOnlyCollection<ContentRequest> requests, Guid languageKey, ContentFormat? contentType, string application = null)
+    {
+        var result = new Dictionary<string, string>();
+        foreach (var request in requests ?? [])
+        {
+            var (value, _) = await GetContentAsync(request.Key, request.DefaultValue, languageKey, contentType, application, request.Translations);
+            result[request.Key] = value;
+        }
+        return result;
+    }
+
     Task SetContentAsync(string key, string defaultValue, Guid languageKey, ContentFormat contentType, string application = null);
     Task<Language[]> GetLanguagesAsync(bool forceReload);
     Task ClearContentCacheAsync();

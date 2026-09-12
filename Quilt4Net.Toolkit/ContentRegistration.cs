@@ -89,6 +89,20 @@ public static class ContentRegistration
             return new RemoteContentCallService(environmentName, co, httpClientFactory, logger);
         });
 
+        // The write half. Registered so a host can inject it, never called on its behalf: asserting
+        // a build's strings at startup is the thing this feature exists to avoid (see
+        // IContentWriteService). Stateless, so the lifetime is incidental — it matches its
+        // neighbours rather than making a point.
+        services.AddSingleton<Features.Content.IContentWriteService>(s =>
+        {
+            var env = s.GetService<IHostEnvironment>();
+            var co = s.GetService<IOptions<ContentOptions>>();
+            var environmentName = new Features.FeatureToggle.EnvironmentName { Name = env?.EnvironmentName ?? "Production" };
+            var httpClientFactory = s.GetRequiredService<IHttpClientFactory>();
+            var logger = s.GetService<ILogger<Features.Content.ContentWriteService>>();
+            return new Features.Content.ContentWriteService(environmentName, co, httpClientFactory, logger);
+        });
+
         // Same factory pattern as RemoteContentCallService — EnvironmentName isn't a globally
         // registered type, it's resolved per-component from IHostEnvironment. Singleton so the
         // reader can hold caches later (Phase 2 keeps it stateless).
