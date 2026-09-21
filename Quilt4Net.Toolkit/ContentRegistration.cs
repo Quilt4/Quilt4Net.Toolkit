@@ -115,5 +115,18 @@ public static class ContentRegistration
             var logger = s.GetService<ILogger<Features.Content.Pages.RemoteContentPageReader>>();
             return new Features.Content.Pages.RemoteContentPageReader(environmentName, co, httpClientFactory, logger);
         });
+
+        // Release notes ride on the same registration rather than an AddQuilt4NetReleaseNotes of
+        // their own: same server, same api key, same application name, same named HttpClient — a
+        // second entry point would only be a second way to configure the identical connection. No
+        // EnvironmentName here, because a release note has no stage: 1.2.3 is the same build
+        // wherever it runs. Reading only; notes are written over REST/MCP from a release pipeline.
+        services.AddSingleton<Features.ReleaseNotes.IReleaseNoteService>(s =>
+        {
+            var co = s.GetService<IOptions<ContentOptions>>();
+            var httpClientFactory = s.GetRequiredService<IHttpClientFactory>();
+            var logger = s.GetService<ILogger<Features.ReleaseNotes.RemoteReleaseNoteService>>();
+            return new Features.ReleaseNotes.RemoteReleaseNoteService(co, httpClientFactory, logger);
+        });
     }
 }
