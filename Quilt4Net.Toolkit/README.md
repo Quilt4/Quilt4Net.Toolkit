@@ -375,6 +375,75 @@ At `Debug` you get, per content read, the key, resolved language + application, 
 time; and, in Blazor, each language reload (with timing) and every selected-language change that
 triggers a content reload. Genuinely slow server round-trips are logged at `Warning` regardless (see `SlowLogThreshold`).
 
+## Release notes
+
+Publish one markdown note per application version, and let an application ask what has changed
+since the version it last showed a user — "what's new since you were last here".
+
+The toolkit is the **reading** half. Notes are **written** over plain REST or MCP from a release
+pipeline, which needs no NuGet dependency. Registration comes with content, since it is the same
+server, the same api key and the same application name:
+
+```csharp
+builder.AddQuilt4NetContent();
+```
+
+```csharp
+var news = await _releaseNoteService.GetDeltaAsync(lastSeenVersion);
+if (news.HasNews)
+{
+    Render(news.Markdown);          // every note, newest first, already concatenated
+    Remember(news.LatestVersion);   // the mark to pass in next time
+}
+```
+
+Three things about it are deliberate:
+
+**You own the "last seen" mark.** The server keeps no per-visitor state, and neither does the
+toolkit. Store `LatestVersion` wherever you already keep per-user settings, and pass it back next
+time.
+
+**No version, no call.** A first-ever visitor has nothing to be caught up on, so do not call. Asking
+with nothing is not a way to fetch the whole history — the call short-circuits in the client and
+never reaches the server. Asking with something that is not SemVer (a `v1.2.3` tag, a four-part
+`1.2.3.4` assembly version) does the same thing and logs a warning, because an empty delta otherwise
+looks exactly like "you are up to date".
+
+**Versions are strict SemVer 2.0.** Ordering is the whole feature and text ordering gets it wrong —
+`1.10.0` sorts before `1.9.0` as a string. `SemanticVersion` is public if you want the same parsing
+and comparison the server uses.
+
+| Member | Description |
+|--------|-------------|
+| `GetDeltaAsync(sinceVersion, includePreRelease, application)` | Everything newer than `sinceVersion`, newest first. Never null: nothing new, nothing to ask from, and a server that did not answer all come back empty. Pre-releases are left out unless asked for. |
+| `GetAsync(version, application)` | One version's note, or `null` when it has none. |
+
+Release notes are decoration, so every failure degrades quietly — a page that cannot show its news
+still renders.
+
+### Minting a key
+
+In the Quilt4Net.Server admin UI under **Api → Api Key**. `release:read` comes with any key at Viewer
+level or above, so a consuming application's existing key can already read the news. **`release:write`
+is registered at Administrator**, so a key only carries it at that access level or as an explicit
+scope override — publishing is a release-pipeline action, and every application key holds `User` for
+content write-back, which would otherwise let any app embedding the toolkit announce a version. For
+publishing over MCP the key also needs `mcp:discover`.
+
+### Publishing a note
+
+Not through this package — a release step should not need a NuGet reference to write one document:
+
+```bash
+curl -X POST https://quilt4net.com/Api/ReleaseNote \
+  -H "X-API-KEY: $QUILT4NET_KEY" -H "Content-Type: application/json" \
+  -d '{"application":"MyApp","version":"1.4.0","markdown":"## 1.4.0\n- Faster search"}'
+```
+
+Or the MCP tool `quilt4net.release_note.publish`, for a release step driven by an agent. Publishing a
+version again replaces its body, so a rerun or a fixed typo leaves one note rather than two, and a
+version that is not strict SemVer is refused there and then — ordering is what the delta is built on.
+
 ## Health check client
 
 Client for consuming health endpoints from a remote service that uses Quilt4Net Health API.
