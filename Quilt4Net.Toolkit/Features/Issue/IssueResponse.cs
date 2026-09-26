@@ -75,6 +75,16 @@ public record IssueResponse
     /// </remarks>
     public IssueReferenceResponse[] References { get; init; } = [];
 
+    /// <summary>
+    /// Who says they are working on this, and from which machine; <c>null</c> when nobody holds it.
+    /// </summary>
+    /// <remarks>
+    /// Not <c>required</c>, for the reason given on <see cref="References"/>. <c>null</c> against an
+    /// older server means it cannot say, which reads the same as unclaimed — the safe interpretation,
+    /// since claiming an issue somebody else holds only ever warns.
+    /// </remarks>
+    public IssueClaimResponse Claim { get; init; }
+
     /// <summary>When the issue was created (UTC).</summary>
     public required DateTime CreatedUtc { get; init; }
 

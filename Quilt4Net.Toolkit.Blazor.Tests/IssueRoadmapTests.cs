@@ -316,6 +316,95 @@ public class IssueRoadmapTests : BunitContext
         Render<IssueRoadmap>().Markup.Should().Contain("Closed without delivering");
     }
 
+    [Fact]
+    public void A_claim_names_the_user_and_the_machine()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, claim: Claim("danie", "NEPTUNUS"))]));
+
+        var cut = Render<IssueRoadmap>();
+
+        // The machine is the half that matters: the collision a claim exists to show is one person's
+        // two sessions, and "danie" alone cannot tell them apart.
+        var node = cut.Find("[data-claim]");
+        node.TextContent.Should().Be("danie · NEPTUNUS");
+        node.GetAttribute("data-stale").Should().Be("false");
+    }
+
+    [Fact]
+    public void A_claim_takes_the_assignees_corner()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, assignedUserKey: "u1", assignedUserName: "Daniel", claim: Claim("danie", "NEPTUNUS"))]));
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.OnItemSelected, _ => { }));
+
+        cut.FindAll("[data-assignee]").Should().BeEmpty("the card has one corner for a name, and the live claim wins it");
+        cut.Find("[data-claim]").TextContent.Should().Be("danie · NEPTUNUS");
+        cut.Find("button[data-issue='1']").GetAttribute("title").Should().Contain("Daniel", "the assignee is not lost, only moved to the tooltip");
+    }
+
+    [Fact]
+    public void A_stale_claim_is_drawn_differently_from_a_live_one()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now:
+        [
+            Item(1, claim: Claim("danie", "NEPTUNUS")),
+            Item(2, claim: Claim("danie", "SATURNUS", stale: true))
+        ]));
+
+        var cut = Render<IssueRoadmap>();
+
+        var claims = cut.FindAll("[data-claim]");
+        var live = claims.Single(x => x.GetAttribute("data-stale") == "false");
+        var stale = claims.Single(x => x.GetAttribute("data-stale") == "true");
+
+        // Asserted on the drawing rather than only the flag: a stale marker that renders identically
+        // is the bug this guards against, since "somebody is on it" and "somebody was" must not look alike.
+        stale.GetAttribute("opacity").Should().NotBe(live.GetAttribute("opacity"));
+        stale.GetAttribute("fill").Should().NotBe(live.GetAttribute("fill"));
+    }
+
+    [Fact]
+    public void A_claim_with_only_a_machine_does_not_draw_an_empty_separator()
+    {
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, claim: Claim("", "NEPTUNUS"))]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.Find("[data-claim]").TextContent.Should().Be("NEPTUNUS");
+    }
+
+    [Fact]
+    public void The_tooltip_says_when_the_claimant_was_last_seen()
+    {
+        // The roadmap is generated 2026-09-03 00:00; the claimant last wrote two hours before that.
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1, claim: Claim("danie", "NEPTUNUS", lastSeen: new DateTime(2026, 9, 2, 22, 0, 0, DateTimeKind.Utc)))]));
+
+        var cut = Render<IssueRoadmap>(p => p.Add(x => x.OnItemSelected, _ => { }));
+
+        cut.Find("button[data-issue='1']").GetAttribute("title").Should().Contain("claimed by danie · NEPTUNUS, last seen 2h ago");
+    }
+
+    [Fact]
+    public void An_unclaimed_item_draws_no_claim()
+    {
+        // Also the shape of every item from a server that predates claims: null must read as
+        // unclaimed, not fail to render.
+        _issueService.Roadmap = Roadmap(Route("r", now: [Item(1)]));
+
+        var cut = Render<IssueRoadmap>();
+
+        cut.FindAll("[data-claim]").Should().BeEmpty();
+    }
+
+    private static IssueClaimResponse Claim(string user, string machine, bool stale = false, DateTime? lastSeen = null) => new()
+    {
+        User = user,
+        Machine = machine,
+        ClaimedUtc = new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc),
+        LastSeenUtc = lastSeen ?? new DateTime(2026, 9, 2, 23, 0, 0, DateTimeKind.Utc),
+        IsStale = stale
+    };
+
     /// <summary>The status bar down an item's leading edge, found by the item's own hit-target row.</summary>
     private static IElement Bar(IRenderedComponent<IssueRoadmap> cut, int number) =>
         cut.FindAll("rect[rx='1.5']")[Index(cut, number)];
@@ -353,8 +442,10 @@ public class IssueRoadmapTests : BunitContext
     };
 
     private static RoadmapItemResponse Item(int number, bool terminal = false, bool quickWin = false, string assignedUserKey = null, string assignedUserName = null,
-        string state = "Todo", RoadmapStateKind kind = RoadmapStateKind.NotStarted, string resolution = null, bool? resolutionIsSuccess = null) => new()
+        string state = "Todo", RoadmapStateKind kind = RoadmapStateKind.NotStarted, string resolution = null, bool? resolutionIsSuccess = null,
+        IssueClaimResponse claim = null) => new()
     {
+        Claim = claim,
         Number = number,
         Title = $"issue {number}",
         State = state,
