@@ -873,6 +873,7 @@ One scrollable SVG figure, not a list of cards with the dependencies described u
 - **Effort rides on the item** as `· S`, `· M` or `· L`. A ring marks a quick win — small, with nothing pointing at it.
 - **Status is a bar down the item's leading edge**, repeated as a dot beside the state name. Driven by `RoadmapStateKind` — `NotStarted`, `InProgress`, `Done` — which the server derives from the team's workflow. It cannot key off state names: the workflow is editable, so a component that recognised `Todo` and `Doing` would draw a team with any other vocabulary as one flat colour. What is stable across every workflow is the shape — an entry, an exit, and everything in between.
 - **The assignee's name sits on the item**, resolved on the server because this component is embeddable by a project that holds no team roster. An assignee the server could not name falls back to the raw key rather than to blank: an issue parked on somebody who has left should look wrong, not unassigned.
+- **A claim takes the assignee's corner** as `user · machine` — which session has the issue open right now, the more urgent of the two to see. The assignee moves to the tooltip, which also says when the claimant was last seen. A stale claim is drawn faded and in italics, so "somebody is on it" and "somebody was" do not look alike.
 - Issues in a terminal state are dimmed: they are on the map to explain an edge, as context rather than as work.
 
 Set `ShowHowToRead="false"` to drop the legend and the explanatory cells when the surrounding page already explains the notation.

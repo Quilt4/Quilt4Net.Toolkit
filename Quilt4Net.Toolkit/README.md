@@ -700,7 +700,7 @@ References travel on `CreateAsync` and `UpdateAsync` rather than through endpoin
 
 ### Workflow
 
-Each team has one workflow — a list of states plus the transitions allowed between them — seeded as `Todo → Doing → Done`. Read it with `GetWorkflowAsync`, replace it with `SetWorkflowAsync`. A state change goes through `SetStateAsync` rather than `UpdateAsync` so the move can be checked; a transition the workflow does not permit is rejected, and the error names the states the issue can actually reach.
+Each team has one workflow — a list of states plus the transitions allowed between them — seeded as `Todo → Doing → Closed`. Read it with `GetWorkflowAsync`, replace it with `SetWorkflowAsync`. A state change goes through `SetStateAsync` rather than `UpdateAsync` so the move can be checked; a transition the workflow does not permit is rejected, and the error names the states the issue can actually reach.
 
 A replacement workflow that would leave issues stranded in a state it no longer defines is rejected rather than applied.
 
@@ -735,6 +735,28 @@ tracker's own term (GitHub's `not_planned`, Jira's `Won't Fix`) without a Toolki
 > nothing to judge** — the issue is open, or the server predates the field — and only an explicit
 > `false` licenses drawing an ending as abandoned. Treating `null` as "did not deliver" would repaint
 > every finished issue on every server that has not caught up.
+
+#### Who is working on it
+
+An issue in progress carries a **claim**: who says they are working on it, and from which machine.
+
+```csharp
+var issue = await issueService.GetAsync(99);
+if (issue.Claim is { IsStale: false } claim)
+{
+    Console.WriteLine($"#{issue.Number} is held by {claim.User} on {claim.Machine}, last seen {claim.LastSeenUtc:u}");
+}
+```
+
+The claim is **stated by the caller, not checked by the server**. A team API key carries no user, so
+the server records what the `X-Quilt4Net-User` and `X-Quilt4Net-Machine` request headers say. A move
+into an in-progress state takes the claim; a move to the entry state or to a terminal state releases
+it; the holder's own writes keep `LastSeenUtc` fresh. Taking an issue somebody else holds succeeds with
+a warning rather than failing, because the holder may simply have crashed.
+
+`IsStale` is judged by the server — a claim whose holder has not written for a day — so every client
+draws the same line between "somebody is on it" and "somebody was". `Claim` is optional and `null` when
+nobody holds the issue, which is also how every issue reads against a server that predates claims.
 
 ### IssueOptions
 

@@ -172,7 +172,23 @@
                                   fill="var(--rz-text-secondary-color)">@Truncate(StateLabel(item), 20)</text>
                         </g>
 
-                        @if (!string.IsNullOrEmpty(AssigneeFor(item)))
+                        @* The claim takes the assignee's slot when there is one: it says which session
+                           has the issue open right now, which is the more urgent thing to see, and the
+                           card has one corner for a name. The assignee stays in the tooltip. A stale
+                           claim is faded and italic, so "somebody is on it" and "somebody was" do not
+                           look alike. *@
+                        @if (item.Claim != null)
+                        {
+                            <g>
+                                <text data-claim data-stale="@(item.Claim.IsStale ? "true" : "false")"
+                                      x="@N(placed.X + RoadmapLayout.ItemWidth - 12)" y="@N(placed.Y + 61)"
+                                      font-size="11" text-anchor="end"
+                                      font-style="@(item.Claim.IsStale ? "italic" : "normal")"
+                                      opacity="@(item.Claim.IsStale ? "0.55" : "1")"
+                                      fill="@(item.Claim.IsStale ? "var(--rz-text-tertiary-color)" : "var(--rz-primary)")">@Truncate(ClaimantFor(item.Claim), 18)</text>
+                            </g>
+                        }
+                        else if (!string.IsNullOrEmpty(AssigneeFor(item)))
                         {
                             <g>
                                 @* data-assignee is a selector hook, deliberately valueless: it lets a
@@ -408,8 +424,34 @@
         var assignee = AssigneeFor(item);
         if (!string.IsNullOrEmpty(assignee)) parts.Add(assignee);
 
+        if (item.Claim != null)
+        {
+            var stale = item.Claim.IsStale ? ", stale" : string.Empty;
+            parts.Add($"claimed by {ClaimantFor(item.Claim)}, last seen {Ago(item.Claim.LastSeenUtc)}{stale}");
+        }
+
         if (item.IsQuickWin) parts.Add("quick win");
         return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// <c>user · machine</c>, dropping whichever part was not stated. The machine is the part that
+    /// tells one person's two sessions apart, so it is never folded away when present.
+    /// </summary>
+    private static string ClaimantFor(IssueClaimResponse claim) =>
+        string.Join(" · ", new[] { claim.User, claim.Machine }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    /// <summary>
+    /// Measured against the snapshot's own time rather than the clock, so the figure and its caption
+    /// agree about "now" however long the page has been open.
+    /// </summary>
+    private string Ago(DateTime utc)
+    {
+        var age = _generatedUtc - utc;
+        if (age < TimeSpan.FromMinutes(1)) return "just now";
+        if (age < TimeSpan.FromHours(1)) return $"{(int)age.TotalMinutes}m ago";
+        if (age < TimeSpan.FromDays(1)) return $"{(int)age.TotalHours}h ago";
+        return $"{(int)age.TotalDays}d ago";
     }
 
     private static string Truncate(string value, int max) =>

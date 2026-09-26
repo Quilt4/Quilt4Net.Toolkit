@@ -111,6 +111,18 @@ public record RoadmapItemResponse
     /// </remarks>
     public string AssignedUserName { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Who says they are working on this, and from which machine; <c>null</c> when nobody holds it
+    /// or the server predates claims.
+    /// </summary>
+    /// <remarks>
+    /// Carried separately from the assignee because they answer different questions: the assignee is
+    /// who the issue is <i>for</i>, the claim is which session has it open <i>right now</i>. The card
+    /// draws the claim where the assignee otherwise goes, because a live claim is the more urgent of
+    /// the two to see.
+    /// </remarks>
+    public IssueClaimResponse Claim { get; init; }
+
     /// <summary>Rough size, rendered on the item as <c>· S</c>, <c>· M</c> or <c>· L</c>.</summary>
     public required IssueEffort? Effort { get; init; }
 
